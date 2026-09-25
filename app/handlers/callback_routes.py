@@ -4,12 +4,26 @@ from typing import Awaitable, Callable
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.handlers import dashboard, destination, source, statistics, transfer, username_settings
+from app.handlers import (
+    ai_settings,
+    dashboard,
+    destination,
+    source,
+    statistics,
+    transfer,
+    username_settings,
+)
 from app.handlers import settings as settings_handlers
 
 CallbackHandler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
 
 CALLBACK_ROUTES: dict[tuple[str, str], CallbackHandler] = {
+    ("settings", "ai"): ai_settings.show,
+    ("ai", "toggle"): ai_settings.toggle,
+    ("ai", "key"): partial(ai_settings.ask, field="api_key"),
+    ("ai", "url"): partial(ai_settings.ask, field="base_url"),
+    ("ai", "model"): partial(ai_settings.ask, field="model"),
+    ("ai", "clear_key"): ai_settings.clear_key,
     ("settings", "usernames"): username_settings.show,
     ("usernames", "replace"): username_settings.ask,
     ("usernames", "delete"): username_settings.remove,

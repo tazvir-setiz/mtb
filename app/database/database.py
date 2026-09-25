@@ -21,6 +21,7 @@ _ensure_sqlite_dir(settings.database_url)
 
 engine = create_engine(
     settings.database_url,
+    hide_parameters=True,
     connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
 )
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)

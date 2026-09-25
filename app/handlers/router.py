@@ -6,11 +6,11 @@ from telegram import Update
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
+from app.handlers import ai_settings, source, transfer, username_settings
 from app.handlers import settings as settings_handlers
-from app.handlers import source, transfer, username_settings
 from app.handlers.auth import is_authorized, reject
 from app.handlers.callback_routes import CALLBACK_ROUTES
-from app.handlers.states import State, get_state
+from app.handlers.states import State, get_state, reset
 from app.ui import keyboards
 from app.ui.callbacks import parse
 
@@ -28,6 +28,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     await query.answer()
     namespace, action, _arg = parse(query.data or "")
+    if get_state(getattr(context, "user_data", {}) or {}) in ai_settings.INPUT_FIELDS:
+        reset(context.user_data)
 
     try:
         handler = CALLBACK_ROUTES.get((namespace, action))
@@ -65,6 +67,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await settings_handlers.handle_signature_input(update, context)
         elif state == State.USERNAME_INPUT:
             await username_settings.save(update, context)
+        elif state in ai_settings.INPUT_FIELDS:
+            await ai_settings.save(update, context)
         else:
             await update.message.reply_text(
                 "از دکمه‌های داشبورد استفاده کنید یا /menu را بزنید.",

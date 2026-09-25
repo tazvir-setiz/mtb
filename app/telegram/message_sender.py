@@ -8,6 +8,7 @@ from telethon.tl.types import Message
 from app.config import settings
 from app.services.ai_policy import AIReviewRequired
 from app.services.ai_service import apply_ai_guardrails
+from app.services.ai_settings import load_ai_settings
 from app.services.text_sanitizer import sanitize_text
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,9 @@ async def send_message(
     destination_id: int,
     signature: str | None,
 ) -> Message | None:
+    ai_enabled = load_ai_settings(settings).enabled
     if getattr(original, "poll", None):
-        if settings.ai_enabled:
+        if ai_enabled:
             raise AIReviewRequired(
                 "Polls require review; text moderation cannot sanitize a forwarded poll"
             )
@@ -38,7 +40,7 @@ async def send_message(
     processed_html = await apply_ai_guardrails(current_html)
     if processed_html == "__DROP__":
         return None
-    processed_html = sanitize_text(processed_html, remove_links=settings.ai_enabled)
+    processed_html = sanitize_text(processed_html, remove_links=ai_enabled)
 
     if signature:
         separator = "\n\n" if processed_html.strip() else ""

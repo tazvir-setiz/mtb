@@ -14,6 +14,7 @@ from app.database.repository import (
     SettingsRepository,
 )
 from app.handlers.states import State, reset, set_state
+from app.services.ai_settings import load_ai_settings
 from app.telegram import auto_forward
 from app.telegram.client import ensure_started
 from app.ui import keyboards, messages
@@ -33,7 +34,7 @@ def _dashboard_content() -> tuple[str, object]:
         destination.title if destination else None,
         stats["success"],
         auto_enabled,
-        ai_enabled=settings.ai_enabled,
+        ai_enabled=load_ai_settings(settings).enabled,
         signature_enabled=bool(signature),
     )
     markup = keyboards.main_menu(

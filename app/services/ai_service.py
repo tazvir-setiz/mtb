@@ -4,14 +4,16 @@ import httpx
 
 from app.config import settings
 from app.services.ai_policy import AIProcessingError, AIReviewRequired, parse_decision
+from app.services.ai_settings import load_ai_settings
 
 logger = logging.getLogger(__name__)
 
 
 async def apply_ai_guardrails(html_text: str) -> str:
-    if not settings.ai_enabled or not html_text.strip():
+    config = load_ai_settings(settings)
+    if not config.enabled or not html_text.strip():
         return html_text
-    if not settings.ai_api_key:
+    if not config.api_key:
         raise AIProcessingError("AI API key is missing")
 
     system_prompt = (
@@ -26,7 +28,7 @@ async def apply_ai_guardrails(html_text: str) -> str:
         "در خروجی خود آیدی‌های اصلی را حفظ کنید و @MyChannel اضافه نکنید."
     )
     payload = {
-        "model": settings.ai_model,
+        "model": config.model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": html_text},
@@ -36,9 +38,9 @@ async def apply_ai_guardrails(html_text: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=45.0) as client:
             response = await client.post(
-                settings.ai_base_url,
+                config.base_url,
                 json=payload,
-                headers={"Authorization": f"Bearer {settings.ai_api_key}"},
+                headers={"Authorization": f"Bearer {config.api_key}"},
             )
             response.raise_for_status()
             return parse_decision(response.json()["choices"][0]["message"]["content"])

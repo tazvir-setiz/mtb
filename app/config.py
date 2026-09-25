@@ -58,7 +58,7 @@ class Settings:
     progress_update_interval: float = 3.0
 
     ai_enabled: bool = False
-    ai_api_key: str = ""
+    ai_api_key: str = field(default="", repr=False)
     ai_base_url: str = "https://api.openai.com/v1/chat/completions"
     ai_model: str = "gpt-4o-mini"
     ai_guardrails: str = ""
