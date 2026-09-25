@@ -23,17 +23,22 @@ logger = logging.getLogger(__name__)
 async def show_transfer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     source_id, dest_id, source_title, dest_title = transfer_service.get_channels()
     if source_id is None or dest_id is None:
-        await update.callback_query.answer("ابتدا کانال مبدأ و مقصد را تنظیم کنید.", show_alert=True)
+        await update.callback_query.answer(
+            "ابتدا کانال مبدأ و مقصد را تنظیم کنید.", show_alert=True
+        )
         return
     set_state(context.user_data, State.TRANSFER_MENU)
     await update.callback_query.edit_message_text(
-        messages.transfer_menu_text(source_title, dest_title), reply_markup=keyboards.transfer_menu()
+        messages.transfer_menu_text(source_title, dest_title),
+        reply_markup=keyboards.transfer_menu(),
     )
 
 
 async def start_range_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     set_state(context.user_data, State.RANGE_INPUT_START)
-    await update.callback_query.edit_message_text(messages.ask_start_id(), reply_markup=keyboards.cancel_only())
+    await update.callback_query.edit_message_text(
+        messages.ask_start_id(), reply_markup=keyboards.cancel_only()
+    )
 
 
 async def start_ids_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -51,7 +56,9 @@ async def start_new_messages_flow(update: Update, context: ContextTypes.DEFAULT_
     )
 
 
-async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE, state: State) -> None:
+async def handle_text_input(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, state: State
+) -> None:
     text = update.message.text.strip()
 
     if state == State.RANGE_INPUT_START:
@@ -131,7 +138,8 @@ async def confirm_and_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     set_state(context.user_data, State.TRANSFERRING)
 
     await update.callback_query.edit_message_text(
-        messages.progress_text(0, len(message_ids), 0, 0, 0, 0), reply_markup=keyboards.in_progress()
+        messages.progress_text(0, len(message_ids), 0, 0, 0, 0),
+        reply_markup=keyboards.in_progress(),
     )
     progress_message_id = update.callback_query.message.message_id
     context.user_data[KEY_PROGRESS_MESSAGE_ID] = progress_message_id
@@ -162,8 +170,12 @@ async def resume_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     with get_session() as session:
         job = ForwardJobRepository.get(session, job_id)
         remaining = list(
-            range(job.last_processed_message_id + 1 if job.last_processed_message_id else job.start_message_id,
-                  job.end_message_id + 1)
+            range(
+                job.last_processed_message_id + 1
+                if job.last_processed_message_id
+                else job.start_message_id,
+                job.end_message_id + 1,
+            )
         )
         source_id, dest_id = job.source_channel_id, job.destination_channel_id
 

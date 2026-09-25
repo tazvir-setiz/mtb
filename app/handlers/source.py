@@ -9,7 +9,11 @@ from app.database.database import get_session
 from app.database.models import ChannelType
 from app.database.repository import ChannelRepository
 from app.handlers.states import KEY_PENDING_CHANNEL_KIND, State, set_state
-from app.telegram.channel_service import ChannelAccessError, resolve_channel, verify_destination_permissions
+from app.telegram.channel_service import (
+    ChannelAccessError,
+    resolve_channel,
+    verify_destination_permissions,
+)
 from app.telegram.client import ensure_started
 from app.ui import keyboards, messages
 
@@ -19,7 +23,9 @@ _TYPE_MAP = {"source": ChannelType.SOURCE, "destination": ChannelType.DESTINATIO
 _STATE_MAP = {"source": State.SOURCE_CHANNEL, "destination": State.DESTINATION_CHANNEL}
 
 
-async def show_channel_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str) -> None:
+async def show_channel_prompt(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str
+) -> None:
     channel_type = _TYPE_MAP[kind]
     with get_session() as session:
         channel = ChannelRepository.get_by_type(session, channel_type)
@@ -43,13 +49,17 @@ async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYP
             info = await resolve_channel(client, raw)
     except ChannelAccessError as exc:
         if kind == "destination" and "Administrator" in str(exc):
-            await update.message.reply_text(messages.PERMISSION_ERROR, reply_markup=keyboards.destination_retry())
+            await update.message.reply_text(
+                messages.PERMISSION_ERROR, reply_markup=keyboards.destination_retry()
+            )
         else:
             await update.message.reply_text(str(exc), reply_markup=keyboards.cancel_only())
         return
     except Exception:  # noqa: BLE001
         logger.exception("Channel resolution failed")
-        await update.message.reply_text(messages.CHANNEL_NOT_FOUND, reply_markup=keyboards.cancel_only())
+        await update.message.reply_text(
+            messages.CHANNEL_NOT_FOUND, reply_markup=keyboards.cancel_only()
+        )
         return
 
     with get_session() as session:
@@ -95,7 +105,9 @@ async def handle_destination_retry(update: Update, context: ContextTypes.DEFAULT
         )
         return
     text = messages.channel_confirmed("destination", info.title, info.telegram_id, info.username)
-    await update.callback_query.edit_message_text(text, reply_markup=keyboards.channel_confirm("destination"))
+    await update.callback_query.edit_message_text(
+        text, reply_markup=keyboards.channel_confirm("destination")
+    )
 
 
 async def handle_destination_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

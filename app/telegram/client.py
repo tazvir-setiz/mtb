@@ -13,6 +13,7 @@ Bot API نمی‌تواند تاریخچه پیام‌های قدیمی یک ک�
 پیاده‌سازی شده و صرفاً واسط کاربری ادمین است؛ عملیات واقعی Telegram توسط
 همین کلاینت Telethon انجام می‌شود.
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,10 +50,7 @@ def _get_proxy() -> tuple | None:
     try:
         import socks
     except ImportError:
-        logger.error(
-            "PROXY_ENABLED=true است اما پکیج PySocks نصب نیست. "
-            "دستور: pip install PySocks"
-        )
+        logger.error("PROXY_ENABLED=true است اما پکیج PySocks نصب نیست. دستور: pip install PySocks")
         raise
 
     proxy_type_map = {

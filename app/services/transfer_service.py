@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 
-from telegram import Bot
 from telegram.ext import ContextTypes
 
 from app.database.database import get_session
 from app.database.models import ChannelType
-from app.database.repository import ChannelRepository, ForwardJobRepository, ForwardedMessageRepository
+from app.database.repository import (
+    ChannelRepository,
+    ForwardedMessageRepository,
+    ForwardJobRepository,
+)
 from app.services.progress_service import ProgressReporter
 from app.telegram.client import ensure_started
 from app.telegram.forward_service import forward_range, request_stop, retry_failed
@@ -55,7 +57,9 @@ async def run_transfer(
 ) -> None:
     client = await ensure_started()
     reporter = ProgressReporter(context.bot, chat_id, progress_message_id)
-    await forward_range(client, job_id, source_id, dest_id, message_ids, on_progress=reporter.update)
+    await forward_range(
+        client, job_id, source_id, dest_id, message_ids, on_progress=reporter.update
+    )
 
     with get_session() as session:
         from app.database.models import JobStatus

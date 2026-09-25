@@ -1,6 +1,8 @@
-import httpx
 import logging
 import re
+
+import httpx
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -26,18 +28,15 @@ async def apply_ai_guardrails(html_text: str) -> str:
         "۴. خروجی باید حتماً و فقط با یک تگ دسته‌بندی در داخل کروشه [] شروع شود و بعد از آن متن نهایی بیاید (بدون هیچ توضیح اضافه‌ای از جانب شما).\n"
     )
 
-    headers = {
-        "Authorization": f"Bearer {settings.ai_api_key}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {settings.ai_api_key}", "Content-Type": "application/json"}
 
     payload = {
         "model": settings.ai_model,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": html_text}
+            {"role": "user", "content": html_text},
         ],
-        "temperature": 0.1
+        "temperature": 0.1,
         # 👈 دما را به 0.1 کاهش دادیم تا کاملاً رباتیک و مطیع قوانین شود (از خلاقیت و جواب دادن جلوگیری کند)
     }
 
@@ -49,36 +48,46 @@ async def apply_ai_guardrails(html_text: str) -> str:
             data = response.json()
             result = data["choices"][0]["message"]["content"].strip()
 
-            if result.startswith("```html"): result = result[7:]
-            if result.startswith("```"): result = result[3:]
-            if result.endswith("```"): result = result[:-3]
+            if result.startswith("```html"):
+                result = result[7:]
+            if result.startswith("```"):
+                result = result[3:]
+            if result.endswith("```"):
+                result = result[:-3]
 
             result = result.strip()
 
             category = "بدون دسته‌بندی"
-            match = re.match(r'^\[(.*?)\]', result)
+            match = re.match(r"^\[(.*?)\]", result)
             if match:
                 category = match.group(1).strip()
-                result = result[match.end():].strip()
+                result = result[match.end() :].strip()
 
             if "حذف کامل" in category or "DROP" in result or "DROP" in category:
                 snippet = html_text[:80].replace("\n", " ")
                 logger.warning(
                     "❌ Message dropped. Category: [%s] | Original text snippet: [%s...]",
-                    category, snippet
+                    category,
+                    snippet,
                 )
                 return "__DROP__"
 
-            logger.info("✅ AI Action: [%s] | Original Length: %d, New Length: %d", category, len(html_text),
-                        len(result))
+            logger.info(
+                "✅ AI Action: [%s] | Original Length: %d, New Length: %d",
+                category,
+                len(html_text),
+                len(result),
+            )
             return result
 
     except httpx.HTTPStatusError as e:
-        logger.error("AI HTTP Error: Status %s - Details: %s", e.response.status_code, e.response.text)
+        logger.error(
+            "AI HTTP Error: Status %s - Details: %s", e.response.status_code, e.response.text
+        )
         return html_text
     except httpx.RequestError as e:
         logger.error("AI Connection Error: %s", str(e))
         return html_text
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error during AI processing.")
         return html_text

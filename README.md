@@ -61,12 +61,19 @@ Forward کردن پیام‌های کانال، توسط یک **حساب کار�
 telegram-forwarder/
 ├── app/
 │   ├── config.py            # بارگذاری .env
-│   ├── database/            # مدل‌ها، اتصال، Repository ها (SQLAlchemy)
-│   ├── telegram/            # client.py (Telethon), bot.py (PTB dispatcher),
-│   │                        # channel_service.py, forward_service.py
-│   ├── handlers/            # هندلرهای هر صفحه از UI (فقط UI ↔ Service)
-│   ├── ui/                  # keyboards.py / messages.py / callbacks.py
-│   ├── services/            # transfer_service, progress_service, statistics_service
+│   ├── logging_config.py    # تنظیم لاگ کنسول و فایل‌های چرخشی
+│   ├── database/            # مدل‌ها و اتصال SQLAlchemy
+│   │   └── repositories/    # channels.py / jobs.py / messages.py / settings.py
+│   ├── telegram/            # اتصال، راه‌اندازی ربات و هماهنگی انتقال‌ها
+│   │   ├── message_sender.py # پردازش و ارسال مشترک انتقال دستی و خودکار
+│   │   ├── forward_errors.py # دسته‌بندی خطاها و متن قابل نمایش
+│   │   └── forward_progress.py # ساختار داده پیشرفت انتقال
+│   ├── handlers/            # auth.py / commands.py / router.py و هندلرهای صفحات
+│   │   └── callback_routes.py # جدول اتصال دکمه‌ها به هندلرها
+│   ├── ui/                  # مسیرهای عمومی messages.py / keyboards.py / callbacks.py
+│   │   ├── texts/           # متن‌ها به تفکیک صفحه
+│   │   └── buttons/         # دکمه‌ها به تفکیک صفحه
+│   ├── services/            # انتقال، ثبت نتیجه، پیشرفت، آمار و AI
 │   └── utils/                # validators.py, helpers.py
 ├── data/                    # فایل SQLite
 ├── sessions/                # فایل Session تلتون (حساس - Commit نشود)
@@ -78,6 +85,22 @@ telegram-forwarder/
 
 Handlerها فقط event دریافت می‌کنند و Service مربوطه را صدا می‌زنند؛ منطق
 Forward و دسترسی به Telegram API هرگز داخل Handler نیست.
+
+برای پیدا کردن محل تغییر یا دیباگ:
+
+| موضوع | محل اصلی |
+|---|---|
+| دکمه‌ای که به صفحه اشتباه می‌رود | `app/handlers/callback_routes.py` |
+| دسترسی ادمین و ورودی متنی | `app/handlers/auth.py` و `router.py` |
+| متن یا ظاهر یک صفحه | فایل هم‌نام صفحه در `app/ui/texts/` و `app/ui/buttons/` |
+| پردازش AI، امضا، رسانه و ارسال پیام | `app/telegram/message_sender.py` |
+| حلقه انتقال، توقف و تلاش مجدد پس از FloodWait | `app/telegram/forward_service.py` |
+| دریافت پیام جدید کانال | `app/telegram/auto_forward.py` |
+| ذخیره نتیجه و شمارنده‌های عملیات | `app/services/forward_results.py` |
+| پرس‌وجوی دیتابیس | فایل مربوط به موجودیت در `app/database/repositories/` |
+
+مسیرهای import عمومی `app.ui.messages`، `app.ui.keyboards` و
+`app.database.repository` حفظ شده‌اند؛ پیاده‌سازی هر بخش در فایل‌های تخصصی قرار دارد.
 
 ## ۳. محدودیت‌های واقعی Telegram
 
@@ -294,7 +317,14 @@ WantedBy=multi-user.target
 ```bash
 pip install -r requirements-dev.txt
 pytest -q
+python -m ruff check app tests main.py
+python -m ruff format --check app tests main.py
 ```
+
+تنظیمات قالب‌بندی و بررسی کد در `pyproject.toml` است. برای اعمال قالب‌بندی:
+`python -m ruff format app tests main.py`.
+تست‌ها دیتابیس موقت مستقل می‌سازند و AI و پروکسی را غیرفعال می‌کنند تا به
+داده‌های واقعی پروژه یا سرویس خارجی وابسته نباشند.
 
 تمام تست‌ها Mock شده‌اند و به اتصال واقعی تلگرام نیاز ندارند. موارد پوشش‌
 داده‌شده: Admin authorization، اعتبارسنجی کانال، اعتبارسنجی Message ID،

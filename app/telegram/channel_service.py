@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from telethon import TelegramClient
 from telethon.errors import ChannelPrivateError, UsernameNotOccupiedError
 from telethon.tl.functions.channels import GetParticipantRequest
-from telethon.tl.types import Channel as TLChannel, ChannelParticipantAdmin, ChannelParticipantCreator, Chat
+from telethon.tl.types import Channel as TLChannel
+from telethon.tl.types import ChannelParticipantAdmin, ChannelParticipantCreator, Chat
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,7 @@ async def resolve_channel(client: TelegramClient, raw: str) -> ChannelInfo:
     except (ValueError, UsernameNotOccupiedError) as exc:
         raise ChannelAccessError("کانال یافت نشد. شناسه یا Username را بررسی کنید.") from exc
     except ChannelPrivateError as exc:
-        raise ChannelAccessError(
-            "این کانال خصوصی است و حساب متصل به ربات عضو آن نیست."
-        ) from exc
+        raise ChannelAccessError("این کانال خصوصی است و حساب متصل به ربات عضو آن نیست.") from exc
 
     if not isinstance(entity, (TLChannel, Chat)):
         raise ChannelAccessError("این شناسه متعلق به یک کانال یا گروه نیست.")
@@ -57,9 +56,7 @@ async def resolve_channel(client: TelegramClient, raw: str) -> ChannelInfo:
     if isinstance(entity, TLChannel):
         try:
             me = await client.get_me()
-            participant = await client(
-                GetParticipantRequest(channel=entity, participant=me.id)
-            )
+            participant = await client(GetParticipantRequest(channel=entity, participant=me.id))
             is_admin = isinstance(
                 participant.participant, (ChannelParticipantAdmin, ChannelParticipantCreator)
             )

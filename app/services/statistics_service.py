@@ -7,16 +7,17 @@ from app.utils.helpers import format_datetime
 
 
 def get_statistics_text() -> str:
-    from app.ui import messages as ui_messages
     from sqlalchemy import select
+
+    from app.ui import messages as ui_messages
 
     with get_session() as session:
         stats = ForwardedMessageRepository.stats(session)
         source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
         destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
-        last_job = session.execute(
-            select(ForwardJob).order_by(ForwardJob.id.desc())
-        ).scalars().first()
+        last_job = (
+            session.execute(select(ForwardJob).order_by(ForwardJob.id.desc())).scalars().first()
+        )
 
     return ui_messages.statistics_text(
         total=stats["total"],
@@ -25,7 +26,9 @@ def get_statistics_text() -> str:
         duplicate=stats["duplicate"],
         source_title=source.title if source else "❌ تنظیم نشده",
         destination_title=destination.title if destination else "❌ تنظیم نشده",
-        last_operation=format_datetime(last_job.finished_at or last_job.started_at) if last_job else "—",
+        last_operation=format_datetime(last_job.finished_at or last_job.started_at)
+        if last_job
+        else "—",
     )
 
 

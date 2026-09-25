@@ -1,4 +1,4 @@
-from app.config import settings, _parse_admin_ids
+from app.config import _parse_admin_ids, settings
 
 
 def test_admin_ids_parsed():

@@ -1,13 +1,13 @@
 """
 Auto-Forward پیام‌های جدید.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 
 from telethon import TelegramClient, events
-from telethon.extensions import html as telethon_html
 
 from app.database.database import get_session
 from app.database.models import ChannelType, JobStatus, MessageStatus
@@ -17,8 +17,8 @@ from app.database.repository import (
     ForwardJobRepository,
     SettingsRepository,
 )
-from app.telegram.forward_service import FRIENDLY_ERRORS, classify_error, ForwardErrorType
-from app.services.ai_service import apply_ai_guardrails
+from app.telegram.forward_errors import FRIENDLY_ERRORS, ForwardErrorType, classify_error
+from app.telegram.message_sender import send_message
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ _AUTO_JOB_MARKER = -1
 _handler = None  # type: ignore[var-annotated]
 _registered_client: TelegramClient | None = None
 
-# 👈 این قفل اضافه شد تا پیام‌ها دقیقاً به ترتیب و یکی‌یکی پردازش شوند
+# Serialize processing to preserve message order.
 _processing_lock = asyncio.Lock()
 
 
@@ -57,7 +57,7 @@ def _get_auto_job_id(source_id: int, destination_id: int) -> int:
 
 
 async def _on_new_message(event, source_id: int, destination_id: int, job_id: int) -> None:  # noqa: ANN001
-    # 👈 قفل کردن اجرای همزمان: پیام‌ها منتظر می‌مانند تا کار پیام قبلی کاملاً تمام شود
+    # Wait until the previous message has finished processing.
     async with _processing_lock:
         msg_id = event.message.id
         logger.info("Auto-forward: New message detected (ID: %d)", msg_id)
@@ -71,59 +71,57 @@ async def _on_new_message(event, source_id: int, destination_id: int, job_id: in
             return
 
         try:
-            if getattr(event.message, 'poll', None):
-                logger.info("Auto-forward: Message %d is a poll. Forwarding directly.", msg_id)
-                result = await event.client.forward_messages(entity=destination_id, messages=msg_id, from_peer=source_id, drop_author=True)
-                dest_msg = result[0] if isinstance(result, list) else result
-            else:
-                current_html = telethon_html.unparse(event.message.message or "", event.message.entities or [])
-                processed_html = await apply_ai_guardrails(current_html)
-
-                if processed_html == "__DROP__":
-                    logger.warning("Auto-forward: Message %d skipped by AI Guardrails.", msg_id)
-                    with get_session() as session:
-                        ForwardedMessageRepository.record(
-                            session, job_id, source_id, msg_id, destination_id,
-                            MessageStatus.SKIPPED, error="حذف شده توسط هوش مصنوعی"
-                        )
-                    return
-
-                if signature:
-                    separator = "\n\n" if processed_html.strip() else ""
-                    processed_html += separator + signature
-
-                media_to_send = event.message.media
-                if media_to_send and type(media_to_send).__name__ == "MessageMediaWebPage":
-                    media_to_send = None
-
-                dest_msg = await event.client.send_message(
-                    entity=destination_id,
-                    message=processed_html,
-                    file=media_to_send,
-                    parse_mode='html',
-                    link_preview=False
-                )
+            dest_msg = await send_message(
+                event.client, event.message, source_id, destination_id, signature
+            )
+            if dest_msg is None:
+                logger.warning("Auto-forward: Message %d skipped by AI Guardrails.", msg_id)
+                with get_session() as session:
+                    ForwardedMessageRepository.record(
+                        session,
+                        job_id,
+                        source_id,
+                        msg_id,
+                        destination_id,
+                        MessageStatus.SKIPPED,
+                        error="حذف شده توسط هوش مصنوعی",
+                    )
+                return
 
             dest_id = getattr(dest_msg, "id", None)
 
             with get_session() as session:
                 ForwardedMessageRepository.record(
-                    session, job_id, source_id, msg_id, destination_id,
-                    MessageStatus.SUCCESS, destination_message_id=dest_id,
+                    session,
+                    job_id,
+                    source_id,
+                    msg_id,
+                    destination_id,
+                    MessageStatus.SUCCESS,
+                    destination_message_id=dest_id,
                 )
-            logger.info("Auto-forward: Message %d -> %d successfully processed and sent.", msg_id, dest_id)
+            logger.info(
+                "Auto-forward: Message %d -> %d successfully processed and sent.", msg_id, dest_id
+            )
 
         except Exception as exc:  # noqa: BLE001
             err_type = classify_error(exc)
             if err_type == ForwardErrorType.UNKNOWN:
                 logger.exception("Auto-forward: Unknown error processing message %d", msg_id)
             else:
-                logger.error("Auto-forward failed for message %d: %s (%s)", msg_id, str(exc), err_type)
+                logger.error(
+                    "Auto-forward failed for message %d: %s (%s)", msg_id, str(exc), err_type
+                )
 
             with get_session() as session:
                 ForwardedMessageRepository.record(
-                    session, job_id, source_id, msg_id, destination_id,
-                    MessageStatus.FAILED, error=FRIENDLY_ERRORS[err_type],
+                    session,
+                    job_id,
+                    source_id,
+                    msg_id,
+                    destination_id,
+                    MessageStatus.FAILED,
+                    error=FRIENDLY_ERRORS[err_type],
                 )
 
 
@@ -150,7 +148,11 @@ async def start_listener(client: TelegramClient) -> bool:
     client.add_event_handler(handler, events.NewMessage(chats=source_id))
     _handler = handler
     _registered_client = client
-    logger.info("Auto-forward listener started successfully (Source: %s -> Dest: %s)", source_id, destination_id)
+    logger.info(
+        "Auto-forward listener started successfully (Source: %s -> Dest: %s)",
+        source_id,
+        destination_id,
+    )
     return True
 
 
@@ -165,7 +167,8 @@ async def stop_listener(client: TelegramClient) -> None:
 
 async def enable(client: TelegramClient) -> bool:
     started = await start_listener(client)
-    if started: _set_enabled(True)
+    if started:
+        _set_enabled(True)
     return started
 
 

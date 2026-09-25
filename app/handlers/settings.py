@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from app.config import settings
 from app.database.database import get_session
 from app.database.repository import SettingsRepository
+from app.handlers.states import State, reset, set_state
 from app.ui import keyboards, messages
 
 
@@ -32,8 +33,6 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def ask_signature(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from app.handlers.states import State, set_state
-
     set_state(context.user_data, State.SIGNATURE_INPUT)
     await update.callback_query.edit_message_text(
         messages.ask_signature(),
@@ -72,9 +71,17 @@ async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from app.ui.messages import HELP_TEXT
-
     await update.callback_query.edit_message_text(
-        HELP_TEXT,
+        messages.HELP_TEXT,
         reply_markup=keyboards.back_home(),
     )
+
+
+async def handle_signature_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Persist the formatted signature and return to settings."""
+    with get_session() as session:
+        SettingsRepository.set(session, "signature_text", update.message.text_html)
+
+    await update.message.reply_text("✅ امضا ذخیره شد.")
+    reset(context.user_data)
+    await show_settings(update, context)

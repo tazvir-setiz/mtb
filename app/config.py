@@ -58,7 +58,7 @@ class Settings:
     log_level: str = "INFO"
     forward_delay: float = 1.5
     progress_update_interval: float = 3.0
-    
+
     # تنظیمات AI
     ai_enabled: bool = False
     ai_api_key: str = ""
@@ -76,15 +76,23 @@ def load_settings() -> Settings:
     api_hash = _get_env("API_HASH")
     admin_ids = _parse_admin_ids(_get_env("ADMIN_IDS", required=False, default=""))
     database_url = _get_env("DATABASE_URL", required=False, default="sqlite:///data/forwarder.db")
-    telethon_session = _get_env("TELETHON_SESSION", required=False, default="sessions/forwarder_session")
+    telethon_session = _get_env(
+        "TELETHON_SESSION", required=False, default="sessions/forwarder_session"
+    )
     log_level = _get_env("LOG_LEVEL", required=False, default="INFO")
     forward_delay = float(_get_env("FORWARD_DELAY", required=False, default="1.5"))
     progress_interval = float(_get_env("PROGRESS_UPDATE_INTERVAL", required=False, default="3"))
-    
+
     # AI Envs
-    ai_enabled = _get_env("AI_ENABLED", required=False, default="false").lower() in ("1", "true", "yes")
+    ai_enabled = _get_env("AI_ENABLED", required=False, default="false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     ai_api_key = _get_env("AI_API_KEY", required=False, default="")
-    ai_base_url = _get_env("AI_BASE_URL", required=False, default="https://api.openai.com/v1/chat/completions")
+    ai_base_url = _get_env(
+        "AI_BASE_URL", required=False, default="https://api.openai.com/v1/chat/completions"
+    )
     ai_model = _get_env("AI_MODEL", required=False, default="gpt-4o-mini")
     ai_guardrails = _get_env("AI_GUARDRAILS", required=False, default="")
 
@@ -104,5 +112,6 @@ def load_settings() -> Settings:
         ai_model=ai_model,
         ai_guardrails=ai_guardrails,
     )
+
 
 settings = load_settings()

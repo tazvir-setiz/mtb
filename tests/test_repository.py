@@ -60,9 +60,7 @@ def test_retry_failed_messages_query():
     with get_session() as session:
         job = ForwardJobRepository.create(session, -1001, -1002, 100, 101, 2)
         job_id = job.id
-        ForwardedMessageRepository.record(
-            session, job_id, -1001, 100, -1002, MessageStatus.SUCCESS
-        )
+        ForwardedMessageRepository.record(session, job_id, -1001, 100, -1002, MessageStatus.SUCCESS)
         ForwardedMessageRepository.record(
             session, job_id, -1001, 101, -1002, MessageStatus.FAILED, error="⚠️ خطا"
         )
