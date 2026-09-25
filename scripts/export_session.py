@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 
 from telethon.sessions import StringSession
@@ -38,4 +39,6 @@ if __name__ == "__main__":
         raise SystemExit(
             f"{OUTPUT_PATH} already exists. Move or remove it before exporting a new session."
         )
-    asyncio.run(export_session())
+    # Match the bot's Windows socket handling when Telethon uses a SOCKS proxy.
+    loop_factory = asyncio.SelectorEventLoop if sys.platform == "win32" else None
+    asyncio.run(export_session(), loop_factory=loop_factory)
