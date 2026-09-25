@@ -55,7 +55,9 @@ class Settings:
     admin_ids: list[int] = field(default_factory=list)
     database_url: str = "sqlite:///data/forwarder.db"
     telethon_session: str = "sessions/forwarder_session"
+    telethon_string_session: str = field(default="", repr=False)
     log_level: str = "INFO"
+    log_to_file: bool = True
     forward_delay: float = 1.5
     progress_update_interval: float = 3.0
 
@@ -80,6 +82,14 @@ def load_settings() -> Settings:
         "TELETHON_SESSION", required=False, default="sessions/forwarder_session"
     )
     log_level = _get_env("LOG_LEVEL", required=False, default="INFO")
+    telethon_string_session = _get_env(
+        "TELETHON_STRING_SESSION", required=False, default=""
+    ).strip()
+    log_to_file = _get_env("LOG_TO_FILE", required=False, default="true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     forward_delay = float(_get_env("FORWARD_DELAY", required=False, default="1.5"))
     progress_interval = float(_get_env("PROGRESS_UPDATE_INTERVAL", required=False, default="3"))
 
@@ -103,7 +113,9 @@ def load_settings() -> Settings:
         admin_ids=admin_ids,
         database_url=database_url,
         telethon_session=telethon_session,
+        telethon_string_session=telethon_string_session,
         log_level=log_level,
+        log_to_file=log_to_file,
         forward_delay=forward_delay,
         progress_update_interval=progress_interval,
         ai_enabled=ai_enabled,

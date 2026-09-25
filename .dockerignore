@@ -1,0 +1,13 @@
+# Only application sources and runtime dependencies belong in the build context.
+**
+!Dockerfile
+!requirements.txt
+!main.py
+!app/
+!app/**
+**/__pycache__/
+**/*.pyc
+**/.env*
+**/*.session*
+**/*.db*
+**/*.log

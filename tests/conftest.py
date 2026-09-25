@@ -11,6 +11,7 @@ os.environ.setdefault("FORWARD_DELAY", "0")
 os.environ.setdefault("PROGRESS_UPDATE_INTERVAL", "0")
 os.environ["AI_ENABLED"] = "false"
 os.environ["PROXY_ENABLED"] = "false"
+os.environ["TELETHON_STRING_SESSION"] = ""
 
 _tmp_dir = tempfile.TemporaryDirectory(prefix="forwarder-tests-")
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(_tmp_dir.name) / 'test.db'}"

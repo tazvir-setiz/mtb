@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
-from app.config import settings
+from app.config import ConfigError, settings
+from app.telegram.session import create_session
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,7 @@ def get_client() -> TelegramClient:
     global _client
     if _client is None:
         _client = TelegramClient(
-            settings.telethon_session,
+            create_session(settings.telethon_session, settings.telethon_string_session),
             settings.api_id,
             settings.api_hash,
             proxy=_get_proxy(),
@@ -99,12 +101,24 @@ async def ensure_started() -> TelegramClient:
         await client.connect()
 
     if not await client.is_user_authorized():
+        if not sys.stdin or not sys.stdin.isatty():
+            await client.disconnect()
+            raise ConfigError(
+                "Telethon session is not authorized and interactive login is unavailable. "
+                "Generate TELETHON_STRING_SESSION locally with python -m scripts.export_session "
+                "and set it in Railway Variables before deploying. "
+                "If a revoked session already exists on the volume, replace that session file."
+            )
         logger.warning("Telethon session احراز هویت نشده است؛ ورود تعاملی آغاز می‌شود.")
         try:
             await client.start()  # type: ignore[func-returns-value]
         except SessionPasswordNeededError:
             logger.error("حساب دارای Two-Step Verification است؛ رمز عبور را وارد کنید.")
             raise
+    if settings.telethon_string_session:
+        # StringSession contains credentials, but not channel access hashes.
+        # Populate the persistent entity cache for channels configured by numeric ID.
+        await client.get_dialogs()
     return client
 
 

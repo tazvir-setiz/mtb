@@ -4,6 +4,9 @@
 با رابط کاربری کاملاً Inline (بدون نیاز به Command)، مدیریت FloodWait، جلوگیری
 از پیام‌های تکراری، Progress زنده، Retry و ذخیره کامل وضعیت در SQLite.
 
+**دیپلوی روی Railway:** [راهنمای گام‌به‌گام](docs/railway.md) شامل Dockerfile،
+Volume دائمی، متغیرهای محیطی و آماده‌سازی Session برای ورود غیرتعاملی.
+
 ---
 
 ## فهرست مطالب
@@ -317,12 +320,12 @@ WantedBy=multi-user.target
 ```bash
 pip install -r requirements-dev.txt
 pytest -q
-python -m ruff check app tests main.py
-python -m ruff format --check app tests main.py
+python -m ruff check app scripts tests main.py
+python -m ruff format --check app scripts tests main.py
 ```
 
 تنظیمات قالب‌بندی و بررسی کد در `pyproject.toml` است. برای اعمال قالب‌بندی:
-`python -m ruff format app tests main.py`.
+`python -m ruff format app scripts tests main.py`.
 تست‌ها دیتابیس موقت مستقل می‌سازند و AI و پروکسی را غیرفعال می‌کنند تا به
 داده‌های واقعی پروژه یا سرویس خارجی وابسته نباشند.
 

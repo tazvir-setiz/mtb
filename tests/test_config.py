@@ -1,4 +1,4 @@
-from app.config import _parse_admin_ids, settings
+from app.config import _parse_admin_ids, load_settings, settings
 
 
 def test_admin_ids_parsed():
@@ -49,3 +49,12 @@ def test_parse_admin_ids_empty():
 
 def test_parse_admin_ids_ignores_bad_items_only():
     assert _parse_admin_ids("123456789,abc,987654321") == [123456789, 987654321]
+
+
+def test_deployment_settings(monkeypatch):
+    monkeypatch.setenv("TELETHON_STRING_SESSION", "  dummy-session-secret  ")
+    monkeypatch.setenv("LOG_TO_FILE", "false")
+    deployed = load_settings()
+    assert deployed.telethon_string_session == "dummy-session-secret"
+    assert not deployed.log_to_file
+    assert "dummy-session-secret" not in repr(deployed)

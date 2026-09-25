@@ -1,4 +1,7 @@
 .env
+.env.*
+!.env.example
+!.env.railway.example
 .venv/
 venv/
 __pycache__/
@@ -13,3 +16,5 @@ logs/
 .vscode/
 *.session
 *.session-journal
+*.session-wal
+*.session-shm
