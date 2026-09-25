@@ -1,7 +1,3 @@
-"""
-Configuration loader.
-تمام مقادیر حساس فقط از .env خوانده می‌شوند و هرگز داخل کد قرار نمی‌گیرند.
-"""
 from __future__ import annotations
 
 import logging
@@ -29,27 +25,9 @@ def _get_env(name: str, required: bool = True, default: str | None = None) -> st
 
 
 def _parse_admin_ids(raw: str) -> list[int]:
-    """
-    ADMIN_IDS را به‌صورت مقاوم پارس می‌کند.
-
-    برخلاف کتابخانه‌هایی مثل pydantic-settings که برای فیلدهای لیستی انتظار
-    JSON خالص دارند (مثلاً ``["123456789"]``)، این تابع همه فرمت‌های زیر را
-    که معمولاً در پنل‌های Deploy (مثل Railway/Docker/systemd) تایپ می‌شوند
-    می‌پذیرد و اگر یک آیتم قابل تبدیل به عدد نبود، فقط همان آیتم را نادیده
-    می‌گیرد (نه کل مقدار را):
-
-        123456789
-        123456789,987654321
-        123456789, 987654321   (با فاصله)
-        [123456789, 987654321] (JSON-style)
-        ["123456789", "987654321"] (JSON-style با رشته)
-        "123456789"             (با کوتیشن دور کل مقدار)
-    """
     raw = raw.strip()
     if not raw:
         return []
-
-    # حذف کروشه یا کوتیشن دورِ کل مقدار (فرمت JSON یا کوتیشن‌دار)
     if raw.startswith("[") and raw.endswith("]"):
         raw = raw[1:-1]
     raw = raw.strip()
@@ -58,20 +36,14 @@ def _parse_admin_ids(raw: str) -> list[int]:
 
     ids: list[int] = []
     for part in raw.split(","):
-        # کوتیشن، فاصله و براکت احتمالی دورِ هر آیتم را جدا حذف می‌کند
         cleaned = part.strip().strip("[]").strip().strip("'\"").strip()
         if not cleaned:
             continue
         try:
             ids.append(int(cleaned))
         except ValueError:
-            logger.warning("مقدار ADMIN_IDS نامعتبر و نادیده گرفته شد: %r", part)
             continue
 
-    if not ids:
-        logger.warning(
-            "ADMIN_IDS is empty - no one will be able to use this bot's dashboard."
-        )
     return ids
 
 
@@ -86,6 +58,13 @@ class Settings:
     log_level: str = "INFO"
     forward_delay: float = 1.5
     progress_update_interval: float = 3.0
+    
+    # تنظیمات AI
+    ai_enabled: bool = False
+    ai_api_key: str = ""
+    ai_base_url: str = "https://api.openai.com/v1/chat/completions"
+    ai_model: str = "gpt-4o-mini"
+    ai_guardrails: str = ""
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_ids
@@ -93,35 +72,37 @@ class Settings:
 
 def load_settings() -> Settings:
     bot_token = _get_env("BOT_TOKEN")
-    api_id_raw = _get_env("API_ID")
+    api_id = int(_get_env("API_ID"))
     api_hash = _get_env("API_HASH")
-    admin_ids_raw = _get_env("ADMIN_IDS", required=False, default="")
-
-    try:
-        api_id = int(api_id_raw)
-    except ValueError as exc:
-        raise ConfigError("API_ID باید عددی باشد") from exc
-
+    admin_ids = _parse_admin_ids(_get_env("ADMIN_IDS", required=False, default=""))
     database_url = _get_env("DATABASE_URL", required=False, default="sqlite:///data/forwarder.db")
-    telethon_session = _get_env(
-        "TELETHON_SESSION", required=False, default="sessions/forwarder_session"
-    )
+    telethon_session = _get_env("TELETHON_SESSION", required=False, default="sessions/forwarder_session")
     log_level = _get_env("LOG_LEVEL", required=False, default="INFO")
-
-    forward_delay_raw = _get_env("FORWARD_DELAY", required=False, default="1.5")
-    progress_interval_raw = _get_env("PROGRESS_UPDATE_INTERVAL", required=False, default="3")
+    forward_delay = float(_get_env("FORWARD_DELAY", required=False, default="1.5"))
+    progress_interval = float(_get_env("PROGRESS_UPDATE_INTERVAL", required=False, default="3"))
+    
+    # AI Envs
+    ai_enabled = _get_env("AI_ENABLED", required=False, default="false").lower() in ("1", "true", "yes")
+    ai_api_key = _get_env("AI_API_KEY", required=False, default="")
+    ai_base_url = _get_env("AI_BASE_URL", required=False, default="https://api.openai.com/v1/chat/completions")
+    ai_model = _get_env("AI_MODEL", required=False, default="gpt-4o-mini")
+    ai_guardrails = _get_env("AI_GUARDRAILS", required=False, default="")
 
     return Settings(
         bot_token=bot_token,
         api_id=api_id,
         api_hash=api_hash,
-        admin_ids=_parse_admin_ids(admin_ids_raw),
+        admin_ids=admin_ids,
         database_url=database_url,
         telethon_session=telethon_session,
         log_level=log_level,
-        forward_delay=float(forward_delay_raw),
-        progress_update_interval=float(progress_interval_raw),
+        forward_delay=forward_delay,
+        progress_update_interval=progress_interval,
+        ai_enabled=ai_enabled,
+        ai_api_key=ai_api_key,
+        ai_base_url=ai_base_url,
+        ai_model=ai_model,
+        ai_guardrails=ai_guardrails,
     )
-
 
 settings = load_settings()

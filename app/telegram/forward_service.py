@@ -7,7 +7,8 @@ from enum import Enum
 from typing import Awaitable, Callable
 
 from telethon import TelegramClient
-from telethon.extensions import html as telethon_html  # 👈 پردازشگر قدرتمند HTML تلتون
+from telethon.extensions import html as telethon_html
+from telethon.tl.types import MessageMediaWebPage
 from telethon.errors import (
     ChatAdminRequiredError,
     ChatForwardsRestrictedError,
@@ -21,6 +22,7 @@ from app.config import settings
 from app.database.database import get_session
 from app.database.models import JobStatus, MessageStatus
 from app.database.repository import ForwardedMessageRepository, ForwardJobRepository, SettingsRepository
+from app.services.ai_service import apply_ai_guardrails
 
 logger = logging.getLogger(__name__)
 
@@ -42,27 +44,20 @@ FRIENDLY_ERRORS: dict[ForwardErrorType, str] = {
     ForwardErrorType.CHAT_NOT_FOUND: "⚠️ کانال یافت نشد",
     ForwardErrorType.PERMISSION_DENIED: "⚠️ دسترسی کافی نیست",
     ForwardErrorType.FORBIDDEN: "⚠️ ارسال پیام مجاز نیست",
-    ForwardErrorType.PROTECTED_CONTENT: "🔒 محتوای این پیام محافظت‌شده و قابل Forward نیست",
+    ForwardErrorType.PROTECTED_CONTENT: "🔒 محتوای محافظت‌شده",
     ForwardErrorType.NETWORK_ERROR: "🌐 خطای شبکه",
     ForwardErrorType.UNKNOWN: "⚠️ خطای نامشخص",
 }
 
 
 def classify_error(exc: Exception) -> ForwardErrorType:
-    if isinstance(exc, FloodWaitError):
-        return ForwardErrorType.FLOOD_WAIT
-    if isinstance(exc, MessageIdInvalidError):
-        return ForwardErrorType.MESSAGE_NOT_FOUND
-    if isinstance(exc, (ChatAdminRequiredError, ChatWriteForbiddenError)):
-        return ForwardErrorType.PERMISSION_DENIED
-    if isinstance(exc, ChatForwardsRestrictedError):
-        return ForwardErrorType.PROTECTED_CONTENT
-    if isinstance(exc, UserBannedInChannelError):
-        return ForwardErrorType.FORBIDDEN
-    if isinstance(exc, (ValueError,)) and "Cannot find" in str(exc):
-        return ForwardErrorType.CHAT_NOT_FOUND
-    if isinstance(exc, (ConnectionError, OSError)):
-        return ForwardErrorType.NETWORK_ERROR
+    if isinstance(exc, FloodWaitError): return ForwardErrorType.FLOOD_WAIT
+    if isinstance(exc, MessageIdInvalidError): return ForwardErrorType.MESSAGE_NOT_FOUND
+    if isinstance(exc, (ChatAdminRequiredError, ChatWriteForbiddenError)): return ForwardErrorType.PERMISSION_DENIED
+    if isinstance(exc, ChatForwardsRestrictedError): return ForwardErrorType.PROTECTED_CONTENT
+    if isinstance(exc, UserBannedInChannelError): return ForwardErrorType.FORBIDDEN
+    if isinstance(exc, (ValueError,)) and "Cannot find" in str(exc): return ForwardErrorType.CHAT_NOT_FOUND
+    if isinstance(exc, (ConnectionError, OSError)): return ForwardErrorType.NETWORK_ERROR
     return ForwardErrorType.UNKNOWN
 
 
@@ -90,50 +85,42 @@ def _should_stop(job_id: int) -> bool:
     return _stop_flags.get(job_id, False)
 
 
-async def append_signature_if_needed(client: TelegramClient, dest_id: int, dest_msg, signature_html: str) -> None:
-    """
-    در صورت وجود امضا، آن را با تبدیلِ ایمن به HTML و حفظ دقیقِ فرمتینگ پیام اصلی به انتهای پیام می‌چسباند.
-    """
-    if not signature_html or not dest_msg:
-        return
+async def _process_and_send_message(client: TelegramClient, msg_id: int, source_id: int, dest_id: int,
+                                    signature: str | None):
+    msgs = await client.get_messages(source_id, ids=[msg_id])
+    if not msgs or not msgs[0]:
+        raise MessageIdInvalidError(request=None)
 
-    # چشم‌پوشی از پیام‌هایی که امکان درج متن (کپشن) ندارند
-    if getattr(dest_msg, 'poll', None) or getattr(dest_msg, 'sticker', False) or getattr(dest_msg, 'dice',
-                                                                                         False) or getattr(dest_msg,
-                                                                                                           'contact',
-                                                                                                           False) or getattr(
-            dest_msg, 'location', False):
-        return
+    original_msg = msgs[0]
 
-    # استفاده از پیام خام (بدون مارک‌داون) تا تلتون ستاره‌های مارک‌داون (**) تولید نکند
-    current_text = dest_msg.message or ""
-    current_entities = dest_msg.entities or []
+    if getattr(original_msg, 'poll', None):
+        logger.info("Message %d is a poll. Skipping AI and forwarding directly.", msg_id)
+        result = await client.forward_messages(entity=dest_id, messages=msg_id, from_peer=source_id, drop_author=True)
+        return result[0] if isinstance(result, list) else result
 
-    # استخراج پیام اصلی دقیقاً به شکل یک رشته HTML
-    current_html = telethon_html.unparse(current_text, current_entities)
+    current_html = telethon_html.unparse(original_msg.message or "", original_msg.entities or [])
 
-    separator = "\n\n" if current_text.strip() else ""
+    processed_html = await apply_ai_guardrails(current_html)
 
-    # ترکیب HTML پیام اصلی با HTML امضا
-    new_html = current_html + separator + signature_html
+    if processed_html == "__DROP__":
+        return None
 
-    is_media = bool(dest_msg.media)
-    max_len = 1024 if is_media else 4096
+    if signature:
+        separator = "\n\n" if processed_html.strip() else ""
+        processed_html += separator + signature
 
-    # بررسی طول نمایشی پیام (بدون تگ‌های HTML) برای جلوگیری از خطای تلگرام
-    sig_plain, _ = telethon_html.parse(signature_html)
-    if len(current_text + separator + sig_plain) > max_len:
-        return
+    media_to_send = original_msg.media
+    if media_to_send and type(media_to_send).__name__ == "MessageMediaWebPage":
+        media_to_send = None
 
-    try:
-        await client.edit_message(
-            entity=dest_id,
-            message=dest_msg.id,
-            text=new_html,
-            parse_mode='html'  # 👈 دستور به تلتون برای تفسیر بلاک یکپارچه HTML
-        )
-    except Exception as e:
-        logger.warning("Could not append signature to message %s: %s", getattr(dest_msg, 'id', 'unknown'), e)
+    dest_msg = await client.send_message(
+        entity=dest_id,
+        message=processed_html,
+        file=media_to_send,
+        parse_mode='html',
+        link_preview=False
+    )
+    return dest_msg
 
 
 async def forward_range(
@@ -150,8 +137,7 @@ async def forward_range(
 
     with get_session() as session:
         job = ForwardJobRepository.get(session, job_id)
-        if job:
-            ForwardJobRepository.update_status(session, job, JobStatus.RUNNING)
+        if job: ForwardJobRepository.update_status(session, job, JobStatus.RUNNING)
         signature = SettingsRepository.get(session, "signature_text")
 
     last_update = 0.0
@@ -159,140 +145,103 @@ async def forward_range(
 
     for msg_id in message_ids:
         if _should_stop(job_id):
+            logger.info("Job %d manually stopped.", job_id)
             with get_session() as session:
                 job = ForwardJobRepository.get(session, job_id)
-                if job:
-                    ForwardJobRepository.update_status(session, job, JobStatus.PAUSED)
+                if job: ForwardJobRepository.update_status(session, job, JobStatus.PAUSED)
             if on_progress:
-                await on_progress(
-                    ProgressSnapshot(job_id, total, processed, success, skipped, failed, stopped=True)
-                )
+                await on_progress(ProgressSnapshot(job_id, total, processed, success, skipped, failed, stopped=True))
             return
 
         with get_session() as session:
-            already = ForwardedMessageRepository.exists(
-                session, source_channel_id, msg_id, destination_channel_id
-            )
+            already = ForwardedMessageRepository.exists(session, source_channel_id, msg_id, destination_channel_id)
+
         if already:
             skipped += 1
             processed += 1
             with get_session() as session:
                 job = ForwardJobRepository.get(session, job_id)
-                if job:
-                    ForwardJobRepository.increment(session, job, skipped=1, last_message_id=msg_id)
-                ForwardedMessageRepository.record(
-                    session,
-                    job_id,
-                    source_channel_id,
-                    msg_id,
-                    destination_channel_id,
-                    MessageStatus.DUPLICATE,
-                )
+                if job: ForwardJobRepository.increment(session, job, skipped=1, last_message_id=msg_id)
+                ForwardedMessageRepository.record(session, job_id, source_channel_id, msg_id, destination_channel_id,
+                                                  MessageStatus.DUPLICATE)
+            logger.debug("Message %d skipped (Already forwarded).", msg_id)
         else:
             try:
-                result = await client.forward_messages(
-                    entity=destination_channel_id,
-                    messages=msg_id,
-                    from_peer=source_channel_id,
-                    drop_author=True,
-                )
-                dest_msg = result[0] if isinstance(result, list) else result
-                dest_id = getattr(dest_msg, "id", None)
+                dest_msg = await _process_and_send_message(client, msg_id, source_channel_id, destination_channel_id,
+                                                           signature)
 
-                # الصاق امضا همراه با فرمت
-                if signature and dest_id:
-                    await append_signature_if_needed(client, destination_channel_id, dest_msg, signature)
-
-                success += 1
-                with get_session() as session:
-                    job = ForwardJobRepository.get(session, job_id)
-                    if job:
-                        ForwardJobRepository.increment(
-                            session, job, success=1, last_message_id=msg_id
-                        )
-                    ForwardedMessageRepository.record(
-                        session,
-                        job_id,
-                        source_channel_id,
-                        msg_id,
-                        destination_channel_id,
-                        MessageStatus.SUCCESS,
-                        destination_message_id=dest_id,
-                    )
-                logger.info("Message forwarded: %s -> %s", msg_id, dest_id)
-            except FloodWaitError as exc:
-                logger.warning("FloodWait: sleeping %s seconds", exc.seconds)
-                if on_progress:
-                    await on_progress(
-                        ProgressSnapshot(job_id, total, processed, success, skipped, failed)
-                    )
-                await asyncio.sleep(exc.seconds + 1)
-                try:
-                    result = await client.forward_messages(
-                        entity=destination_channel_id,
-                        messages=msg_id,
-                        from_peer=source_channel_id,
-                        drop_author=True,
-                    )
-                    dest_msg = result[0] if isinstance(result, list) else result
+                if dest_msg is None:
+                    skipped += 1
+                    with get_session() as session:
+                        job = ForwardJobRepository.get(session, job_id)
+                        if job: ForwardJobRepository.increment(session, job, skipped=1, last_message_id=msg_id)
+                        ForwardedMessageRepository.record(session, job_id, source_channel_id, msg_id,
+                                                          destination_channel_id, MessageStatus.SKIPPED,
+                                                          error="حذف شده توسط هوش مصنوعی")
+                    logger.info("Message %d skipped (Rejected by AI Guardrails).", msg_id)
+                else:
                     dest_id = getattr(dest_msg, "id", None)
-
-                    # الصاق امضا همراه با فرمت
-                    if signature and dest_id:
-                        await append_signature_if_needed(client, destination_channel_id, dest_msg, signature)
-
                     success += 1
                     with get_session() as session:
                         job = ForwardJobRepository.get(session, job_id)
-                        if job:
-                            ForwardJobRepository.increment(
-                                session, job, success=1, last_message_id=msg_id
-                            )
-                        ForwardedMessageRepository.record(
-                            session,
-                            job_id,
-                            source_channel_id,
-                            msg_id,
-                            destination_channel_id,
-                            MessageStatus.SUCCESS,
-                            destination_message_id=dest_id,
-                        )
+                        if job: ForwardJobRepository.increment(session, job, success=1, last_message_id=msg_id)
+                        ForwardedMessageRepository.record(session, job_id, source_channel_id, msg_id,
+                                                          destination_channel_id, MessageStatus.SUCCESS,
+                                                          destination_message_id=dest_id)
+                    logger.info("Message %d -> %d forwarded successfully.", msg_id, dest_id)
+
+            except FloodWaitError as exc:
+                logger.warning("FloodWait triggered. Sleeping for %d seconds...", exc.seconds)
+                if on_progress:
+                    await on_progress(ProgressSnapshot(job_id, total, processed, success, skipped, failed))
+                await asyncio.sleep(exc.seconds + 1)
+
+                try:
+                    dest_msg = await _process_and_send_message(client, msg_id, source_channel_id,
+                                                               destination_channel_id, signature)
+                    if dest_msg is None:
+                        skipped += 1
+                        with get_session() as session:
+                            job = ForwardJobRepository.get(session, job_id)
+                            if job: ForwardJobRepository.increment(session, job, skipped=1, last_message_id=msg_id)
+                            ForwardedMessageRepository.record(session, job_id, source_channel_id, msg_id,
+                                                              destination_channel_id, MessageStatus.SKIPPED,
+                                                              error="حذف شده توسط هوش مصنوعی")
+                    else:
+                        dest_id = getattr(dest_msg, "id", None)
+                        success += 1
+                        with get_session() as session:
+                            job = ForwardJobRepository.get(session, job_id)
+                            if job: ForwardJobRepository.increment(session, job, success=1, last_message_id=msg_id)
+                            ForwardedMessageRepository.record(session, job_id, source_channel_id, msg_id,
+                                                              destination_channel_id, MessageStatus.SUCCESS,
+                                                              destination_message_id=dest_id)
                 except Exception as retry_exc:  # noqa: BLE001
                     failed += 1
                     err_type = classify_error(retry_exc)
-                    logger.error("Message forwarding failed after FloodWait: %s", retry_exc)
+                    logger.exception("Failed to forward message %d after FloodWait.", msg_id)
                     with get_session() as session:
                         job = ForwardJobRepository.get(session, job_id)
-                        if job:
-                            ForwardJobRepository.increment(
-                                session, job, failed=1, last_message_id=msg_id
-                            )
-                        ForwardedMessageRepository.record(
-                            session,
-                            job_id,
-                            source_channel_id,
-                            msg_id,
-                            destination_channel_id,
-                            MessageStatus.FAILED,
-                            error=FRIENDLY_ERRORS[err_type],
-                        )
+                        if job: ForwardJobRepository.increment(session, job, failed=1, last_message_id=msg_id)
+                        ForwardedMessageRepository.record(session, job_id, source_channel_id, msg_id,
+                                                          destination_channel_id, MessageStatus.FAILED,
+                                                          error=FRIENDLY_ERRORS[err_type])
+
             except Exception as exc:  # noqa: BLE001
                 failed += 1
                 err_type = classify_error(exc)
-                logger.error("Message forwarding failed: %s (%s)", exc, err_type)
+
+                if err_type == ForwardErrorType.UNKNOWN:
+                    logger.exception("Unknown error while forwarding message %d", msg_id)
+                else:
+                    logger.error("Failed to forward message %d: %s (Reason: %s)", msg_id, str(exc), err_type)
+
                 with get_session() as session:
                     job = ForwardJobRepository.get(session, job_id)
-                    if job:
-                        ForwardJobRepository.increment(session, job, failed=1, last_message_id=msg_id)
-                    ForwardedMessageRepository.record(
-                        session,
-                        job_id,
-                        source_channel_id,
-                        msg_id,
-                        destination_channel_id,
-                        MessageStatus.FAILED,
-                        error=FRIENDLY_ERRORS[err_type],
-                    )
+                    if job: ForwardJobRepository.increment(session, job, failed=1, last_message_id=msg_id)
+                    ForwardedMessageRepository.record(session, job_id, source_channel_id, msg_id,
+                                                      destination_channel_id, MessageStatus.FAILED,
+                                                      error=FRIENDLY_ERRORS[err_type])
             processed += 1
 
         now = loop.time()
@@ -304,26 +253,21 @@ async def forward_range(
 
     with get_session() as session:
         job = ForwardJobRepository.get(session, job_id)
-        if job:
-            ForwardJobRepository.update_status(session, job, JobStatus.COMPLETED)
-    logger.info("Forward job completed: job_id=%s success=%s failed=%s skipped=%s",
-                job_id, success, failed, skipped)
+        if job: ForwardJobRepository.update_status(session, job, JobStatus.COMPLETED)
+    logger.info("Job %d completed. Success: %d, Skipped: %d, Failed: %d", job_id, success, skipped, failed)
 
 
-async def retry_failed(
-        client: TelegramClient,
-        job_id: int,
-        on_progress: ProgressCallback | None = None,
-) -> None:
+async def retry_failed(client: TelegramClient, job_id: int, on_progress: ProgressCallback | None = None) -> None:
+    logger.info("Initiating retry for failed messages of Job %d", job_id)
     with get_session() as session:
         job = ForwardJobRepository.get(session, job_id)
-        if not job:
-            return
+        if not job: return
         failed_records = ForwardedMessageRepository.failed_for_job(session, job_id)
         message_ids = [r.source_message_id for r in failed_records]
         source_id = job.source_channel_id
         dest_id = job.destination_channel_id
 
     if not message_ids:
+        logger.info("No failed messages found to retry for Job %d", job_id)
         return
     await forward_range(client, job_id, source_id, dest_id, message_ids, on_progress)

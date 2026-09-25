@@ -18,30 +18,37 @@ from app.telegram.client import ensure_started, stop_client
 
 def setup_logging() -> None:
     Path("logs").mkdir(exist_ok=True)
-    log_format = "%(asctime)s %(levelname)-8s %(name)s - %(message)s"
+
+    # 👈 فرمت جدید و بسیار حرفه‌ای برای لاگ‌ها (شامل نام فایل و شماره خط)
+    log_format = "%(asctime)s | %(levelname)-8s | %(name)s:%(filename)s:%(lineno)d | %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+    formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
 
     root = logging.getLogger()
     root.setLevel(settings.log_level)
 
-    console = logging.StreamHandler()
-    console.setFormatter(logging.Formatter(log_format))
+    # لاگ در کنسول
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(formatter)
     root.addHandler(console)
 
+    # لاگ فایل اصلی (با پشتیبانی از کاراکترهای فارسی و حجم 10 مگابایت)
     app_file = logging.handlers.RotatingFileHandler(
-        "logs/app.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8"
+        "logs/app.log", maxBytes=10_000_000, backupCount=5, encoding="utf-8"
     )
-    app_file.setFormatter(logging.Formatter(log_format))
+    app_file.setFormatter(formatter)
     app_file.setLevel(logging.INFO)
     root.addHandler(app_file)
 
+    # لاگ اختصاصی خطاها
     error_file = logging.handlers.RotatingFileHandler(
-        "logs/error.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8"
+        "logs/error.log", maxBytes=10_000_000, backupCount=5, encoding="utf-8"
     )
-    error_file.setFormatter(logging.Formatter(log_format))
+    error_file.setFormatter(formatter)
     error_file.setLevel(logging.ERROR)
     root.addHandler(error_file)
 
-    # جلوگیری از لاگ شدن کتابخانه‌های پرحجم در سطح DEBUG
+    # سایلنت کردن لاگ‌های مزاحم و اضافی کتابخانه‌ها
     logging.getLogger("telethon").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -49,7 +56,6 @@ def setup_logging() -> None:
 async def _post_init(application) -> None:  # noqa: ANN001
     client = await ensure_started()
     logging.getLogger(__name__).info("Telethon client متصل شد.")
-    # اگر Auto-Forward قبلاً روشن بوده، دوباره فعالش کن (فقط پیام‌های از این لحظه به بعد)
     await auto_forward.sync_on_startup(client)
 
 
@@ -60,7 +66,7 @@ async def _post_shutdown(application) -> None:  # noqa: ANN001
 def main() -> None:
     setup_logging()
     logger = logging.getLogger(__name__)
-    logger.info("Starting bot")
+    logger.info("Starting bot... (Telegram Forwarder + AI Guardrails)")
 
     init_db()
 
