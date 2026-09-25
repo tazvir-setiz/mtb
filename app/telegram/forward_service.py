@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Awaitable, Callable
 
 from telethon import TelegramClient
+from telethon.extensions import html as telethon_html  # 👈 پردازشگر قدرتمند HTML تلتون
 from telethon.errors import (
     ChatAdminRequiredError,
     ChatForwardsRestrictedError,
@@ -19,7 +20,7 @@ from telethon.errors.rpcerrorlist import ChatWriteForbiddenError
 from app.config import settings
 from app.database.database import get_session
 from app.database.models import JobStatus, MessageStatus
-from app.database.repository import ForwardedMessageRepository, ForwardJobRepository
+from app.database.repository import ForwardedMessageRepository, ForwardJobRepository, SettingsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -89,18 +90,60 @@ def _should_stop(job_id: int) -> bool:
     return _stop_flags.get(job_id, False)
 
 
+async def append_signature_if_needed(client: TelegramClient, dest_id: int, dest_msg, signature_html: str) -> None:
+    """
+    در صورت وجود امضا، آن را با تبدیلِ ایمن به HTML و حفظ دقیقِ فرمتینگ پیام اصلی به انتهای پیام می‌چسباند.
+    """
+    if not signature_html or not dest_msg:
+        return
+
+    # چشم‌پوشی از پیام‌هایی که امکان درج متن (کپشن) ندارند
+    if getattr(dest_msg, 'poll', None) or getattr(dest_msg, 'sticker', False) or getattr(dest_msg, 'dice',
+                                                                                         False) or getattr(dest_msg,
+                                                                                                           'contact',
+                                                                                                           False) or getattr(
+            dest_msg, 'location', False):
+        return
+
+    # استفاده از پیام خام (بدون مارک‌داون) تا تلتون ستاره‌های مارک‌داون (**) تولید نکند
+    current_text = dest_msg.message or ""
+    current_entities = dest_msg.entities or []
+
+    # استخراج پیام اصلی دقیقاً به شکل یک رشته HTML
+    current_html = telethon_html.unparse(current_text, current_entities)
+
+    separator = "\n\n" if current_text.strip() else ""
+
+    # ترکیب HTML پیام اصلی با HTML امضا
+    new_html = current_html + separator + signature_html
+
+    is_media = bool(dest_msg.media)
+    max_len = 1024 if is_media else 4096
+
+    # بررسی طول نمایشی پیام (بدون تگ‌های HTML) برای جلوگیری از خطای تلگرام
+    sig_plain, _ = telethon_html.parse(signature_html)
+    if len(current_text + separator + sig_plain) > max_len:
+        return
+
+    try:
+        await client.edit_message(
+            entity=dest_id,
+            message=dest_msg.id,
+            text=new_html,
+            parse_mode='html'  # 👈 دستور به تلتون برای تفسیر بلاک یکپارچه HTML
+        )
+    except Exception as e:
+        logger.warning("Could not append signature to message %s: %s", getattr(dest_msg, 'id', 'unknown'), e)
+
+
 async def forward_range(
-    client: TelegramClient,
-    job_id: int,
-    source_channel_id: int,
-    destination_channel_id: int,
-    message_ids: list[int],
-    on_progress: ProgressCallback | None = None,
+        client: TelegramClient,
+        job_id: int,
+        source_channel_id: int,
+        destination_channel_id: int,
+        message_ids: list[int],
+        on_progress: ProgressCallback | None = None,
 ) -> None:
-    """
-    پیام‌های message_ids را از source_channel_id به destination_channel_id
-    به‌صورت Forward واقعی منتقل می‌کند. نتیجه هر پیام در دیتابیس ثبت می‌شود.
-    """
     _stop_flags.pop(job_id, None)
     total = len(message_ids)
     processed = success = skipped = failed = 0
@@ -109,6 +152,7 @@ async def forward_range(
         job = ForwardJobRepository.get(session, job_id)
         if job:
             ForwardJobRepository.update_status(session, job, JobStatus.RUNNING)
+        signature = SettingsRepository.get(session, "signature_text")
 
     last_update = 0.0
     loop = asyncio.get_event_loop()
@@ -150,9 +194,15 @@ async def forward_range(
                     entity=destination_channel_id,
                     messages=msg_id,
                     from_peer=source_channel_id,
+                    drop_author=True,
                 )
                 dest_msg = result[0] if isinstance(result, list) else result
                 dest_id = getattr(dest_msg, "id", None)
+
+                # الصاق امضا همراه با فرمت
+                if signature and dest_id:
+                    await append_signature_if_needed(client, destination_channel_id, dest_msg, signature)
+
                 success += 1
                 with get_session() as session:
                     job = ForwardJobRepository.get(session, job_id)
@@ -177,12 +227,20 @@ async def forward_range(
                         ProgressSnapshot(job_id, total, processed, success, skipped, failed)
                     )
                 await asyncio.sleep(exc.seconds + 1)
-                # پیام فعلی را دوباره تلاش کن (بدون افزایش processed)
                 try:
                     result = await client.forward_messages(
-                        entity=destination_channel_id, messages=msg_id, from_peer=source_channel_id
+                        entity=destination_channel_id,
+                        messages=msg_id,
+                        from_peer=source_channel_id,
+                        drop_author=True,
                     )
                     dest_msg = result[0] if isinstance(result, list) else result
+                    dest_id = getattr(dest_msg, "id", None)
+
+                    # الصاق امضا همراه با فرمت
+                    if signature and dest_id:
+                        await append_signature_if_needed(client, destination_channel_id, dest_msg, signature)
+
                     success += 1
                     with get_session() as session:
                         job = ForwardJobRepository.get(session, job_id)
@@ -197,7 +255,7 @@ async def forward_range(
                             msg_id,
                             destination_channel_id,
                             MessageStatus.SUCCESS,
-                            destination_message_id=getattr(dest_msg, "id", None),
+                            destination_message_id=dest_id,
                         )
                 except Exception as retry_exc:  # noqa: BLE001
                     failed += 1
@@ -253,9 +311,9 @@ async def forward_range(
 
 
 async def retry_failed(
-    client: TelegramClient,
-    job_id: int,
-    on_progress: ProgressCallback | None = None,
+        client: TelegramClient,
+        job_id: int,
+        on_progress: ProgressCallback | None = None,
 ) -> None:
     with get_session() as session:
         job = ForwardJobRepository.get(session, job_id)

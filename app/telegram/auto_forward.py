@@ -1,14 +1,5 @@
 """
 Auto-Forward پیام‌های جدید.
-
-با فعال بودن این حالت، به‌محض انتشار پیام جدید در کانال مبدأ، همان لحظه
-با Telethon Event (events.NewMessage) دریافت و به کانال مقصد Forward واقعی
-می‌شود؛ نیازی به فشردن دکمه در Dashboard نیست.
-
-نکته مهم: این حالت پیام‌های جاافتاده حین خاموش بودن ربات را Forward نمی‌کند؛
-فقط پیام‌هایی که از لحظه روشن (یا فعال‌سازی مجدد) به بعد در کانال مبدأ
-منتشر می‌شوند پردازش خواهند شد. برای پیام‌های قبلی از «انتقال بازه» یا
-«انتخاب Message ID» در منوی «انتقال پیام‌ها» استفاده کنید.
 """
 from __future__ import annotations
 
@@ -24,13 +15,11 @@ from app.database.repository import (
     ForwardJobRepository,
     SettingsRepository,
 )
-from app.telegram.forward_service import FRIENDLY_ERRORS, classify_error
+from app.telegram.forward_service import FRIENDLY_ERRORS, append_signature_if_needed, classify_error
 
 logger = logging.getLogger(__name__)
 
 SETTING_KEY = "auto_forward_enabled"
-
-# Marker مخصوص Job مربوط به حالت Auto-Forward (برای تمایز از Jobهای دستی)
 _AUTO_JOB_MARKER = -1
 
 _handler = None  # type: ignore[var-annotated]
@@ -48,10 +37,6 @@ def _set_enabled(value: bool) -> None:
 
 
 def _get_auto_job_id(source_id: int, destination_id: int) -> int:
-    """
-    یک ForwardJob دائمی مخصوص حالت Auto-Forward برمی‌گرداند (برای ثبت
-    ForwardedMessageها استفاده می‌شود) یا در صورت نبود، آن را می‌سازد.
-    """
     with get_session() as session:
         job = ForwardJobRepository.create(
             session,
@@ -70,15 +55,25 @@ async def _on_new_message(event, source_id: int, destination_id: int, job_id: in
 
     with get_session() as session:
         already = ForwardedMessageRepository.exists(session, source_id, msg_id, destination_id)
+        signature = SettingsRepository.get(session, "signature_text")
+
     if already:
         return
 
     try:
         result = await event.client.forward_messages(
-            entity=destination_id, messages=msg_id, from_peer=source_id
+            entity=destination_id,
+            messages=msg_id,
+            from_peer=source_id,
+            drop_author=True,
         )
         dest_msg = result[0] if isinstance(result, list) else result
         dest_id = getattr(dest_msg, "id", None)
+
+        # الصاق امضا
+        if signature and dest_id:
+            await append_signature_if_needed(event.client, destination_id, dest_msg, signature)
+
         with get_session() as session:
             ForwardedMessageRepository.record(
                 session,
@@ -106,10 +101,6 @@ async def _on_new_message(event, source_id: int, destination_id: int, job_id: in
 
 
 async def start_listener(client: TelegramClient) -> bool:
-    """
-    Event Handler را روی کانال مبدأ فعلی ثبت می‌کند.
-    اگر کانال مبدأ/مقصد تنظیم نشده باشند، False برمی‌گرداند.
-    """
     global _handler, _registered_client
 
     with get_session() as session:
@@ -146,7 +137,6 @@ async def stop_listener(client: TelegramClient) -> None:
 
 
 async def enable(client: TelegramClient) -> bool:
-    """Auto-Forward را فعال می‌کند و در Settings ذخیره می‌کند."""
     started = await start_listener(client)
     if started:
         _set_enabled(True)
@@ -154,19 +144,12 @@ async def enable(client: TelegramClient) -> bool:
 
 
 async def disable(client: TelegramClient) -> None:
-    """Auto-Forward را غیرفعال می‌کند و در Settings ذخیره می‌کند."""
     await stop_listener(client)
     _set_enabled(False)
 
 
 async def sync_on_startup(client: TelegramClient) -> None:
-    """
-    در استارت برنامه صدا زده می‌شود: اگر قبلاً Auto-Forward فعال بوده،
-    دوباره Listener را (فقط برای پیام‌های از این لحظه به بعد) ثبت می‌کند.
-    پیام‌های منتشرشده حین خاموش بودن ربات، عمداً Forward نمی‌شوند.
-    """
     if is_enabled():
         started = await start_listener(client)
         if not started:
-            # کانال‌ها هنوز تنظیم نشده‌اند؛ وضعیت را خاموش نگه دار
             _set_enabled(False)

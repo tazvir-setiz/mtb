@@ -126,6 +126,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 await settings_handlers.show_delay_info(update, context)
             elif action == "clear_data":
                 await settings_handlers.clear_data(update, context)
+            elif action == "signature":
+                await settings_handlers.ask_signature(update, context)
+            elif action == "clear_sig":
+                await settings_handlers.clear_signature(update, context)
             return
 
     except Exception:  # noqa: BLE001
@@ -144,6 +148,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await source.handle_channel_input(update, context)
         elif state in (State.RANGE_INPUT_START, State.RANGE_INPUT_END, State.IDS_INPUT):
             await transfer.handle_text_input(update, context, state)
+        elif state == State.SIGNATURE_INPUT:
+            from app.database.database import get_session
+            from app.database.repository import SettingsRepository
+            # 👈 تغییر بسیار مهم: دریافت متن با فرمت‌بندی HTML (حفظ بولد، لینک و غیره)
+            text_html = update.message.text_html
+            with get_session() as session:
+                SettingsRepository.set(session, "signature_text", text_html)
+            await update.message.reply_text("✅ امضا (زیرنویس) با موفقیت ذخیره شد.")
+            reset(context.user_data)
+            await settings_handlers.show_settings(update, context)
         else:
             await update.message.reply_text(
                 "از دکمه‌های منو برای انجام عملیات استفاده کنید.",
@@ -154,27 +168,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _get_bot_api_proxy_url() -> str | None:
-    """
-    آدرس پروکسی برای python-telegram-bot (که از httpx استفاده می‌کند) را
-    از همان متغیرهای .env استفاده‌شده برای Telethon می‌سازد.
-
-    نکته: python-telegram-bot >= 20 برای پروکسی SOCKS5/SOCKS4 به بسته
-    ``httpx[socks]`` نیاز دارد:
-        pip install "httpx[socks]"
-
-    متغیرهای .env (مشترک با app/telegram/client.py):
-        PROXY_ENABLED=true
-        PROXY_TYPE=socks5      # socks5 | socks4 | http
-        PROXY_HOST=127.0.0.1
-        PROXY_PORT=12334
-        PROXY_USERNAME=        # اختیاری
-        PROXY_PASSWORD=        # اختیاری
-    """
     if os.getenv("PROXY_ENABLED", "false").lower() not in ("1", "true", "yes"):
         return None
 
     scheme_map = {
-        "socks5": "socks5h",  # h => نام‌دامنه هم از طریق پروکسی resolve می‌شود
+        "socks5": "socks5h",
         "socks4": "socks4",
         "http": "http",
     }

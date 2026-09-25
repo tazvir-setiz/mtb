@@ -14,6 +14,7 @@ class State(str, Enum):
     CONFIRM_TRANSFER = "CONFIRM_TRANSFER"
     TRANSFERRING = "TRANSFERRING"
     TRANSFER_RESULT = "TRANSFER_RESULT"
+    SIGNATURE_INPUT = "SIGNATURE_INPUT"  # 👈 اضافه شد
 
 
 # کلیدهای user_data

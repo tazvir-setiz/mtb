@@ -147,7 +147,16 @@ def settings_menu() -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📥 کانال مبدأ", callback_data="menu:source")],
             [InlineKeyboardButton("📤 کانال مقصد", callback_data="menu:destination")],
             [InlineKeyboardButton("⏱ فاصله Forward", callback_data="settings:delay")],
+            [InlineKeyboardButton("✍️ تنظیم زیرنویس (امضا)", callback_data="settings:signature")],  # 👈 اضافه شد
             [InlineKeyboardButton("🧹 پاک کردن داده‌ها", callback_data="settings:clear_data")],
             [InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back")],
+        ]
+    )
+
+def signature_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🗑 حذف امضای فعلی", callback_data="settings:clear_sig")],
+            [InlineKeyboardButton("❌ لغو", callback_data="nav:cancel")],
         ]
     )
