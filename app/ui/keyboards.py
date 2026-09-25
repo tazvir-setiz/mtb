@@ -3,18 +3,24 @@ from __future__ import annotations
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def main_menu(source_ready: bool, destination_ready: bool) -> InlineKeyboardMarkup:
+def main_menu(source_ready: bool, destination_ready: bool, auto_forward_enabled: bool = False) -> InlineKeyboardMarkup:
     transfer_row = (
         [InlineKeyboardButton("🚀 انتقال پیام‌ها", callback_data="menu:transfer")]
         if source_ready and destination_ready
         else []
     )
+    auto_row = []
+    if source_ready and destination_ready:
+        label = "🟢 Auto-Forward: روشن" if auto_forward_enabled else "🔴 Auto-Forward: خاموش"
+        auto_row = [InlineKeyboardButton(label, callback_data="menu:auto_toggle")]
+
     rows = [
         [
             InlineKeyboardButton("📥 کانال مبدأ", callback_data="menu:source"),
             InlineKeyboardButton("📤 کانال مقصد", callback_data="menu:destination"),
         ],
         transfer_row,
+        auto_row,
         [
             InlineKeyboardButton("📋 پیام‌های اخیر", callback_data="menu:recent"),
             InlineKeyboardButton("📊 آمار", callback_data="menu:stats"),

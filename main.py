@@ -3,18 +3,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import logging.handlers
-from pathlib import Path
-
-from app.config import settings
-from app.database.database import init_db
-from app.telegram.bot import build_application
-from app.telegram.client import ensure_started, stop_client
-
-import asyncio
 import sys
+from pathlib import Path
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+from app.config import settings
+from app.database.database import init_db
+from app.telegram import auto_forward
+from app.telegram.bot import build_application
+from app.telegram.client import ensure_started, stop_client
+
+
 def setup_logging() -> None:
     Path("logs").mkdir(exist_ok=True)
     log_format = "%(asctime)s %(levelname)-8s %(name)s - %(message)s"
@@ -46,8 +47,10 @@ def setup_logging() -> None:
 
 
 async def _post_init(application) -> None:  # noqa: ANN001
-    await ensure_started()
+    client = await ensure_started()
     logging.getLogger(__name__).info("Telethon client متصل شد.")
+    # اگر Auto-Forward قبلاً روشن بوده، دوباره فعالش کن (فقط پیام‌های از این لحظه به بعد)
+    await auto_forward.sync_on_startup(client)
 
 
 async def _post_shutdown(application) -> None:  # noqa: ANN001
