@@ -104,7 +104,17 @@ async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, kin
         )
     context.user_data.pop(KEY_PENDING_CHANNEL, None)
     if auto_forward.is_enabled():
-        await auto_forward.sync_on_startup(await ensure_started())
+        try:
+            refreshed = await auto_forward.refresh_listener(await ensure_started())
+        except Exception:
+            logger.exception("Could not reconnect auto-forward after channel change")
+            await auto_forward.disable()
+            refreshed = False
+        if not refreshed:
+            await update.callback_query.message.reply_text(
+                "⚠️ کانال ذخیره شد، اما اتصال انتقال خودکار برقرار نشد و خاموش شد. "
+                "پس از بررسی اتصال، دوباره آن را فعال کنید."
+            )
     await show_dashboard(update, context, edit=True)
 
 

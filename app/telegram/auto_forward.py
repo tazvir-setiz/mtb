@@ -56,9 +56,14 @@ def _get_auto_job_id(source_id: int, destination_id: int) -> int:
         return job.id
 
 
-async def _on_new_message(event, source_id: int, destination_id: int, job_id: int) -> None:  # noqa: ANN001
+async def _on_new_message(
+    event, source_id: int, destination_id: int, job_id: int, *, listener=None
+) -> None:  # noqa: ANN001
     # Wait until the previous message has finished processing.
     async with _processing_lock:
+        # Removed handlers may still have callbacks queued behind an active send.
+        if listener is not None and listener is not _handler:
+            return
         msg_id = event.message.id
         logger.info("Auto-forward: New message detected (ID: %d)", msg_id)
 
@@ -128,6 +133,7 @@ async def _on_new_message(event, source_id: int, destination_id: int, job_id: in
 async def start_listener(client: TelegramClient) -> bool:
     global _handler, _registered_client
 
+    await stop_listener(client)
     with get_session() as session:
         source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
         destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
@@ -136,14 +142,12 @@ async def start_listener(client: TelegramClient) -> bool:
         logger.warning("Auto-forward listener cannot start: Source or Destination not configured.")
         return False
 
-    await stop_listener(client)
-
     source_id = source.telegram_id
     destination_id = destination.telegram_id
     job_id = _get_auto_job_id(source_id, destination_id)
 
     async def handler(event):  # noqa: ANN001
-        await _on_new_message(event, source_id, destination_id, job_id)
+        await _on_new_message(event, source_id, destination_id, job_id, listener=handler)
 
     client.add_event_handler(handler, events.NewMessage(chats=source_id))
     _handler = handler
@@ -156,7 +160,7 @@ async def start_listener(client: TelegramClient) -> bool:
     return True
 
 
-async def stop_listener(client: TelegramClient) -> None:
+async def stop_listener(client: TelegramClient | None = None) -> None:
     global _handler, _registered_client
     if _handler is not None and _registered_client is not None:
         _registered_client.remove_event_handler(_handler)
@@ -166,19 +170,31 @@ async def stop_listener(client: TelegramClient) -> None:
 
 
 async def enable(client: TelegramClient) -> bool:
-    started = await start_listener(client)
-    if started:
-        _set_enabled(True)
+    try:
+        started = await start_listener(client)
+    except Exception:
+        _set_enabled(False)
+        raise
+    _set_enabled(started)
     return started
 
 
-async def disable(client: TelegramClient) -> None:
+async def disable(client: TelegramClient | None = None) -> None:
     await stop_listener(client)
     _set_enabled(False)
 
 
-async def sync_on_startup(client: TelegramClient) -> None:
-    if is_enabled():
-        logger.info("Auto-forward was enabled previously. Attempting to restart listener...")
-        if not await start_listener(client):
-            _set_enabled(False)
+async def sync_on_startup(client: TelegramClient) -> bool:
+    return await refresh_listener(client)
+
+
+async def refresh_listener(client: TelegramClient) -> bool:
+    """Rebind enabled forwarding to the saved channels and report the real outcome."""
+    if not is_enabled():
+        return False
+    try:
+        return await enable(client)
+    except Exception:
+        logger.exception("Could not refresh auto-forward listener")
+        await disable(client)
+        return False
