@@ -12,14 +12,13 @@ if sys.platform == "win32":
 from app.config import settings
 from app.database.database import init_db
 from app.telegram import auto_forward
-from app.telegram.bot import build_application
+from app.telegram.bot import build_application, setup_bot_ui
 from app.telegram.client import ensure_started, stop_client
 
 
 def setup_logging() -> None:
     Path("logs").mkdir(exist_ok=True)
 
-    # 👈 فرمت جدید و بسیار حرفه‌ای برای لاگ‌ها (شامل نام فایل و شماره خط)
     log_format = "%(asctime)s | %(levelname)-8s | %(name)s:%(filename)s:%(lineno)d | %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
@@ -27,33 +26,37 @@ def setup_logging() -> None:
     root = logging.getLogger()
     root.setLevel(settings.log_level)
 
-    # لاگ در کنسول
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(formatter)
     root.addHandler(console)
 
-    # لاگ فایل اصلی (با پشتیبانی از کاراکترهای فارسی و حجم 10 مگابایت)
     app_file = logging.handlers.RotatingFileHandler(
-        "logs/app.log", maxBytes=10_000_000, backupCount=5, encoding="utf-8"
+        "logs/app.log",
+        maxBytes=10_000_000,
+        backupCount=5,
+        encoding="utf-8",
     )
     app_file.setFormatter(formatter)
     app_file.setLevel(logging.INFO)
     root.addHandler(app_file)
 
-    # لاگ اختصاصی خطاها
     error_file = logging.handlers.RotatingFileHandler(
-        "logs/error.log", maxBytes=10_000_000, backupCount=5, encoding="utf-8"
+        "logs/error.log",
+        maxBytes=10_000_000,
+        backupCount=5,
+        encoding="utf-8",
     )
     error_file.setFormatter(formatter)
     error_file.setLevel(logging.ERROR)
     root.addHandler(error_file)
 
-    # سایلنت کردن لاگ‌های مزاحم و اضافی کتابخانه‌ها
     logging.getLogger("telethon").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 async def _post_init(application) -> None:  # noqa: ANN001
+    await setup_bot_ui(application.bot)
+
     client = await ensure_started()
     logging.getLogger(__name__).info("Telethon client متصل شد.")
     await auto_forward.sync_on_startup(client)

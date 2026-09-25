@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import os
 
-from telegram import Update
+from telegram import Bot, BotCommand, MenuButtonCommands, Update
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -16,9 +17,17 @@ from telegram.ext import (
 )
 
 from app.config import settings
-from app.handlers import dashboard, destination, settings as settings_handlers, source, start, statistics, transfer
-from app.handlers.states import State, get_state, reset, set_state
-from app.ui import keyboards
+from app.handlers import (
+    dashboard,
+    destination,
+    settings as settings_handlers,
+    source,
+    start,
+    statistics,
+    transfer,
+)
+from app.handlers.states import State, get_state, reset
+from app.ui import keyboards, messages
 from app.ui.callbacks import parse
 
 logger = logging.getLogger(__name__)
@@ -30,19 +39,97 @@ def _is_authorized(update: Update) -> bool:
 
 
 async def _reject(update: Update) -> None:
-    from app.ui.messages import UNAUTHORIZED
-
     if update.callback_query:
-        await update.callback_query.answer(UNAUTHORIZED, show_alert=True)
+        await update.callback_query.answer(messages.UNAUTHORIZED, show_alert=True)
     elif update.effective_message:
-        await update.effective_message.reply_text(UNAUTHORIZED)
+        await update.effective_message.reply_text(messages.UNAUTHORIZED)
+
+
+async def setup_bot_ui(bot: Bot) -> None:
+    """تنظیم Command Menu و توضیحات پروفایل ربات در Telegram."""
+    commands = [
+        BotCommand("menu", "🏠 داشبورد اصلی"),
+        BotCommand("stats", "📊 آمار انتقال‌ها"),
+        BotCommand("recent", "🕘 پیام‌های اخیر"),
+        BotCommand("settings", "⚙️ تنظیمات"),
+        BotCommand("help", "❓ راهنما"),
+        BotCommand("cancel", "✕ لغو جریان فعلی"),
+    ]
+
+    try:
+        await bot.set_my_commands(commands)
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        await bot.set_my_short_description(messages.BOT_SHORT_DESCRIPTION)
+        await bot.set_my_description(messages.BOT_DESCRIPTION)
+        logger.info("Telegram command menu/profile UI configured.")
+    except TelegramError:
+        logger.exception("Could not configure Telegram command menu/profile UI.")
+
+
+async def command_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        await _reject(update)
+        return
+
+    from app.services.statistics_service import get_statistics_text
+
+    await update.effective_message.reply_text(
+        get_statistics_text(),
+        reply_markup=keyboards.stats_menu(),
+    )
+
+
+async def command_recent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        await _reject(update)
+        return
+
+    from app.services.statistics_service import get_recent_messages
+
+    await update.effective_message.reply_text(
+        messages.recent_messages_text(get_recent_messages()),
+        reply_markup=keyboards.back_home(),
+    )
+
+
+async def command_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        await _reject(update)
+        return
+
+    await settings_handlers.show_settings(update, context)
+
+
+async def command_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        await _reject(update)
+        return
+
+    await update.effective_message.reply_text(
+        messages.HELP_TEXT,
+        reply_markup=keyboards.back_home(),
+    )
+
+
+async def command_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        await _reject(update)
+        return
+
+    reset(context.user_data)
+    await dashboard.show_dashboard(update, context)
 
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    if query is None:
+        return
+
     if not _is_authorized(update):
         await _reject(update)
         return
+
+    # Callback را سریع ACK می‌کنیم تا spinner تلگرام باقی نماند.
     await query.answer()
     namespace, action, arg = parse(query.data or "")
 
@@ -118,6 +205,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             if action == "refresh":
                 await statistics.refresh_statistics(update, context)
             elif action == "clear":
+                await statistics.ask_clear_statistics(update, context)
+            elif action == "clear_confirm":
                 await statistics.clear_statistics_handler(update, context)
             return
 
@@ -125,6 +214,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             if action == "delay":
                 await settings_handlers.show_delay_info(update, context)
             elif action == "clear_data":
+                await settings_handlers.ask_clear_data(update, context)
+            elif action == "clear_data_confirm":
                 await settings_handlers.clear_data(update, context)
             elif action == "signature":
                 await settings_handlers.ask_signature(update, context)
@@ -134,7 +225,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     except Exception:  # noqa: BLE001
         logger.exception("خطا در پردازش callback: %s", query.data)
-        await query.message.reply_text("⚠️ خطای غیرمنتظره‌ای رخ داد. به خانه بازگردید.")
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ خطای غیرمنتظره‌ای رخ داد.\nاز /menu برای بازگشت به داشبورد استفاده کنید."
+            )
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -151,20 +245,24 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         elif state == State.SIGNATURE_INPUT:
             from app.database.database import get_session
             from app.database.repository import SettingsRepository
-            # 👈 تغییر بسیار مهم: دریافت متن با فرمت‌بندی HTML (حفظ بولد، لینک و غیره)
+
             text_html = update.message.text_html
             with get_session() as session:
                 SettingsRepository.set(session, "signature_text", text_html)
-            await update.message.reply_text("✅ امضا (زیرنویس) با موفقیت ذخیره شد.")
+
+            await update.message.reply_text("✅ امضا ذخیره شد.")
             reset(context.user_data)
             await settings_handlers.show_settings(update, context)
         else:
             await update.message.reply_text(
-                "از دکمه‌های منو برای انجام عملیات استفاده کنید.",
+                "از دکمه‌های داشبورد استفاده کنید یا /menu را بزنید.",
+                reply_markup=keyboards.back_home(),
             )
     except Exception:  # noqa: BLE001
         logger.exception("خطا در پردازش ورودی متنی")
-        await update.message.reply_text("⚠️ خطای غیرمنتظره‌ای رخ داد.")
+        await update.message.reply_text(
+            "⚠️ خطای غیرمنتظره‌ای رخ داد.\nبرای بازگشت /menu را بزنید."
+        )
 
 
 def _get_bot_api_proxy_url() -> str | None:
@@ -189,19 +287,37 @@ def _get_bot_api_proxy_url() -> str | None:
     else:
         url = f"{scheme}://{host}:{port}"
 
-    logger.info("اتصال Bot API (python-telegram-bot) از طریق پروکسی %s://%s:%s", proxy_type_name, host, port)
+    logger.info(
+        "اتصال Bot API (python-telegram-bot) از طریق پروکسی %s://%s:%s",
+        proxy_type_name,
+        host,
+        port,
+    )
     return url
 
 
 def build_application() -> Application:
-    builder = Application.builder().token(settings.bot_token).defaults(Defaults(parse_mode=ParseMode.HTML))
+    builder = (
+        Application.builder()
+        .token(settings.bot_token)
+        .defaults(Defaults(parse_mode=ParseMode.HTML))
+    )
 
     proxy_url = _get_bot_api_proxy_url()
     if proxy_url:
         builder = builder.proxy(proxy_url).get_updates_proxy(proxy_url)
 
     application = builder.build()
+
     application.add_handler(CommandHandler("start", start.handle_start))
+    application.add_handler(CommandHandler("menu", start.handle_start))
+    application.add_handler(CommandHandler("stats", command_stats))
+    application.add_handler(CommandHandler("recent", command_recent))
+    application.add_handler(CommandHandler("settings", command_settings))
+    application.add_handler(CommandHandler("help", command_help))
+    application.add_handler(CommandHandler("cancel", command_cancel))
+
     application.add_handler(CallbackQueryHandler(on_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+
     return application

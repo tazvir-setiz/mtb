@@ -1,5 +1,5 @@
 telethon==1.36.0
-python-telegram-bot>=22
+python-telegram-bot>=22.8,<23.0
 httpx[socks]>=0.27
 PySocks>=1.7.1
 SQLAlchemy>=2.0.52

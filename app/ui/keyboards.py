@@ -1,34 +1,90 @@
 from __future__ import annotations
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
+
+STYLE_PRIMARY = "primary"
+STYLE_SUCCESS = "success"
+STYLE_DANGER = "danger"
 
 
-def main_menu(source_ready: bool, destination_ready: bool, auto_forward_enabled: bool = False) -> InlineKeyboardMarkup:
-    transfer_row = (
-        [InlineKeyboardButton("🚀 انتقال پیام‌ها", callback_data="menu:transfer")]
-        if source_ready and destination_ready
-        else []
+def _cb(
+    text: str,
+    callback_data: str,
+    *,
+    style: str | None = None,
+) -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text=text,
+        callback_data=callback_data,
+        style=style,
     )
-    auto_row = []
-    if source_ready and destination_ready:
-        label = "🟢 Auto-Forward: روشن" if auto_forward_enabled else "🔴 Auto-Forward: خاموش"
-        auto_row = [InlineKeyboardButton(label, callback_data="menu:auto_toggle")]
 
-    rows = [
+
+def _copy(text: str, value: str | int) -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text=text,
+        copy_text=CopyTextButton(text=str(value)),
+        style=STYLE_PRIMARY,
+    )
+
+
+def main_menu(
+    source_ready: bool,
+    destination_ready: bool,
+    auto_forward_enabled: bool = False,
+    source_id: int | None = None,
+    destination_id: int | None = None,
+) -> InlineKeyboardMarkup:
+    ready = source_ready and destination_ready
+
+    rows: list[list[InlineKeyboardButton]] = [
         [
-            InlineKeyboardButton("📥 کانال مبدأ", callback_data="menu:source"),
-            InlineKeyboardButton("📤 کانال مقصد", callback_data="menu:destination"),
-        ],
-        transfer_row,
-        auto_row,
-        [
-            InlineKeyboardButton("📋 پیام‌های اخیر", callback_data="menu:recent"),
-            InlineKeyboardButton("📊 آمار", callback_data="menu:stats"),
-        ],
-        [InlineKeyboardButton("⚙️ تنظیمات", callback_data="menu:settings")],
-        [InlineKeyboardButton("❓ راهنما", callback_data="menu:help")],
+            _cb(
+                "📥 مبدأ" if not source_ready else "✅ مبدأ",
+                "menu:source",
+                style=STYLE_SUCCESS if source_ready else STYLE_PRIMARY,
+            ),
+            _cb(
+                "📤 مقصد" if not destination_ready else "✅ مقصد",
+                "menu:destination",
+                style=STYLE_SUCCESS if destination_ready else STYLE_PRIMARY,
+            ),
+        ]
     ]
-    rows = [r for r in rows if r]
+
+    copy_row: list[InlineKeyboardButton] = []
+    if source_id is not None:
+        copy_row.append(_copy("📋 ID مبدأ", source_id))
+    if destination_id is not None:
+        copy_row.append(_copy("📋 ID مقصد", destination_id))
+    if copy_row:
+        rows.append(copy_row)
+
+    if ready:
+        rows.append([_cb("🚀 انتقال پیام‌ها", "menu:transfer", style=STYLE_SUCCESS)])
+        rows.append(
+            [
+                _cb(
+                    "🟢 Auto-Forward روشن" if auto_forward_enabled else "⚪ Auto-Forward خاموش",
+                    "menu:auto_toggle",
+                    style=STYLE_SUCCESS if auto_forward_enabled else STYLE_PRIMARY,
+                )
+            ]
+        )
+
+    rows.extend(
+        [
+            [
+                _cb("🕘 اخیر", "menu:recent"),
+                _cb("📊 آمار", "menu:stats", style=STYLE_PRIMARY),
+            ],
+            [
+                _cb("⚙️ تنظیمات", "menu:settings"),
+                _cb("❓ راهنما", "menu:help"),
+            ],
+        ]
+    )
+
     return InlineKeyboardMarkup(rows)
 
 
@@ -36,23 +92,27 @@ def back_home(extra: list[list[InlineKeyboardButton]] | None = None) -> InlineKe
     rows = list(extra or [])
     rows.append(
         [
-            InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back"),
-            InlineKeyboardButton("🏠 خانه", callback_data="nav:home"),
+            _cb("‹ بازگشت", "nav:back"),
+            _cb("🏠 داشبورد", "nav:home", style=STYLE_PRIMARY),
         ]
     )
     return InlineKeyboardMarkup(rows)
 
 
 def cancel_only() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton("❌ لغو", callback_data="nav:cancel")]])
+    return InlineKeyboardMarkup(
+        [[_cb("✕ لغو و بازگشت", "nav:cancel", style=STYLE_DANGER)]]
+    )
 
 
 def channel_confirm(prefix: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("✅ تأیید", callback_data=f"{prefix}:confirm")],
-            [InlineKeyboardButton("🔄 تغییر", callback_data=f"{prefix}:change")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back")],
+            [
+                _cb("✅ تأیید", f"{prefix}:confirm", style=STYLE_SUCCESS),
+                _cb("✏️ تغییر", f"{prefix}:change", style=STYLE_PRIMARY),
+            ],
+            [_cb("‹ بازگشت", "nav:back")],
         ]
     )
 
@@ -60,9 +120,9 @@ def channel_confirm(prefix: str) -> InlineKeyboardMarkup:
 def destination_retry() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🔄 بررسی مجدد", callback_data="destination:retry")],
-            [InlineKeyboardButton("📖 راهنما", callback_data="destination:help")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back")],
+            [_cb("🔄 بررسی دوباره", "destination:retry", style=STYLE_PRIMARY)],
+            [_cb("📖 راهنمای دسترسی", "destination:help")],
+            [_cb("‹ بازگشت", "nav:back")],
         ]
     )
 
@@ -70,10 +130,10 @@ def destination_retry() -> InlineKeyboardMarkup:
 def transfer_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🔢 انتقال بازه پیام‌ها", callback_data="transfer:range")],
-            [InlineKeyboardButton("📋 انتخاب Message IDها", callback_data="transfer:ids")],
-            [InlineKeyboardButton("🆕 پیام‌های جدید", callback_data="transfer:new")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back")],
+            [_cb("🔢 انتقال یک بازه", "transfer:range", style=STYLE_SUCCESS)],
+            [_cb("🎯 انتخاب Message IDها", "transfer:ids", style=STYLE_PRIMARY)],
+            [_cb("⚡ پیام‌های جدید", "transfer:new")],
+            [_cb("‹ بازگشت", "nav:back")],
         ]
     )
 
@@ -81,9 +141,11 @@ def transfer_menu() -> InlineKeyboardMarkup:
 def range_summary() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🚀 شروع انتقال", callback_data="transfer:start")],
-            [InlineKeyboardButton("✏️ ویرایش", callback_data="transfer:edit")],
-            [InlineKeyboardButton("❌ لغو", callback_data="nav:cancel")],
+            [_cb("ادامه و بررسی نهایی ›", "transfer:start", style=STYLE_PRIMARY)],
+            [
+                _cb("✏️ ویرایش", "transfer:edit"),
+                _cb("✕ لغو", "nav:cancel", style=STYLE_DANGER),
+            ],
         ]
     )
 
@@ -91,22 +153,24 @@ def range_summary() -> InlineKeyboardMarkup:
 def confirm_transfer() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🚀 بله، شروع کن", callback_data="transfer:confirm")],
-            [InlineKeyboardButton("❌ لغو", callback_data="nav:cancel")],
+            [_cb("🚀 شروع انتقال", "transfer:confirm", style=STYLE_SUCCESS)],
+            [_cb("✕ لغو عملیات", "nav:cancel", style=STYLE_DANGER)],
         ]
     )
 
 
 def in_progress() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⏸ توقف", callback_data="transfer:pause")]])
+    return InlineKeyboardMarkup(
+        [[_cb("⏸ توقف عملیات", "transfer:pause", style=STYLE_PRIMARY)]]
+    )
 
 
 def paused_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("▶️ ادامه", callback_data="transfer:resume")],
-            [InlineKeyboardButton("🔄 شروع مجدد", callback_data="transfer:restart")],
-            [InlineKeyboardButton("🏠 خانه", callback_data="nav:home")],
+            [_cb("▶️ ادامه انتقال", "transfer:resume", style=STYLE_SUCCESS)],
+            [_cb("↻ شروع مجدد", "transfer:restart", style=STYLE_PRIMARY)],
+            [_cb("🏠 داشبورد", "nav:home")],
         ]
     )
 
@@ -114,10 +178,12 @@ def paused_menu() -> InlineKeyboardMarkup:
 def result_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("📋 مشاهده خطاها", callback_data="transfer:errors")],
-            [InlineKeyboardButton("🔄 Retry موارد ناموفق", callback_data="transfer:retry")],
-            [InlineKeyboardButton("🚀 انتقال جدید", callback_data="menu:transfer")],
-            [InlineKeyboardButton("🏠 خانه", callback_data="nav:home")],
+            [
+                _cb("⚠️ خطاها", "transfer:errors", style=STYLE_DANGER),
+                _cb("↻ Retry", "transfer:retry", style=STYLE_PRIMARY),
+            ],
+            [_cb("🚀 انتقال جدید", "menu:transfer", style=STYLE_SUCCESS)],
+            [_cb("🏠 داشبورد", "nav:home")],
         ]
     )
 
@@ -125,8 +191,8 @@ def result_menu() -> InlineKeyboardMarkup:
 def failed_messages_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🔄 Retry همه", callback_data="transfer:retry")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back")],
+            [_cb("↻ Retry همه", "transfer:retry", style=STYLE_PRIMARY)],
+            [_cb("‹ بازگشت", "nav:back")],
         ]
     )
 
@@ -134,9 +200,18 @@ def failed_messages_menu() -> InlineKeyboardMarkup:
 def stats_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🔄 بروزرسانی", callback_data="stats:refresh")],
-            [InlineKeyboardButton("🧹 پاک کردن آمار", callback_data="stats:clear")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back")],
+            [_cb("🔄 به‌روزرسانی", "stats:refresh", style=STYLE_PRIMARY)],
+            [_cb("🗑 پاک کردن آمار", "stats:clear", style=STYLE_DANGER)],
+            [_cb("‹ بازگشت", "nav:back")],
+        ]
+    )
+
+
+def confirm_clear_statistics() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [_cb("🗑 بله، آمار پاک شود", "stats:clear_confirm", style=STYLE_DANGER)],
+            [_cb("لغو", "menu:stats", style=STYLE_PRIMARY)],
         ]
     )
 
@@ -144,19 +219,37 @@ def stats_menu() -> InlineKeyboardMarkup:
 def settings_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("📥 کانال مبدأ", callback_data="menu:source")],
-            [InlineKeyboardButton("📤 کانال مقصد", callback_data="menu:destination")],
-            [InlineKeyboardButton("⏱ فاصله Forward", callback_data="settings:delay")],
-            [InlineKeyboardButton("✍️ تنظیم زیرنویس (امضا)", callback_data="settings:signature")],  # 👈 اضافه شد
-            [InlineKeyboardButton("🧹 پاک کردن داده‌ها", callback_data="settings:clear_data")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="nav:back")],
+            [
+                _cb("📥 مبدأ", "menu:source"),
+                _cb("📤 مقصد", "menu:destination"),
+            ],
+            [_cb("✍️ امضا / زیرنویس", "settings:signature", style=STYLE_PRIMARY)],
+            [_cb("⏱ فاصله ارسال", "settings:delay")],
+            [_cb("🗑 پاک کردن داده‌های عملیات", "settings:clear_data", style=STYLE_DANGER)],
+            [_cb("‹ بازگشت", "nav:back")],
         ]
     )
+
+
+def confirm_clear_data() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                _cb(
+                    "🗑 بله، داده‌های عملیات پاک شود",
+                    "settings:clear_data_confirm",
+                    style=STYLE_DANGER,
+                )
+            ],
+            [_cb("لغو", "menu:settings", style=STYLE_PRIMARY)],
+        ]
+    )
+
 
 def signature_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🗑 حذف امضای فعلی", callback_data="settings:clear_sig")],
-            [InlineKeyboardButton("❌ لغو", callback_data="nav:cancel")],
+            [_cb("🗑 حذف امضای فعلی", "settings:clear_sig", style=STYLE_DANGER)],
+            [_cb("✕ لغو", "nav:cancel")],
         ]
     )
