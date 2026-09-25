@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from html import escape
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from app.config import settings
 from app.database.database import get_session
 from app.database.models import ChannelType
-from app.database.repository import ChannelRepository, ForwardedMessageRepository
+from app.database.repository import (
+    ChannelRepository,
+    ForwardedMessageRepository,
+    SettingsRepository,
+)
 from app.handlers.states import State, reset, set_state
 from app.telegram import auto_forward
 from app.telegram.client import ensure_started
@@ -17,6 +24,7 @@ def _dashboard_content() -> tuple[str, object]:
         source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
         destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
         stats = ForwardedMessageRepository.stats(session)
+        signature = SettingsRepository.get(session, "signature_text")
 
     auto_enabled = auto_forward.is_enabled()
 
@@ -25,6 +33,8 @@ def _dashboard_content() -> tuple[str, object]:
         destination.title if destination else None,
         stats["success"],
         auto_enabled,
+        ai_enabled=settings.ai_enabled,
+        signature_enabled=bool(signature),
     )
     markup = keyboards.main_menu(
         source_ready=source is not None,
@@ -69,9 +79,31 @@ async def toggle_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE
     client = await ensure_started()
     if auto_forward.is_enabled():
         await auto_forward.disable(client)
-        await update.callback_query.answer("Auto-Forward خاموش شد")
+        await update.callback_query.message.reply_text("⚪ انتقال خودکار خاموش شد.")
     else:
-        await auto_forward.enable(client)
-        await update.callback_query.answer("Auto-Forward روشن شد")
+        if not await auto_forward.enable(client):
+            await update.callback_query.message.reply_text(
+                "⚠️ انتقال خودکار فعال نشد. کانال‌ها را بررسی کنید."
+            )
+            return
 
-    await show_dashboard(update, context, edit=True)
+    await show_auto_forward(update, context)
+
+
+async def show_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    reset(context.user_data)
+    with get_session() as session:
+        source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
+        destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
+    if source is None or destination is None:
+        await show_dashboard(update, context, edit=True)
+        return
+    enabled = auto_forward.is_enabled()
+    await update.callback_query.edit_message_text(
+        "⚡ <b>انتقال خودکار پیام‌های جدید</b>\n\n"
+        f"<blockquote>📥 {escape(source.title)}\n📤 {escape(destination.title)}\n"
+        f"وضعیت: <b>{'🟢 روشن' if enabled else '⚪ خاموش'}</b></blockquote>\n\n"
+        "با فعال‌کردن، پیام‌های جدید مبدأ هنگام اجرای ربات به مقصد ارسال می‌شوند.\n"
+        "برای پیام‌های قبلی از «انتقال پیام‌ها» استفاده کنید.",
+        reply_markup=keyboards.auto_forward_menu(enabled),
+    )

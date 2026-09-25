@@ -16,13 +16,14 @@ def transfer_menu_text(source_title: str, destination_title: str) -> str:
         "</blockquote>\n\n"
         "روش انتقال را انتخاب کنید:\n"
         "• <b>بازه</b> برای پیام‌های پشت‌سرهم\n"
-        "• <b>Message ID</b> برای چند پیام مشخص"
+        "• <b>شناسهٔ پیام</b> برای چند پیام مشخص\n"
+        "• <b>انتقال خودکار</b> برای پیام‌های جدید از زمان فعال‌سازی"
     )
 
 
 def ask_start_id() -> str:
     return (
-        "🔢 <b>Message ID شروع</b>\n\n"
+        "۱ از ۳ · <b>شناسهٔ اولین پیام</b>\n\n"
         "شماره اولین پیام بازه را ارسال کنید.\n"
         "<i>مثال: <code>1200</code></i>"
     )
@@ -30,7 +31,7 @@ def ask_start_id() -> str:
 
 def ask_end_id() -> str:
     return (
-        "🔢 <b>Message ID پایان</b>\n\n"
+        "۲ از ۳ · <b>شناسهٔ آخرین پیام</b>\n\n"
         "شماره آخرین پیام بازه را ارسال کنید.\n"
         "<i>این مقدار باید بزرگ‌تر یا مساوی ID شروع باشد.</i>"
     )
@@ -55,7 +56,7 @@ def range_summary_text(
 
 def confirm_transfer_text(count: int, source_title: str, destination_title: str) -> str:
     return (
-        "⚠️ <b>تأیید نهایی انتقال</b>\n"
+        "۳ از ۳ · <b>تأیید نهایی انتقال</b>\n"
         f"{DIVIDER}\n\n"
         f"قرار است <b>{count:,}</b> پیام منتقل شود.\n\n"
         "<blockquote>"
@@ -123,9 +124,10 @@ def final_result_text(
 ) -> str:
     minutes, seconds = divmod(elapsed_seconds, 60)
     success_rate = (success / total * 100) if total else 0.0
+    heading = "⚠️ انتقال با خطا به پایان رسید" if failed else "✅ انتقال به پایان رسید"
 
     return (
-        "✅ <b>انتقال به پایان رسید</b>\n"
+        f"<b>{heading}</b>\n"
         f"{DIVIDER}\n\n"
         "<blockquote>"
         f"📨 کل  <b>{total:,}</b>\n"
@@ -143,6 +145,8 @@ def failed_messages_text(items: list[tuple[int, str]]) -> str:
         return "✅ <b>پیام ناموفقی وجود ندارد</b>"
 
     lines = ["⚠️ <b>پیام‌های ناموفق</b>", DIVIDER, ""]
-    for msg_id, error in items:
-        lines.append(f"<code>#{msg_id}</code>  ·  {_e(error)}")
+    for msg_id, error in items[:10]:
+        lines.append(f"<code>#{msg_id}</code>  ·  {_e(error[:120])}")
+    if len(items) > 10:
+        lines.append(f"\n… و {len(items) - 10:,} پیام دیگر؛ تلاش مجدد شامل همهٔ خطاها می‌شود.")
     return "\n".join(lines)

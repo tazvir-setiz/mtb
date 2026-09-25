@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 async def setup_bot_ui(bot: Bot) -> None:
     """تنظیم Command Menu و توضیحات پروفایل ربات در Telegram."""
     commands = [
+        BotCommand("start", "شروع و تنظیم کانال‌ها"),
         BotCommand("menu", "🏠 داشبورد اصلی"),
         BotCommand("stats", "📊 آمار انتقال‌ها"),
         BotCommand("recent", "🕘 پیام‌های اخیر"),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from telegram import Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from app.handlers import settings as settings_handlers
@@ -34,6 +35,14 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if handler:
             await handler(update, context)
 
+    except BadRequest as exc:
+        if "message is not modified" in str(exc).lower():
+            return
+        logger.exception("Telegram rejected callback: %s", query.data)
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ نمایش این صفحه ممکن نشد. از /menu دوباره شروع کنید."
+            )
     except Exception:  # noqa: BLE001
         logger.exception("خطا در پردازش callback: %s", query.data)
         if update.effective_message:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.ui.buttons.common import STYLE_PRIMARY, STYLE_SUCCESS, _cb, _copy
+from app.ui.buttons.common import STYLE_PRIMARY, STYLE_SUCCESS, _cb, _copy, _disabled
 
 
 def main_menu(
@@ -42,12 +42,16 @@ def main_menu(
         rows.append(
             [
                 _cb(
-                    "🟢 Auto-Forward روشن" if auto_forward_enabled else "⚪ Auto-Forward خاموش",
-                    "menu:auto_toggle",
+                    "🟢 انتقال خودکار · روشن"
+                    if auto_forward_enabled
+                    else "⚪ انتقال خودکار · خاموش",
+                    "transfer:new",
                     style=STYLE_SUCCESS if auto_forward_enabled else STYLE_PRIMARY,
                 )
             ]
         )
+    else:
+        rows.append([_disabled("🔒 انتقال · ابتدا مبدأ و مقصد را تنظیم کنید")])
 
     rows.extend(
         [
@@ -63,3 +67,18 @@ def main_menu(
     )
 
     return InlineKeyboardMarkup(rows)
+
+
+def auto_forward_menu(enabled: bool = False) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                _cb(
+                    "⏹ خاموش کردن" if enabled else "▶️ فعال کردن انتقال خودکار",
+                    "menu:auto_toggle",
+                    style=STYLE_PRIMARY if enabled else STYLE_SUCCESS,
+                )
+            ],
+            [_cb("🏠 داشبورد", "nav:home")],
+        ]
+    )

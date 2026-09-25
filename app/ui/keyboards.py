@@ -7,6 +7,7 @@ from app.ui.buttons.common import STYLE_PRIMARY as STYLE_PRIMARY
 from app.ui.buttons.common import STYLE_SUCCESS as STYLE_SUCCESS
 from app.ui.buttons.common import back_home as back_home
 from app.ui.buttons.common import cancel_only as cancel_only
+from app.ui.buttons.dashboard import auto_forward_menu as auto_forward_menu
 from app.ui.buttons.dashboard import main_menu as main_menu
 from app.ui.buttons.settings import confirm_clear_data as confirm_clear_data
 from app.ui.buttons.settings import settings_menu as settings_menu

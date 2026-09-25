@@ -20,6 +20,7 @@ class State(str, Enum):
 # کلیدهای user_data
 KEY_STATE = "state"
 KEY_PENDING_CHANNEL_KIND = "pending_channel_kind"
+KEY_PENDING_CHANNEL = "pending_channel"
 KEY_RANGE_START = "range_start"
 KEY_CURRENT_JOB_ID = "current_job_id"
 KEY_PROGRESS_MESSAGE_ID = "progress_message_id"
@@ -37,9 +38,10 @@ def get_state(user_data: dict) -> State:
 def reset(user_data: dict) -> None:
     for key in (
         KEY_PENDING_CHANNEL_KIND,
+        KEY_PENDING_CHANNEL,
         KEY_RANGE_START,
-        KEY_CURRENT_JOB_ID,
-        KEY_PROGRESS_MESSAGE_ID,
+        "range_end",
+        "explicit_ids",
     ):
         user_data.pop(key, None)
     set_state(user_data, State.MAIN_MENU)

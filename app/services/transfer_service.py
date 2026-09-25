@@ -82,7 +82,7 @@ async def run_transfer(
             chat_id=chat_id,
             message_id=progress_message_id,
             text=text,
-            reply_markup=keyboards.result_menu(),
+            reply_markup=keyboards.result_menu(has_errors=failed > 0),
         )
 
 

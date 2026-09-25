@@ -8,7 +8,8 @@ from telegram.ext import ContextTypes
 from app.database.database import get_session
 from app.database.models import ChannelType
 from app.database.repository import ChannelRepository
-from app.handlers.states import KEY_PENDING_CHANNEL_KIND, State, set_state
+from app.handlers.states import KEY_PENDING_CHANNEL, KEY_PENDING_CHANNEL_KIND, State, set_state
+from app.telegram import auto_forward
 from app.telegram.channel_service import (
     ChannelAccessError,
     resolve_channel,
@@ -31,14 +32,18 @@ async def show_channel_prompt(
         channel = ChannelRepository.get_by_type(session, channel_type)
     text = messages.ask_channel(kind, channel.title if channel else None)
     context.user_data[KEY_PENDING_CHANNEL_KIND] = kind
+    context.user_data.pop(KEY_PENDING_CHANNEL, None)
     set_state(context.user_data, _STATE_MAP[kind])
-    await update.callback_query.edit_message_text(text, reply_markup=keyboards.cancel_only())
+    await update.callback_query.message.reply_text(
+        text, reply_markup=keyboards.cancel_only(force_reply=True)
+    )
 
 
 async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     kind = context.user_data.get(KEY_PENDING_CHANNEL_KIND)
     if kind not in _TYPE_MAP:
         return
+    context.user_data.pop(KEY_PENDING_CHANNEL, None)
     raw = update.message.text.strip()
 
     try:
@@ -62,26 +67,45 @@ async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    with get_session() as session:
-        ChannelRepository.upsert(
-            session,
-            telegram_id=info.telegram_id,
-            title=info.title,
-            channel_type=_TYPE_MAP[kind],
-            username=info.username,
-        )
-
     text = messages.channel_confirmed(kind, info.title, info.telegram_id, info.username)
     prefix = "source" if kind == "source" else "destination"
-    await update.message.reply_text(text, reply_markup=keyboards.channel_confirm(prefix))
-    logger.info("%s channel configured: %s", kind, info.title)
+    confirmation = await update.message.reply_text(
+        text, reply_markup=keyboards.channel_confirm(prefix)
+    )
+    context.user_data[KEY_PENDING_CHANNEL] = {
+        "kind": kind,
+        "telegram_id": info.telegram_id,
+        "title": info.title,
+        "username": info.username,
+        "message_id": confirmation.message_id,
+    }
 
 
 async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str) -> None:
     from app.handlers.dashboard import show_dashboard
 
-    await update.callback_query.answer("✅ ذخیره شد")
-    await show_dashboard(update, context, edit=False)
+    pending = context.user_data.get(KEY_PENDING_CHANNEL)
+    if (
+        not pending
+        or pending["kind"] != kind
+        or (pending["message_id"] != update.callback_query.message.message_id)
+    ):
+        await update.callback_query.message.reply_text(
+            "این تأیید منقضی شده است. کانال را دوباره انتخاب کنید."
+        )
+        return
+    with get_session() as session:
+        ChannelRepository.upsert(
+            session,
+            telegram_id=pending["telegram_id"],
+            title=pending["title"],
+            channel_type=_TYPE_MAP[kind],
+            username=pending["username"],
+        )
+    context.user_data.pop(KEY_PENDING_CHANNEL, None)
+    if auto_forward.is_enabled():
+        await auto_forward.sync_on_startup(await ensure_started())
+    await show_dashboard(update, context, edit=True)
 
 
 async def handle_change(update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str) -> None:
@@ -108,6 +132,13 @@ async def handle_destination_retry(update: Update, context: ContextTypes.DEFAULT
     await update.callback_query.edit_message_text(
         text, reply_markup=keyboards.channel_confirm("destination")
     )
+    context.user_data[KEY_PENDING_CHANNEL] = {
+        "kind": "destination",
+        "telegram_id": info.telegram_id,
+        "title": info.title,
+        "username": info.username,
+        "message_id": update.callback_query.message.message_id,
+    }
 
 
 async def handle_destination_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

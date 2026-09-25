@@ -9,8 +9,8 @@ def transfer_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [_cb("🔢 انتقال یک بازه", "transfer:range", style=STYLE_SUCCESS)],
-            [_cb("🎯 انتخاب Message IDها", "transfer:ids", style=STYLE_PRIMARY)],
-            [_cb("⚡ پیام‌های جدید", "transfer:new")],
+            [_cb("🎯 انتخاب شناسهٔ پیام‌ها", "transfer:ids", style=STYLE_PRIMARY)],
+            [_cb("⚡ انتقال خودکار پیام‌های جدید", "transfer:new")],
             [_cb("‹ بازگشت", "nav:back")],
         ]
     )
@@ -51,13 +51,19 @@ def paused_menu() -> InlineKeyboardMarkup:
     )
 
 
-def result_menu() -> InlineKeyboardMarkup:
+def result_menu(has_errors: bool = True) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [
+        (
             [
-                _cb("⚠️ خطاها", "transfer:errors", style=STYLE_DANGER),
-                _cb("↻ Retry", "transfer:retry", style=STYLE_PRIMARY),
-            ],
+                [
+                    _cb("⚠️ خطاها", "transfer:errors", style=STYLE_DANGER),
+                    _cb("↻ تلاش مجدد", "transfer:retry", style=STYLE_PRIMARY),
+                ],
+            ]
+            if has_errors
+            else []
+        )
+        + [
             [_cb("🚀 انتقال جدید", "menu:transfer", style=STYLE_SUCCESS)],
             [_cb("🏠 داشبورد", "nav:home")],
         ]
@@ -67,7 +73,7 @@ def result_menu() -> InlineKeyboardMarkup:
 def failed_messages_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [_cb("↻ Retry همه", "transfer:retry", style=STYLE_PRIMARY)],
+            [_cb("↻ تلاش مجدد برای همه", "transfer:retry", style=STYLE_PRIMARY)],
             [_cb("‹ بازگشت", "nav:back")],
         ]
     )

@@ -11,6 +11,7 @@ from app.handlers.states import (
     KEY_PROGRESS_MESSAGE_ID,
     KEY_RANGE_START,
     State,
+    get_state,
     set_state,
 )
 from app.services import transfer_service
@@ -35,25 +36,30 @@ async def show_transfer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def start_range_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("explicit_ids", None)
+    context.user_data.pop(KEY_RANGE_START, None)
+    context.user_data.pop("range_end", None)
     set_state(context.user_data, State.RANGE_INPUT_START)
-    await update.callback_query.edit_message_text(
-        messages.ask_start_id(), reply_markup=keyboards.cancel_only()
+    await update.callback_query.message.reply_text(
+        messages.ask_start_id(), reply_markup=keyboards.cancel_only(force_reply=True)
     )
 
 
 async def start_ids_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop(KEY_RANGE_START, None)
+    context.user_data.pop("range_end", None)
+    context.user_data.pop("explicit_ids", None)
     set_state(context.user_data, State.IDS_INPUT)
-    await update.callback_query.edit_message_text(
+    await update.callback_query.message.reply_text(
         "📋 Message IDهای مورد نظر را با کاما یا در خطوط جدا ارسال کنید.\n\nمثال:\n101,102,105",
-        reply_markup=keyboards.cancel_only(),
+        reply_markup=keyboards.cancel_only(force_reply=True),
     )
 
 
 async def start_new_messages_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.callback_query.answer(
-        "این قابلیت نیازمند دریافت آنی پیام‌های جدید کانال مبدأ است و به‌زودی فعال می‌شود.",
-        show_alert=True,
-    )
+    from app.handlers.dashboard import show_auto_forward
+
+    await show_auto_forward(update, context)
 
 
 async def handle_text_input(
@@ -68,7 +74,9 @@ async def handle_text_input(
             return
         context.user_data[KEY_RANGE_START] = value
         set_state(context.user_data, State.RANGE_INPUT_END)
-        await update.message.reply_text(messages.ask_end_id(), reply_markup=keyboards.cancel_only())
+        await update.message.reply_text(
+            messages.ask_end_id(), reply_markup=keyboards.cancel_only(force_reply=True)
+        )
         return
 
     if state == State.RANGE_INPUT_END:
@@ -108,6 +116,11 @@ async def handle_text_input(
 async def show_confirm_from_range(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     start_id = context.user_data.get(KEY_RANGE_START)
     end_id = context.user_data.get("range_end")
+    if start_id is None or end_id is None or get_state(context.user_data) != State.CONFIRM_TRANSFER:
+        await update.callback_query.message.reply_text(
+            "این انتخاب منقضی شده؛ از /menu دوباره شروع کنید."
+        )
+        return
     _, _, source_title, dest_title = transfer_service.get_channels()
     count = end_id - start_id + 1
     set_state(context.user_data, State.CONFIRM_TRANSFER)
@@ -122,10 +135,24 @@ async def edit_range(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def confirm_and_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if get_state(context.user_data) != State.CONFIRM_TRANSFER:
+        await update.callback_query.message.reply_text(
+            "این درخواست قبلاً اجرا شده یا منقضی شده است. /menu"
+        )
+        return
     source_id, dest_id, source_title, dest_title = transfer_service.get_channels()
     start_id = context.user_data.get(KEY_RANGE_START)
     end_id = context.user_data.get("range_end")
     explicit_ids = context.user_data.get("explicit_ids")
+    if (
+        source_id is None
+        or dest_id is None
+        or (not explicit_ids and (start_id is None or end_id is None))
+    ):
+        await update.callback_query.message.reply_text(
+            "اطلاعات انتقال کامل نیست. از /menu دوباره شروع کنید."
+        )
+        return
 
     if explicit_ids:
         message_ids = explicit_ids
