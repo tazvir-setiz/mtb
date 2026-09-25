@@ -105,6 +105,8 @@ def load_settings() -> Settings:
     )
     ai_model = _get_env("AI_MODEL", required=False, default="gpt-4o-mini")
     ai_guardrails = _get_env("AI_GUARDRAILS", required=False, default="")
+    if not ai_guardrails.strip():
+        ai_guardrails = (BASE_DIR / "app/prompts/guardrails.txt").read_text(encoding="utf-8")
 
     return Settings(
         bot_token=bot_token,

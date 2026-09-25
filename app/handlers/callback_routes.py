@@ -6,12 +6,15 @@ from typing import Awaitable, Callable
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.handlers import dashboard, destination, source, statistics, transfer
+from app.handlers import dashboard, destination, source, statistics, transfer, username_settings
 from app.handlers import settings as settings_handlers
 
 CallbackHandler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
 
 CALLBACK_ROUTES: dict[tuple[str, str], CallbackHandler] = {
+    ("settings", "usernames"): username_settings.show,
+    ("usernames", "replace"): username_settings.ask,
+    ("usernames", "delete"): username_settings.remove,
     ("menu", "source"): partial(source.show_channel_prompt, kind="source"),
     ("menu", "destination"): partial(source.show_channel_prompt, kind="destination"),
     ("menu", "transfer"): transfer.show_transfer_menu,

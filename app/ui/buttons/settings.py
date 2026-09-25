@@ -13,6 +13,7 @@ def settings_menu() -> InlineKeyboardMarkup:
                 _cb("📤 مقصد", "menu:destination"),
             ],
             [_cb("✍️ امضا / زیرنویس", "settings:signature", style=STYLE_PRIMARY)],
+            [_cb("👤 آیدی‌های داخل پیام", "settings:usernames", style=STYLE_PRIMARY)],
             [_cb("⏱ فاصله ارسال", "settings:delay")],
             [_cb("🗑 پاک کردن داده‌های عملیات", "settings:clear_data", style=STYLE_DANGER)],
             [_cb("‹ بازگشت", "nav:back")],
@@ -40,5 +41,15 @@ def signature_menu() -> InlineKeyboardMarkup:
         [
             [_cb("🗑 حذف امضای فعلی", "settings:clear_sig", style=STYLE_DANGER)],
             [_cb("✕ لغو", "nav:cancel")],
+        ]
+    )
+
+
+def username_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [_cb("✏️ تعیین آیدی جایگزین", "usernames:replace", style=STYLE_PRIMARY)],
+            [_cb("🗑 حذف آیدی‌ها از پیام", "usernames:delete", style=STYLE_DANGER)],
+            [_cb("‹ تنظیمات", "menu:settings")],
         ]
     )

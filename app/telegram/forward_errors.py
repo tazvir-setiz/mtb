@@ -11,6 +11,8 @@ from telethon.errors import (
 )
 from telethon.errors.rpcerrorlist import ChatWriteForbiddenError
 
+from app.services.ai_policy import AIProcessingError, AIReviewRequired
+
 
 class ForwardErrorType(str, Enum):
     FLOOD_WAIT = "flood_wait"
@@ -21,9 +23,13 @@ class ForwardErrorType(str, Enum):
     PROTECTED_CONTENT = "protected_content"
     NETWORK_ERROR = "network_error"
     UNKNOWN = "unknown"
+    AI_REVIEW = "ai_review"
+    AI_ERROR = "ai_error"
 
 
 FRIENDLY_ERRORS: dict[ForwardErrorType, str] = {
+    ForwardErrorType.AI_REVIEW: "🔎 نیازمند بررسی؛ منتشر نشد. تلاش مجدد، پالایش را دوباره اجرا می‌کند.",
+    ForwardErrorType.AI_ERROR: "🤖 خطای پالایش هوشمند؛ برای جلوگیری از ارسال متن خام، منتشر نشد.",
     ForwardErrorType.FLOOD_WAIT: "⏳ محدودیت موقت Telegram (FloodWait)",
     ForwardErrorType.MESSAGE_NOT_FOUND: "⚠️ پیام یافت نشد یا حذف شده است",
     ForwardErrorType.CHAT_NOT_FOUND: "⚠️ کانال یافت نشد",
@@ -36,6 +42,10 @@ FRIENDLY_ERRORS: dict[ForwardErrorType, str] = {
 
 
 def classify_error(exc: Exception) -> ForwardErrorType:
+    if isinstance(exc, AIReviewRequired):
+        return ForwardErrorType.AI_REVIEW
+    if isinstance(exc, AIProcessingError):
+        return ForwardErrorType.AI_ERROR
     if isinstance(exc, FloodWaitError):
         return ForwardErrorType.FLOOD_WAIT
     if isinstance(exc, MessageIdInvalidError):

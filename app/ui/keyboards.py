@@ -12,6 +12,7 @@ from app.ui.buttons.dashboard import main_menu as main_menu
 from app.ui.buttons.settings import confirm_clear_data as confirm_clear_data
 from app.ui.buttons.settings import settings_menu as settings_menu
 from app.ui.buttons.settings import signature_menu as signature_menu
+from app.ui.buttons.settings import username_menu as username_menu
 from app.ui.buttons.statistics import confirm_clear_statistics as confirm_clear_statistics
 from app.ui.buttons.statistics import stats_menu as stats_menu
 from app.ui.buttons.transfer import confirm_transfer as confirm_transfer

@@ -4,6 +4,7 @@ from enum import Enum
 
 
 class State(str, Enum):
+    USERNAME_INPUT = "USERNAME_INPUT"
     MAIN_MENU = "MAIN_MENU"
     SOURCE_CHANNEL = "SOURCE_CHANNEL"
     DESTINATION_CHANNEL = "DESTINATION_CHANNEL"

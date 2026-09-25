@@ -7,7 +7,7 @@ from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from app.handlers import settings as settings_handlers
-from app.handlers import source, transfer
+from app.handlers import source, transfer, username_settings
 from app.handlers.auth import is_authorized, reject
 from app.handlers.callback_routes import CALLBACK_ROUTES
 from app.handlers.states import State, get_state
@@ -64,6 +64,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await transfer.handle_text_input(update, context, state)
         elif state == State.SIGNATURE_INPUT:
             await settings_handlers.handle_signature_input(update, context)
+        elif state == State.USERNAME_INPUT:
+            await username_settings.save(update, context)
         else:
             await update.message.reply_text(
                 "از دکمه‌های داشبورد استفاده کنید یا /menu را بزنید.",
