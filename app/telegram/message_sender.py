@@ -1,5 +1,3 @@
-"""Shared message processing for manual transfers and the live listener."""
-
 import logging
 
 from telethon import TelegramClient
@@ -22,7 +20,6 @@ async def send_message(
     destination_id: int,
     signature: str | None,
 ) -> Message | None:
-    """Send a processed message, or return None when AI rejects it."""
     if getattr(original, "poll", None):
         if settings.ai_enabled:
             raise AIReviewRequired(

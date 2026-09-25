@@ -1,5 +1,3 @@
-"""Bootstrap a persistent Telethon session from an optional deployment secret."""
-
 from pathlib import Path
 
 from telethon.sessions import SQLiteSession, StringSession

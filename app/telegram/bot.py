@@ -1,5 +1,3 @@
-"""Build the Bot API application and register its entry points."""
-
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,

@@ -1,5 +1,3 @@
-"""Persistent username sanitization controls for administrators."""
-
 from telegram import Update
 from telegram.ext import ContextTypes
 

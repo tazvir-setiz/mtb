@@ -1,5 +1,3 @@
-"""Stable public imports for the screen-specific UI modules."""
-
 from app.ui.buttons.channels import channel_confirm as channel_confirm
 from app.ui.buttons.channels import destination_retry as destination_retry
 from app.ui.buttons.common import STYLE_DANGER as STYLE_DANGER

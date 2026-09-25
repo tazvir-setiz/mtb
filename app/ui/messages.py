@@ -1,5 +1,3 @@
-"""Stable public imports for the screen-specific UI modules."""
-
 from app.ui.texts.channels import CHANNEL_NOT_FOUND as CHANNEL_NOT_FOUND
 from app.ui.texts.channels import PERMISSION_ERROR as PERMISSION_ERROR
 from app.ui.texts.channels import ask_channel as ask_channel

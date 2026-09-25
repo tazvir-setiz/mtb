@@ -24,6 +24,16 @@ _TYPE_MAP = {"source": ChannelType.SOURCE, "destination": ChannelType.DESTINATIO
 _STATE_MAP = {"source": State.SOURCE_CHANNEL, "destination": State.DESTINATION_CHANNEL}
 
 
+def remember_channel(user_data: dict, kind: str, info, message_id: int) -> None:
+    user_data[KEY_PENDING_CHANNEL] = {
+        "kind": kind,
+        "telegram_id": info.telegram_id,
+        "title": info.title,
+        "username": info.username,
+        "message_id": message_id,
+    }
+
+
 async def show_channel_prompt(
     update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str
 ) -> None:
@@ -60,7 +70,7 @@ async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             await update.message.reply_text(str(exc), reply_markup=keyboards.cancel_only())
         return
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Channel resolution failed")
         await update.message.reply_text(
             messages.CHANNEL_NOT_FOUND, reply_markup=keyboards.cancel_only()
@@ -68,17 +78,10 @@ async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     text = messages.channel_confirmed(kind, info.title, info.telegram_id, info.username)
-    prefix = "source" if kind == "source" else "destination"
     confirmation = await update.message.reply_text(
-        text, reply_markup=keyboards.channel_confirm(prefix)
+        text, reply_markup=keyboards.channel_confirm(kind)
     )
-    context.user_data[KEY_PENDING_CHANNEL] = {
-        "kind": kind,
-        "telegram_id": info.telegram_id,
-        "title": info.title,
-        "username": info.username,
-        "message_id": confirmation.message_id,
-    }
+    remember_channel(context.user_data, kind, info, confirmation.message_id)
 
 
 async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str) -> None:
@@ -103,19 +106,24 @@ async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, kin
             username=pending["username"],
         )
     context.user_data.pop(KEY_PENDING_CHANNEL, None)
-    if auto_forward.is_enabled():
-        try:
-            refreshed = await auto_forward.refresh_listener(await ensure_started())
-        except Exception:
-            logger.exception("Could not reconnect auto-forward after channel change")
-            await auto_forward.disable()
-            refreshed = False
-        if not refreshed:
-            await update.callback_query.message.reply_text(
-                "⚠️ کانال ذخیره شد، اما اتصال انتقال خودکار برقرار نشد و خاموش شد. "
-                "پس از بررسی اتصال، دوباره آن را فعال کنید."
-            )
+    await refresh_auto_forward(update)
     await show_dashboard(update, context, edit=True)
+
+
+async def refresh_auto_forward(update: Update) -> None:
+    if not auto_forward.is_enabled():
+        return
+    try:
+        refreshed = await auto_forward.refresh_listener(await ensure_started())
+    except Exception:
+        logger.exception("Could not reconnect auto-forward after channel change")
+        await auto_forward.disable()
+        refreshed = False
+    if not refreshed:
+        await update.callback_query.message.reply_text(
+            "⚠️ کانال ذخیره شد، اما اتصال انتقال خودکار برقرار نشد و خاموش شد. "
+            "پس از بررسی اتصال، دوباره آن را فعال کنید."
+        )
 
 
 async def handle_change(update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str) -> None:
@@ -123,9 +131,7 @@ async def handle_change(update: Update, context: ContextTypes.DEFAULT_TYPE, kind
 
 
 async def handle_destination_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from app.database.database import get_session as _gs
-
-    with _gs() as session:
+    with get_session() as session:
         channel = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
     if not channel:
         await show_channel_prompt(update, context, "destination")
@@ -142,13 +148,9 @@ async def handle_destination_retry(update: Update, context: ContextTypes.DEFAULT
     await update.callback_query.edit_message_text(
         text, reply_markup=keyboards.channel_confirm("destination")
     )
-    context.user_data[KEY_PENDING_CHANNEL] = {
-        "kind": "destination",
-        "telegram_id": info.telegram_id,
-        "title": info.title,
-        "username": info.username,
-        "message_id": update.callback_query.message.message_id,
-    }
+    remember_channel(
+        context.user_data, "destination", info, update.callback_query.message.message_id
+    )
 
 
 async def handle_destination_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

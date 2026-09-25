@@ -1,7 +1,3 @@
-"""
-Callback Data ساختارمند: <namespace>:<action>[:<arg>]
-"""
-
 from __future__ import annotations
 
 

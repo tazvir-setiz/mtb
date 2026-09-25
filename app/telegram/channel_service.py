@@ -65,7 +65,7 @@ async def resolve_channel(client: TelegramClient, raw: str) -> ChannelInfo:
                 can_post = bool(rights and rights.post_messages) or entity.megagroup
             elif isinstance(participant.participant, ChannelParticipantCreator):
                 can_post = True
-        except Exception:  # noqa: BLE001 - عضو نبودن یعنی عدم دسترسی
+        except Exception:
             is_admin = False
             can_post = False
 

@@ -14,7 +14,7 @@ from app.telegram.bot import build_application, setup_bot_ui
 from app.telegram.client import ensure_started, stop_client
 
 
-async def _post_init(application) -> None:  # noqa: ANN001
+async def _post_init(application) -> None:
     await setup_bot_ui(application.bot)
 
     client = await ensure_started()
@@ -22,7 +22,7 @@ async def _post_init(application) -> None:  # noqa: ANN001
     await auto_forward.sync_on_startup(client)
 
 
-async def _post_shutdown(application) -> None:  # noqa: ANN001
+async def _post_shutdown(application) -> None:
     await stop_client()
 
 

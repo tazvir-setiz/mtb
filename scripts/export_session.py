@@ -1,5 +1,3 @@
-"""Export a local login for Railway without printing credentials to the terminal."""
-
 import asyncio
 import os
 import sys

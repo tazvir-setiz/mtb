@@ -1,7 +1,3 @@
-"""
-Auto-Forward پیام‌های جدید.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +24,6 @@ _AUTO_JOB_MARKER = -1
 _handler = None  # type: ignore[var-annotated]
 _registered_client: TelegramClient | None = None
 
-# Serialize processing to preserve message order.
 _processing_lock = asyncio.Lock()
 
 
@@ -58,8 +53,7 @@ def _get_auto_job_id(source_id: int, destination_id: int) -> int:
 
 async def _on_new_message(
     event, source_id: int, destination_id: int, job_id: int, *, listener=None
-) -> None:  # noqa: ANN001
-    # Wait until the previous message has finished processing.
+) -> None:
     async with _processing_lock:
         # Removed handlers may still have callbacks queued behind an active send.
         if listener is not None and listener is not _handler:
@@ -109,7 +103,7 @@ async def _on_new_message(
                 "Auto-forward: Message %d -> %d successfully processed and sent.", msg_id, dest_id
             )
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             err_type = classify_error(exc)
             if err_type == ForwardErrorType.UNKNOWN:
                 logger.exception("Auto-forward: Unknown error processing message %d", msg_id)
@@ -146,7 +140,7 @@ async def start_listener(client: TelegramClient) -> bool:
     destination_id = destination.telegram_id
     job_id = _get_auto_job_id(source_id, destination_id)
 
-    async def handler(event):  # noqa: ANN001
+    async def handler(event):
         await _on_new_message(event, source_id, destination_id, job_id, listener=handler)
 
     client.add_event_handler(handler, events.NewMessage(chats=source_id))
@@ -189,7 +183,6 @@ async def sync_on_startup(client: TelegramClient) -> bool:
 
 
 async def refresh_listener(client: TelegramClient) -> bool:
-    """Rebind enabled forwarding to the saved channels and report the real outcome."""
     if not is_enabled():
         return False
     try:

@@ -1,5 +1,3 @@
-"""Translate Telegram and transport errors into user-facing categories."""
-
 from enum import Enum
 
 from telethon.errors import (

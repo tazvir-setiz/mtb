@@ -1,5 +1,3 @@
-"""Validate model decisions before allowing publication."""
-
 import re
 
 

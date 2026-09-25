@@ -131,3 +131,36 @@ async def test_new_messages_opens_auto_forward_controls(monkeypatch):
     update, context = object(), object()
     await transfer.start_new_messages_flow(update, context)
     show.assert_awaited_once_with(update, context)
+
+
+@pytest.mark.asyncio
+async def test_range_input_rejects_invalid_end_and_preserves_start(monkeypatch):
+    monkeypatch.setattr(
+        transfer.transfer_service, "get_channels", lambda: (1, 2, "Source", "Destination")
+    )
+    context = SimpleNamespace(user_data={"state": State.RANGE_INPUT_START})
+    message = SimpleNamespace(text="10", reply_text=AsyncMock())
+    update = SimpleNamespace(message=message)
+    await transfer.handle_text_input(update, context, State.RANGE_INPUT_START)
+    assert context.user_data["range_start"] == 10
+    assert context.user_data["state"] == State.RANGE_INPUT_END
+    message.text = "9"
+    await transfer.handle_text_input(update, context, State.RANGE_INPUT_END)
+    assert "range_end" not in context.user_data
+    assert context.user_data["state"] == State.RANGE_INPUT_END
+    message.text = "12"
+    await transfer.handle_text_input(update, context, State.RANGE_INPUT_END)
+    assert context.user_data["range_end"] == 12
+    assert context.user_data["state"] == State.CONFIRM_TRANSFER
+
+
+@pytest.mark.asyncio
+async def test_id_input_keeps_only_selected_messages(monkeypatch):
+    monkeypatch.setattr(
+        transfer.transfer_service, "get_channels", lambda: (1, 2, "Source", "Destination")
+    )
+    context = SimpleNamespace(user_data={"state": State.IDS_INPUT})
+    update = SimpleNamespace(message=SimpleNamespace(text="10,12", reply_text=AsyncMock()))
+    await transfer.handle_text_input(update, context, State.IDS_INPUT)
+    assert context.user_data["explicit_ids"] == [10, 12]
+    assert context.user_data["state"] == State.CONFIRM_TRANSFER

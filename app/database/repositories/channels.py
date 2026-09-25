@@ -27,7 +27,6 @@ class ChannelRepository:
             session.flush()
             return existing
 
-        # هر نوع کانال (مبدأ/مقصد) فقط یک رکورد فعال دارد؛ رکورد قبلی حذف می‌شود
         old = session.execute(select(Channel).where(Channel.type == channel_type)).scalars().all()
         for row in old:
             session.delete(row)

@@ -1,5 +1,3 @@
-"""Text moderation with strict decisions and no unfiltered fallback."""
-
 import logging
 
 import httpx

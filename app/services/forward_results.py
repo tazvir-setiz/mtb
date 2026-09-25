@@ -1,5 +1,3 @@
-"""Persist transfer outcomes and job counters in a single transaction."""
-
 from app.database.database import get_session
 from app.database.models import JobStatus, MessageStatus
 from app.database.repository import ForwardedMessageRepository, ForwardJobRepository

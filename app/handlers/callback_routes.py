@@ -1,5 +1,3 @@
-"""Callback destinations. Keep callback names aligned with app/ui/buttons/."""
-
 from functools import partial
 from typing import Awaitable, Callable
 

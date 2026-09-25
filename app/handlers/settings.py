@@ -78,7 +78,6 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def handle_signature_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Persist the formatted signature and return to settings."""
     with get_session() as session:
         SettingsRepository.set(session, "signature_text", update.message.text_html)
 

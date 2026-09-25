@@ -1,5 +1,3 @@
-"""Coordinate manual transfers; sending and persistence have separate modules."""
-
 from __future__ import annotations
 
 import asyncio
@@ -40,7 +38,6 @@ async def _send_with_retry(
     snapshot: ProgressSnapshot,
     on_progress: ProgressCallback | None,
 ) -> Message | None:
-    """Retry once after FloodWait, preserving the transfer's retry policy."""
     try:
         return await fetch_and_send_message(client, msg_id, source_id, destination_id, signature)
     except FloodWaitError as exc:
@@ -113,7 +110,7 @@ async def forward_range(
                     logger.info(
                         "Message %d -> %s sent successfully.", msg_id, destination_message_id
                     )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 status = MessageStatus.FAILED
                 error_type = classify_error(exc)
                 error = FRIENDLY_ERRORS[error_type]

@@ -26,7 +26,6 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await reject(update)
         return
 
-    # Callback را سریع ACK می‌کنیم تا spinner تلگرام باقی نماند.
     await query.answer()
     namespace, action, _arg = parse(query.data or "")
 
@@ -43,7 +42,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await update.effective_message.reply_text(
                 "⚠️ نمایش این صفحه ممکن نشد. از /menu دوباره شروع کنید."
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("خطا در پردازش callback: %s", query.data)
         if update.effective_message:
             await update.effective_message.reply_text(
@@ -71,6 +70,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 "از دکمه‌های داشبورد استفاده کنید یا /menu را بزنید.",
                 reply_markup=keyboards.back_home(),
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("خطا در پردازش ورودی متنی")
         await update.message.reply_text("⚠️ خطای غیرمنتظره‌ای رخ داد.\nبرای بازگشت /menu را بزنید.")

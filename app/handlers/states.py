@@ -15,10 +15,9 @@ class State(str, Enum):
     CONFIRM_TRANSFER = "CONFIRM_TRANSFER"
     TRANSFERRING = "TRANSFERRING"
     TRANSFER_RESULT = "TRANSFER_RESULT"
-    SIGNATURE_INPUT = "SIGNATURE_INPUT"  # 👈 اضافه شد
+    SIGNATURE_INPUT = "SIGNATURE_INPUT"
 
 
-# کلیدهای user_data
 KEY_STATE = "state"
 KEY_PENDING_CHANNEL_KIND = "pending_channel_kind"
 KEY_PENDING_CHANNEL = "pending_channel"
