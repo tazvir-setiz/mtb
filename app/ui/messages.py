@@ -1,44 +1,58 @@
 from __future__ import annotations
 
-UNAUTHORIZED = "🔒 دسترسی غیرمجاز\n\nشما اجازه استفاده از این ربات را ندارید."
+from html import escape as _e
+
+UNAUTHORIZED = "🔒 <b>دسترسی غیرمجاز</b>\n\nشما اجازه استفاده از این ربات را ندارید."
+
+DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 
 
-def dashboard(source_title: str | None, destination_title: str | None, total_forwarded: int) -> str:
-    source_line = f"✅ {source_title}" if source_title else "❌ تنظیم نشده"
-    dest_line = f"✅ {destination_title}" if destination_title else "❌ تنظیم نشده"
+def dashboard(
+    source_title: str | None,
+    destination_title: str | None,
+    total_forwarded: int,
+    auto_forward_enabled: bool = False,
+) -> str:
+    source_line = f"✅ <b>{_e(source_title)}</b>" if source_title else "❌ <i>تنظیم نشده</i>"
+    dest_line = f"✅ <b>{_e(destination_title)}</b>" if destination_title else "❌ <i>تنظیم نشده</i>"
+    auto_line = "🟢 روشن" if auto_forward_enabled else "🔴 خاموش"
     return (
-        "🤖 Telegram Forwarder\n\n"
-        "🟢 وضعیت: آماده\n\n"
-        f"📥 کانال مبدأ:\n{source_line}\n\n"
-        f"📤 کانال مقصد:\n{dest_line}\n\n"
-        f"📊 پیام‌های منتقل‌شده:\n{total_forwarded}"
+        "🤖 <b>Telegram Forwarder</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📥 <b>کانال مبدأ</b>\n{source_line}\n\n"
+        f"📤 <b>کانال مقصد</b>\n{dest_line}\n\n"
+        f"🆕 <b>Auto-Forward</b>\n{auto_line}\n\n"
+        f"📊 <b>پیام‌های منتقل‌شده</b>\n<code>{total_forwarded:,}</code>"
     )
 
 
 def ask_channel(kind: str, current_title: str | None) -> str:
-    label = "📥 کانال مبدأ" if kind == "source" else "📤 کانال مقصد"
-    current = f"✅ {current_title}" if current_title else "❌ تنظیم نشده"
+    label = "📥 <b>کانال مبدأ</b>" if kind == "source" else "📤 <b>کانال مقصد</b>"
+    current = f"✅ {_e(current_title)}" if current_title else "❌ <i>تنظیم نشده</i>"
     return (
         f"{label}\n\n"
         f"کانال فعلی:\n{current}\n\n"
-        "شناسه یا Username کانال را ارسال کنید.\n\n"
-        "مثال:\n@source_channel\nیا:\n-1001234567890"
+        f"{DIVIDER}\n\n"
+        "🔗 شناسه یا Username کانال را ارسال کنید:\n\n"
+        "• <code>@source_channel</code>\n"
+        "• <code>-1001234567890</code>"
     )
 
 
 def channel_confirmed(kind: str, title: str, telegram_id: int, username: str | None) -> str:
     label = "کانال مبدأ" if kind == "source" else "کانال مقصد"
-    username_line = f"@{username}" if username else "—"
+    username_line = f"@{_e(username)}" if username else "—"
     return (
-        f"✅ {label} تنظیم شد\n\n"
-        f"📢 نام:\n{title}\n\n"
-        f"🆔 ID:\n{telegram_id}\n\n"
-        f"👤 Username:\n{username_line}"
+        f"✅ <b>{label} تنظیم شد</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📢 نام\n<b>{_e(title)}</b>\n\n"
+        f"🆔 ID\n<code>{telegram_id}</code>\n\n"
+        f"👤 Username\n{username_line}"
     )
 
 
 PERMISSION_ERROR = (
-    "⚠️ دسترسی کافی نیست\n\n"
+    "⚠️ <b>دسترسی کافی نیست</b>\n\n"
     "ربات باید در کانال مقصد Administrator باشد\n"
     "و دسترسی لازم برای ارسال پیام را داشته باشد."
 )
@@ -48,73 +62,78 @@ CHANNEL_NOT_FOUND = "⚠️ کانال یافت نشد یا دسترسی به آ
 
 def transfer_menu_text(source_title: str, destination_title: str) -> str:
     return (
-        "🚀 انتقال پیام‌ها\n\n"
-        f"📥 مبدأ:\n{source_title}\n\n"
-        f"📤 مقصد:\n{destination_title}"
+        "🚀 <b>انتقال پیام‌ها</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📥 مبدأ:  <b>{_e(source_title)}</b>\n"
+        f"📤 مقصد:  <b>{_e(destination_title)}</b>"
     )
 
 
 def ask_start_id() -> str:
-    return "🔢 Message ID شروع را وارد کنید:"
+    return "🔢 <b>Message ID شروع</b> را وارد کنید:"
 
 
 def ask_end_id() -> str:
-    return "🔢 Message ID پایان را وارد کنید:"
+    return "🔢 <b>Message ID پایان</b> را وارد کنید:"
 
 
 def range_summary_text(source_title: str, destination_title: str, start_id: int, end_id: int) -> str:
     count = end_id - start_id + 1
     return (
-        "📋 خلاصه عملیات\n\n"
-        f"📥 مبدأ:\n{source_title}\n\n"
-        f"📤 مقصد:\n{destination_title}\n\n"
-        f"🔢 بازه:\n{start_id} → {end_id}\n\n"
-        f"📨 تعداد:\n{count} پیام"
+        "📋 <b>خلاصه عملیات</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📥 مبدأ:  <b>{_e(source_title)}</b>\n"
+        f"📤 مقصد:  <b>{_e(destination_title)}</b>\n\n"
+        f"🔢 بازه:  <code>{start_id} → {end_id}</code>\n"
+        f"📨 تعداد:  <b>{count:,}</b> پیام"
     )
 
 
 def confirm_transfer_text(count: int, source_title: str, destination_title: str) -> str:
     return (
-        "⚠️ تأیید انتقال\n\n"
-        f"شما در حال انتقال {count} پیام هستید.\n\n"
-        f"📥 از:\n{source_title}\n\n"
-        f"📤 به:\n{destination_title}\n\n"
+        "⚠️ <b>تأیید انتقال</b>\n"
+        f"{DIVIDER}\n\n"
+        f"شما در حال انتقال <b>{count:,}</b> پیام هستید.\n\n"
+        f"📥 از:  <b>{_e(source_title)}</b>\n"
+        f"📤 به:  <b>{_e(destination_title)}</b>\n\n"
         "آیا مطمئن هستید؟"
     )
 
 
 def _progress_bar(percent: int, width: int = 12) -> str:
     filled = int(width * percent / 100)
-    return "█" * filled + "░" * (width - filled)
+    return "▰" * filled + "▱" * (width - filled)
 
 
 def progress_text(processed: int, total: int, success: int, skipped: int, failed: int, elapsed_seconds: int) -> str:
     percent = int((processed / total) * 100) if total else 0
     minutes, seconds = divmod(elapsed_seconds, 60)
     return (
-        "🚀 در حال انتقال...\n\n"
-        f"{_progress_bar(percent)} {percent}%\n\n"
-        f"📨 پردازش:\n{processed} / {total}\n\n"
-        f"✅ موفق:\n{success}\n\n"
-        f"⏭ تکراری:\n{skipped}\n\n"
-        f"❌ خطا:\n{failed}\n\n"
-        f"⏱ زمان:\n{minutes:02d}:{seconds:02d}"
+        "🚀 <b>در حال انتقال...</b>\n\n"
+        f"<code>{_progress_bar(percent)}</code>  <b>{percent}%</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📨 پردازش:  <b>{processed}</b> / {total}\n"
+        f"✅ موفق:  <b>{success}</b>\n"
+        f"⏭ تکراری:  <b>{skipped}</b>\n"
+        f"❌ خطا:  <b>{failed}</b>\n\n"
+        f"⏱ زمان:  <code>{minutes:02d}:{seconds:02d}</code>"
     )
 
 
 def paused_text(processed: int, total: int, success: int, failed: int) -> str:
     return (
-        "⏸ عملیات متوقف شد\n\n"
-        f"📨 پردازش:\n{processed} / {total}\n\n"
-        f"✅ موفق:\n{success}\n\n"
-        f"❌ خطا:\n{failed}"
+        "⏸ <b>عملیات متوقف شد</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📨 پردازش:  <b>{processed}</b> / {total}\n"
+        f"✅ موفق:  <b>{success}</b>\n"
+        f"❌ خطا:  <b>{failed}</b>"
     )
 
 
 def flood_wait_text(seconds: int) -> str:
     return (
-        "⏳ محدودیت Telegram\n\n"
-        f"برای ادامه عملیات باید {seconds} ثانیه صبر کنیم.\n\n"
+        "⏳ <b>محدودیت Telegram</b>\n\n"
+        f"برای ادامه عملیات باید <b>{seconds}</b> ثانیه صبر کنیم.\n\n"
         "ربات به‌صورت خودکار ادامه خواهد داد."
     )
 
@@ -122,32 +141,32 @@ def flood_wait_text(seconds: int) -> str:
 def final_result_text(total: int, success: int, skipped: int, failed: int, elapsed_seconds: int) -> str:
     minutes, seconds = divmod(elapsed_seconds, 60)
     return (
-        "🎉 انتقال به پایان رسید\n\n"
-        "━━━━━━━━━━━━━━━━\n\n"
-        f"📨 کل:\n{total}\n\n"
-        f"✅ موفق:\n{success}\n\n"
-        f"⏭ تکراری:\n{skipped}\n\n"
-        f"❌ ناموفق:\n{failed}\n\n"
-        f"⏱ زمان:\n{minutes:02d}:{seconds:02d}\n\n"
-        "━━━━━━━━━━━━━━━━"
+        "🎉 <b>انتقال به پایان رسید</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📨 کل:  <b>{total:,}</b>\n"
+        f"✅ موفق:  <b>{success:,}</b>\n"
+        f"⏭ تکراری:  <b>{skipped:,}</b>\n"
+        f"❌ ناموفق:  <b>{failed:,}</b>\n\n"
+        f"⏱ زمان:  <code>{minutes:02d}:{seconds:02d}</code>\n"
+        f"{DIVIDER}"
     )
 
 
 def failed_messages_text(items: list[tuple[int, str]]) -> str:
     if not items:
-        return "❌ پیام‌های ناموفق\n\nموردی یافت نشد."
-    lines = ["❌ پیام‌های ناموفق\n"]
+        return "❌ <b>پیام‌های ناموفق</b>\n\n<i>موردی یافت نشد.</i>"
+    lines = ["❌ <b>پیام‌های ناموفق</b>", DIVIDER, ""]
     for msg_id, error in items:
-        lines.append(f"Message #{msg_id}\n⚠️ {error}\n")
+        lines.append(f"<code>#{msg_id}</code>  ⚠️ {_e(error)}")
     return "\n".join(lines)
 
 
 def recent_messages_text(items: list[tuple[int, str]]) -> str:
     if not items:
-        return "📋 پیام‌های اخیر\n\nهنوز پیامی منتقل نشده است."
-    lines = ["📋 پیام‌های اخیر\n"]
+        return "📋 <b>پیام‌های اخیر</b>\n\n<i>هنوز پیامی منتقل نشده است.</i>"
+    lines = ["📋 <b>پیام‌های اخیر</b>", DIVIDER, ""]
     for msg_id, status_icon in items:
-        lines.append(f"📨 #{msg_id}  {status_icon}")
+        lines.append(f"<code>#{msg_id}</code>  {status_icon}")
     return "\n".join(lines)
 
 
@@ -161,22 +180,25 @@ def statistics_text(
     last_operation: str,
 ) -> str:
     return (
-        "📊 آمار\n\n"
-        f"📨 کل پردازش:\n{total:,}\n\n"
-        f"✅ موفق:\n{success:,}\n\n"
-        f"❌ خطا:\n{failed:,}\n\n"
-        f"⏭ تکراری:\n{duplicate:,}\n\n"
-        f"📥 مبدأ:\n{source_title}\n\n"
-        f"📤 مقصد:\n{destination_title}\n\n"
-        f"🕐 آخرین عملیات:\n{last_operation}"
+        "📊 <b>آمار</b>\n"
+        f"{DIVIDER}\n\n"
+        f"📨 کل پردازش:  <b>{total:,}</b>\n"
+        f"✅ موفق:  <b>{success:,}</b>\n"
+        f"❌ خطا:  <b>{failed:,}</b>\n"
+        f"⏭ تکراری:  <b>{duplicate:,}</b>\n\n"
+        f"📥 مبدأ:  <b>{_e(source_title)}</b>\n"
+        f"📤 مقصد:  <b>{_e(destination_title)}</b>\n\n"
+        f"🕐 آخرین عملیات:  <code>{_e(last_operation)}</code>"
     )
 
 
 HELP_TEXT = (
-    "❓ راهنما\n\n"
+    "❓ <b>راهنما</b>\n"
+    f"{DIVIDER}\n\n"
     "این ربات پیام‌ها را به‌صورت Forward واقعی از یک کانال مبدأ به کانال مقصد منتقل می‌کند.\n\n"
-    "۱. ابتدا کانال مبدأ را تنظیم کنید (ربات باید عضو آن باشد).\n"
-    "۲. سپس کانال مقصد را تنظیم کنید (ربات باید Administrator باشد).\n"
-    "۳. از منوی «انتقال پیام‌ها» بازه یا شناسه پیام‌ها را مشخص کنید.\n"
-    "۴. عملیات را تأیید کنید تا Forward آغاز شود."
+    "1️⃣ ابتدا <b>کانال مبدأ</b> را تنظیم کنید (ربات باید عضو آن باشد).\n"
+    "2️⃣ سپس <b>کانال مقصد</b> را تنظیم کنید (ربات باید Administrator باشد).\n"
+    "3️⃣ از منوی «انتقال پیام‌ها» بازه یا شناسه پیام‌ها را مشخص کنید، یا "
+    "<b>Auto-Forward</b> را از داشبورد روشن کنید تا پیام‌های جدید خودکار منتقل شوند.\n"
+    "4️⃣ عملیات دستی را تأیید کنید تا Forward آغاز شود."
 )

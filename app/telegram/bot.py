@@ -4,11 +4,13 @@ import logging
 import os
 
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    Defaults,
     MessageHandler,
     filters,
 )
@@ -60,6 +62,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 await settings_handlers.show_settings(update, context)
             elif action == "help":
                 await settings_handlers.show_help(update, context)
+            elif action == "auto_toggle":
+                await dashboard.toggle_auto_forward(update, context)
             return
 
         if namespace == "nav":
@@ -192,7 +196,7 @@ def _get_bot_api_proxy_url() -> str | None:
 
 
 def build_application() -> Application:
-    builder = Application.builder().token(settings.bot_token)
+    builder = Application.builder().token(settings.bot_token).defaults(Defaults(parse_mode=ParseMode.HTML))
 
     proxy_url = _get_bot_api_proxy_url()
     if proxy_url:
