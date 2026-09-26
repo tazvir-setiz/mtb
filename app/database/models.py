@@ -106,3 +106,22 @@ class Settings(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     key: Mapped[str] = mapped_column(String(100), unique=True)
     value: Mapped[str] = mapped_column(Text)
+
+
+class ReviewRequest(Base):
+    __tablename__ = "review_requests"
+    __table_args__ = (UniqueConstraint("source_id", "message_id", "destination_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(Integer)
+    destination_id: Mapped[int] = mapped_column(BigInteger)
+    job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    preview: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    notified: Mapped[str] = mapped_column(Text, default="[]")
+    decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    destination_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

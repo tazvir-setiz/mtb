@@ -7,8 +7,9 @@ from app.config import ConfigError, optional_env
 @dataclass(frozen=True)
 class GuardSettings:
     confidence_threshold: float = 0.85
+    ai_confidence_threshold: float = 0.75
     max_input_chars: int = 4000
-    max_output_tokens: int = 200
+    max_output_tokens: int = 1024
     max_candidates: int = 8
     max_topics: int = 5
     max_entities: int = 8
@@ -29,8 +30,9 @@ def load_guard_settings() -> GuardSettings:
         if not math.isfinite(value) or value <= 0:
             raise ConfigError(f"Invalid AI_GUARD_{name.upper()}")
         values[name] = value
-    if values["confidence_threshold"] > 1:
-        raise ConfigError("AI_GUARD_CONFIDENCE_THRESHOLD must be at most 1")
+    for name in ("confidence_threshold", "ai_confidence_threshold"):
+        if values[name] > 1:
+            raise ConfigError(f"AI_GUARD_{name.upper()} must be at most 1")
     return GuardSettings(**values)
 
 

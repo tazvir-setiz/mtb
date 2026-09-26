@@ -20,6 +20,7 @@ class ModerationResult:
     text: str | None = None
     source: str = "RULE"
     context_update: dict = field(default_factory=dict)
+    reason: str = ""
 
     @property
     def action(self) -> str:

@@ -242,6 +242,28 @@ def test_low_confidence_and_oversized_rewrite_cannot_publish():
         )
 
 
+def test_ai_publish_threshold_does_not_relax_automatic_drop_threshold():
+    assert validate_output('{"label":"OK","confidence":0.8}', GuardSettings()).action == "PUBLISH"
+    assert validate_output('{"label":"SPAM","confidence":0.8}', GuardSettings()).action == "REVIEW"
+    assert validate_output('{"label":"REVIEW","confidence":1}', GuardSettings()).action == "REVIEW"
+
+
+def test_json_fence_is_accepted_but_extra_prose_is_not():
+    raw = '```json\n{"label":"OK","confidence":0.95}\n```'
+    assert validate_output(raw, GuardSettings()).label == Label.OK
+    with pytest.raises(AIProcessingError):
+        validate_output("Here is the answer: " + raw, GuardSettings())
+
+
+@pytest.mark.asyncio
+async def test_uncertain_decisions_are_not_cached(enabled):
+    await moderation_service.moderate(1, 1, "Original text")
+    enabled.return_value = ModerationResult(Label.OK, 0.95, source="AI")
+    result = await moderation_service.moderate(1, 1, "Original text")
+    assert result.action == "PUBLISH"
+    assert enabled.await_count == 2
+
+
 def test_large_legacy_prompt_is_not_sent(monkeypatch):
     monkeypatch.setattr(
         ai_service, "settings", replace(ai_service.settings, ai_guardrails="old prompt " * 1000)

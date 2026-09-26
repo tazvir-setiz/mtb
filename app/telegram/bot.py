@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 
 from app.config import settings
-from app.handlers import start
+from app.handlers import reviews, start
 from app.handlers.commands import (
     command_cancel,
     command_help,
@@ -43,6 +43,8 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("help", command_help))
     application.add_handler(CommandHandler("cancel", command_cancel))
 
+    application.add_handler(CommandHandler("reviews", reviews.show_pending))
+    application.add_handler(CallbackQueryHandler(reviews.on_callback, pattern=r"^review:"))
     application.add_handler(CallbackQueryHandler(on_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 

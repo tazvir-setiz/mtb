@@ -55,6 +55,7 @@ def main_menu(
 
     rows.extend(
         [
+            [_cb("🔎 پیام‌های نیازمند تصمیم", "menu:reviews")],
             [
                 _cb("🕘 اخیر", "menu:recent"),
                 _cb("📊 آمار", "menu:stats", style=STYLE_PRIMARY),

@@ -1,5 +1,6 @@
 import json
 import math
+import re
 
 from app.guard_config import GuardSettings
 from app.services.ai_policy import AIProcessingError
@@ -19,7 +20,8 @@ def validate_output(raw: str, limits: GuardSettings) -> ModerationResult:
     try:
         if not isinstance(raw, str) or len(raw) > limits.max_input_chars * 2 + 2000:
             raise ValueError()
-        data = json.loads(raw, object_pairs_hook=unique_fields)
+        fenced = re.fullmatch(r"\s*```(?:json)?\s*\n(.*?)\n```\s*", raw, re.S)
+        data = json.loads(fenced.group(1) if fenced else raw, object_pairs_hook=unique_fields)
         if not isinstance(data, dict) or set(data) - {
             "label",
             "confidence",
@@ -68,6 +70,11 @@ def validate_output(raw: str, limits: GuardSettings) -> ModerationResult:
             raise ValueError()
     except (ValueError, TypeError, KeyError, RecursionError):
         raise AIProcessingError("Invalid structured guard response") from None
-    if confidence < limits.confidence_threshold:
-        return ModerationResult(Label.REVIEW, confidence, source="AI")
+    threshold = (
+        limits.ai_confidence_threshold
+        if label in {Label.OK, Label.SANITIZE, Label.REWRITE}
+        else limits.confidence_threshold
+    )
+    if confidence < threshold:
+        return ModerationResult(Label.REVIEW, confidence, source="AI", reason="low_confidence")
     return ModerationResult(label, confidence, text, "AI", update)

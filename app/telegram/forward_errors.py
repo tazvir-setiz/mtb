@@ -26,7 +26,7 @@ class ForwardErrorType(str, Enum):
 
 
 FRIENDLY_ERRORS: dict[ForwardErrorType, str] = {
-    ForwardErrorType.AI_REVIEW: "🔎 نیازمند بررسی؛ منتشر نشد. تلاش مجدد، پالایش را دوباره اجرا می‌کند.",
+    ForwardErrorType.AI_REVIEW: "🔎 منتظر تصمیم مدیر؛ از اعلان بررسی یا /reviews تأیید یا رد کنید.",
     ForwardErrorType.AI_ERROR: "🤖 خطای پالایش هوشمند؛ برای جلوگیری از ارسال متن خام، منتشر نشد.",
     ForwardErrorType.FLOOD_WAIT: "⏳ محدودیت موقت Telegram (FloodWait)",
     ForwardErrorType.MESSAGE_NOT_FOUND: "⚠️ پیام یافت نشد یا حذف شده است",

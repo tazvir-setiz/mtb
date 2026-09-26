@@ -60,7 +60,9 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
             len(text),
             limits.max_input_chars,
         )
-        return record_decision(ModerationResult(Label.REVIEW, 1), chat_id, message_id, started)
+        return record_decision(
+            ModerationResult(Label.REVIEW, 1, reason="input_too_long"), chat_id, message_id, started
+        )
 
     normalized = normalize_text(text, limits.max_candidates)
     context = load_context(chat_id, limits)
@@ -97,7 +99,8 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
 
     result = finalize(result, text)
     remember_context(result, chat_id, normalized.normalized, limits)
-    runtime.remember(key, result, limits.cache_ttl_seconds, limits.cache_size)
+    if result.action != "REVIEW":
+        runtime.remember(key, result, limits.cache_ttl_seconds, limits.cache_size)
     return record_decision(result, chat_id, message_id, started)
 
 
@@ -109,7 +112,7 @@ async def ai_fallback(normalized, context, provider, config, limits, chat_id, me
             "AI bypassed reason=circuit_open retry_in=%.1fs action=REVIEW",
             max(0, runtime.failures[provider][1] - time.monotonic()),
         )
-        return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE")
+        return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE", reason="circuit_open")
     runtime.metrics["ai_calls"] += 1
     logger.info("AI guard fallback triggered chat_id=%s message_id=%s", chat_id, message_id)
     reversed_words = " ".join(word[::-1] for word in normalized.normalized.split())
@@ -135,7 +138,7 @@ async def ai_fallback(normalized, context, provider, config, limits, chat_id, me
             "open" if runtime.unavailable(provider) else "closed",
             limits.cooldown_seconds if runtime.unavailable(provider) else 0,
         )
-        return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE")
+        return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE", reason="service_unavailable")
 
 
 def finalize(result: ModerationResult, text: str) -> ModerationResult:
@@ -144,7 +147,7 @@ def finalize(result: ModerationResult, text: str) -> ModerationResult:
         clean = sanitize_text(approved, remove_links=True)
         if not publication_is_clean(clean):
             logger.warning("Guard review reason=output_failed_final_sanitization")
-            result = ModerationResult(Label.REVIEW, 0, source=result.source)
+            result = ModerationResult(Label.REVIEW, 0, source=result.source, reason="unsafe_output")
         else:
             result = replace(result, text=clean)
     return result

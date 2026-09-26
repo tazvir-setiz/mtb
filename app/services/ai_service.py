@@ -100,5 +100,5 @@ async def apply_ai_guardrails(
     if result.action == "DROP":
         return "__DROP__"
     if result.action == "REVIEW":
-        raise AIReviewRequired("Guard decision requires review")
+        raise AIReviewRequired(result.reason or result.label.value.lower())
     return result.text or ""

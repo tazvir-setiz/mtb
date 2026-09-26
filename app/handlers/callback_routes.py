@@ -8,6 +8,7 @@ from app.handlers import (
     ai_settings,
     dashboard,
     destination,
+    reviews,
     source,
     statistics,
     transfer,
@@ -18,6 +19,7 @@ from app.handlers import settings as settings_handlers
 CallbackHandler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
 
 CALLBACK_ROUTES: dict[tuple[str, str], CallbackHandler] = {
+    ("menu", "reviews"): reviews.show_pending,
     ("settings", "ai"): ai_settings.show,
     ("ai", "toggle"): ai_settings.toggle,
     ("ai", "key"): partial(ai_settings.ask, field="api_key"),
