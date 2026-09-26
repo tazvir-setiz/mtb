@@ -5,8 +5,7 @@ import logging
 import sys
 from contextlib import suppress
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+from telegram.error import InvalidToken, NetworkError
 
 from app.database.database import init_db
 from app.handlers.reviews import notify_pending
@@ -41,7 +40,7 @@ async def _post_shutdown(application) -> None:
     logging.getLogger(__name__).info("Shutdown completed; Telegram client disconnected.")
 
 
-def main() -> None:
+def main() -> int:
     setup_logging()
     logger = logging.getLogger(__name__)
     logger.info("Starting bot... (Telegram Forwarder + AI Guardrails)")
@@ -53,8 +52,30 @@ def main() -> None:
     application.post_init = _post_init
     application.post_shutdown = _post_shutdown
 
-    application.run_polling(allowed_updates=["message", "callback_query"])
+    loop_factory = asyncio.SelectorEventLoop if sys.platform == "win32" else asyncio.new_event_loop
+    with asyncio.Runner(loop_factory=loop_factory) as runner:
+        asyncio.set_event_loop(runner.get_loop())
+        try:
+            logger.info("Telegram startup: up to 3 retries on temporary connection failures.")
+            application.run_polling(
+                allowed_updates=["message", "callback_query"],
+                bootstrap_retries=3,
+                close_loop=False,
+            )
+        except InvalidToken:
+            logger.error("توکن ربات پذیرفته نشد؛ BOT_TOKEN را بررسی کنید.")
+            return 1
+        except NetworkError as exc:
+            logger.error(
+                "اتصال Bot API برقرار نشد (%s). وضعیت اینترنت و پروکسی تنظیم‌شده را بررسی کنید؛ "
+                "اگر پروکسی محلی است، برنامهٔ پروکسی باید روشن و مسیر Telegram قابل دسترس باشد.",
+                type(exc).__name__,
+            )
+            return 1
+        finally:
+            asyncio.set_event_loop(None)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
