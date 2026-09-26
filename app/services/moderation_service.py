@@ -128,7 +128,7 @@ async def ai_fallback(normalized, context, provider, config, limits, chat_id, me
         if runtime.failures.pop(provider, None):
             logger.info("AI recovered circuit=closed")
         return result
-    except AIProcessingError:
+    except AIProcessingError as exc:
         runtime.metrics["ai_errors"] += 1
         runtime.failed(provider, limits.failure_limit, limits.cooldown_seconds)
         logger.warning(
@@ -138,7 +138,12 @@ async def ai_fallback(normalized, context, provider, config, limits, chat_id, me
             "open" if runtime.unavailable(provider) else "closed",
             limits.cooldown_seconds if runtime.unavailable(provider) else 0,
         )
-        return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE", reason="service_unavailable")
+        return ModerationResult(
+            Label.REVIEW,
+            0,
+            source="UNAVAILABLE",
+            reason=getattr(exc, "reason", "service_unavailable"),
+        )
 
 
 def finalize(result: ModerationResult, text: str) -> ModerationResult:

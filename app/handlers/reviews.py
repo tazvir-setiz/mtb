@@ -14,6 +14,16 @@ from app.telegram.client import ensure_started
 
 logger = logging.getLogger(__name__)
 REASONS = {
+    "timeout": "مهلت پاسخ AI تمام شد؛ می‌توانید بررسی با AI را دوباره اجرا کنید",
+    "response_truncated": "پاسخ مدل به سقف توکن رسید و ناقص ماند",
+    "provider_refusal": "سرویس پاسخ قابل انتشار تولید نکرد",
+    "invalid_output": "قالب پاسخ مدل معتبر نبود",
+    "missing_api_key": "کلید API تنظیم نشده است",
+    "invalid_credentials": "سرویس کلید API یا دسترسی حساب را نپذیرفت",
+    "rate_limit": "محدودیت درخواست یا اعتبار سرویس AI",
+    "bad_request": "آدرس، مدل یا پارامترهای درخواست AI پذیرفته نشد",
+    "provider_error": "خطای HTTP سرویس AI",
+    "connection_error": "اتصال به سرویس AI برقرار نشد",
     "poll": "نظرسنجی نیاز به تأیید مدیر دارد",
     "low_confidence": "اطمینان مدل کافی نیست",
     "review": "مدل درباره محتوای پیام مطمئن نیست",
@@ -45,15 +55,18 @@ def card(row):
         f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"
         f"مقصد ثابت این درخواست: {row.destination_id}\nدلیل: {reason}\n\n"
         f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
-        "تأیید یعنی ارسال همین پیام بدون بررسی دوباره AI؛ لینک‌ها و آیدی‌ها پاک‌سازی "
+        "«بررسی دوباره با AI» پالایش را اجرا می‌کند. «ارسال متن اصلی» بدون بازنویسی AI است؛ لینک‌ها و آیدی‌ها پاک‌سازی "
         "و امضای فعلی اضافه می‌شود. نظرسنجی با تأیید شما مستقیم فوروارد می‌شود."
     )
     buttons = []
     if row.status == "pending":
         suffix = f"{row.id}:{row.fingerprint[:12]}"
         buttons.append(
+            [InlineKeyboardButton("🤖 بررسی دوباره با AI", callback_data=f"review:retry:{suffix}")]
+        )
+        buttons.append(
             [
-                InlineKeyboardButton("✅ تأیید ارسال", callback_data=f"review:approve:{suffix}"),
+                InlineKeyboardButton("✅ ارسال متن اصلی", callback_data=f"review:approve:{suffix}"),
                 InlineKeyboardButton("⛔ رد پیام", callback_data=f"review:reject:{suffix}"),
             ]
         )
@@ -162,10 +175,14 @@ async def on_callback(update, context):
     if len(parts) == 3 and parts[1] == "list" and parts[2].isdigit():
         await show_pending(update, context, int(parts[2]))
         return
-    if len(parts) != 4 or parts[1] not in {"approve", "reject", "reset"} or not parts[2].isdigit():
+    if (
+        len(parts) != 4
+        or parts[1] not in {"approve", "reject", "reset", "retry"}
+        or not parts[2].isdigit()
+    ):
         return
     try:
-        client = await ensure_started() if parts[1] == "approve" else None
+        client = await ensure_started() if parts[1] in {"approve", "retry"} else None
     except Exception as exc:
         logger.warning("Review Telegram connection failed type=%s", type(exc).__name__)
         await update.effective_message.reply_text(

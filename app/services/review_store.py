@@ -137,6 +137,14 @@ def recover_interrupted():
         )
 
 
+def requeue(review_id, reason):
+    with get_session() as session:
+        row = session.get(ReviewRequest, review_id)
+        row.status = "pending"
+        row.reason = reason
+        row.notified = "[]"
+
+
 def reopen_uncertain(review_id, admin_id):
     with get_session() as session:
         return (

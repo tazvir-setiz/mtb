@@ -7,6 +7,8 @@ from app.database.database import get_session
 from app.database.models import ForwardedMessage, ForwardJob, MessageStatus
 from app.database.repository import ForwardedMessageRepository, SettingsRepository
 from app.services import review_store
+from app.services.ai_policy import AIReviewRequired
+from app.services.ai_settings import load_ai_settings
 from app.telegram.forward_errors import ForwardErrorType, classify_error
 
 logger = logging.getLogger(__name__)
@@ -55,8 +57,10 @@ async def decide(review_id, version, action, admin_id, client):
             logger.warning("Admin reopened uncertain send review_id=%d admin=%d", row.id, admin_id)
             return "درخواست دوباره آماده بررسی شد. فقط اگر پیام در مقصد نیست، تأییدش کنید. /reviews"
         return "این درخواست قابل بازگردانی نیست. /reviews"
-    if action not in {"approve", "reject"}:
+    if action not in {"approve", "reject", "retry"}:
         return "عملیات نامعتبر است."
+    if action == "retry" and not load_ai_settings().enabled:
+        return "ابتدا AI را در تنظیمات روشن کنید؛ متن اصلی ارسال نشد."
     if not review_store.claim(review_id, admin_id):
         return "این درخواست قبلاً تعیین تکلیف شده یا در حال ارسال است. /reviews"
     if action == "reject":
@@ -87,7 +91,12 @@ async def decide(review_id, version, action, admin_id, client):
             return "این پیام قبلاً به همین مقصد ارسال شده است."
         sending = True
         sent = await _send_message(
-            client, original, row.source_id, row.destination_id, signature, approved=True
+            client,
+            original,
+            row.source_id,
+            row.destination_id,
+            signature,
+            approved=action == "approve",
         )
         destination_message_id = getattr(sent, "id", None)
         review_store.set_status(row.id, "sent" if sent else "rejected", destination_message_id)
@@ -100,9 +109,18 @@ async def decide(review_id, version, action, admin_id, client):
             admin_id,
             destination_message_id,
         )
+        if action == "retry":
+            return (
+                "✅ پیام پس از بررسی و پالایش AI ارسال شد."
+                if sent
+                else "⛔ گارد پیام را حذف کرد؛ ارسال نشد."
+            )
         return (
             "✅ پیام با تأیید شما ارسال شد." if sent else "پیام پس از پاک‌سازی خالی بود؛ ارسال نشد."
         )
+    except AIReviewRequired as exc:
+        review_store.requeue(row.id, str(exc))
+        return "هنوز تأیید خودکار دریافت نشد؛ دلیل تازه در اعلان بررسی و /reviews نمایش داده می‌شود."
     except Exception as exc:
         definite = classify_error(exc) in {
             ForwardErrorType.FLOOD_WAIT,

@@ -9,6 +9,7 @@ from app.config import BASE_DIR, settings
 from app.guard_config import GuardSettings
 from app.services.ai_policy import AIProcessingError, AIReviewRequired
 from app.services.ai_settings import AISettings
+from app.services.ai_transport import AIRequestError, model_options, post_completion
 from app.services.output_validator import validate_output
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def classify(
 ):
     if not config.api_key:
         logger.error("AI guard failure reason=missing_api_key action=REVIEW")
-        raise AIProcessingError("AI API key is missing")
+        raise AIRequestError("missing_api_key")
     user_data = {"ctx": context, "msg": text}
     if candidates:
         user_data["variants"] = list(candidates[:2])
@@ -44,6 +45,7 @@ async def classify(
         ],
         "temperature": 0.1,
         "max_tokens": limits.max_output_tokens,
+        **model_options(config),
     }
     started = time.monotonic()
     logger.info(
@@ -57,15 +59,23 @@ async def classify(
         timeout = httpx.Timeout(limits.timeout_seconds, connect=min(5, limits.timeout_seconds))
         async with asyncio.timeout(limits.timeout_seconds):
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    config.base_url,
-                    json=payload,
-                    headers={"Authorization": f"Bearer {config.api_key}"},
+                response = await post_completion(client, config, payload)
+                data = response.json()
+                choice = data["choices"][0]
+                usage = data.get("usage") or {}
+                logger.info(
+                    "AI completion finish=%s output_tokens=%s reasoning_tokens=%s thinking=%s",
+                    choice.get("finish_reason"),
+                    usage.get("completion_tokens"),
+                    (usage.get("completion_tokens_details") or {}).get("reasoning_tokens"),
+                    payload.get("thinking", {}).get("type", "provider_default"),
                 )
-                response.raise_for_status()
-                choice = response.json()["choices"][0]
                 if choice.get("finish_reason") in {"length", "content_filter", "tool_calls"}:
-                    raise AIProcessingError("Guard response was not completed")
+                    raise AIRequestError(
+                        "response_truncated"
+                        if choice.get("finish_reason") == "length"
+                        else "provider_refusal"
+                    )
                 result = validate_output(choice["message"]["content"], limits)
         logger.info(
             "AI guard response label=%s confidence=%.2f elapsed=%.2fs",
@@ -74,21 +84,38 @@ async def classify(
             time.monotonic() - started,
         )
         return result
-    except AIProcessingError:
+    except AIProcessingError as exc:
+        reason = getattr(exc, "reason", "invalid_output")
         logger.warning(
-            "AI guard failure reason=invalid_or_incomplete_output elapsed=%.2fs action=REVIEW",
+            "AI guard failure reason=%s elapsed=%.2fs action=REVIEW",
+            reason,
             time.monotonic() - started,
         )
-        raise
+        raise AIRequestError(reason) from None
     except Exception as exc:
         status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        reason = (
+            "timeout"
+            if isinstance(exc, (TimeoutError, httpx.TimeoutException))
+            else "invalid_credentials"
+            if status in {401, 403}
+            else "rate_limit"
+            if status == 429
+            else "bad_request"
+            if status in {400, 404, 422}
+            else "provider_error"
+            if status is not None
+            else "connection_error"
+            if isinstance(exc, httpx.TransportError)
+            else "invalid_output"
+        )
         logger.warning(
             "AI guard failure type=%s status=%s elapsed=%.2fs",
             type(exc).__name__,
             status,
             time.monotonic() - started,
         )
-        raise AIProcessingError("AI service unavailable or response invalid") from None
+        raise AIRequestError(reason) from None
 
 
 async def apply_ai_guardrails(

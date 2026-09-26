@@ -11,6 +11,7 @@ from app.database.repository import ForwardedMessageRepository, ForwardJobReposi
 from app.handlers import reviews
 from app.services import review_store
 from app.services.ai_policy import AIReviewRequired
+from app.services.ai_settings import save_ai_value
 from app.services.review_service import decide
 from app.telegram import message_sender
 from app.telegram.forward_service import forward_range
@@ -254,3 +255,45 @@ async def test_failed_notification_is_retried_not_marked_delivered(monkeypatch):
         await reviews.notify_pending(bot)
     assert bot.send_message.await_count == 2
     assert json.loads(review_store.get(row.id).notified) == [111]
+
+
+@pytest.mark.asyncio
+async def test_ai_retry_rewrites_instead_of_bypassing_guard(monkeypatch):
+    save_ai_value("enabled", "true")
+    row = queued()
+    guard = AsyncMock(return_value="متن بازنویسی شده")
+    monkeypatch.setattr(message_sender, "apply_ai_guardrails", guard)
+    client = SimpleNamespace(
+        get_messages=AsyncMock(return_value=[message()]),
+        send_message=AsyncMock(return_value=SimpleNamespace(id=90)),
+    )
+    await decide(row.id, row.fingerprint[:12], "retry", 111, client)
+    guard.assert_awaited_once()
+    assert client.send_message.call_args.kwargs["message"] == "متن بازنویسی شده"
+    assert review_store.get(row.id).status == "sent"
+
+
+@pytest.mark.asyncio
+async def test_ai_retry_failure_stays_pending_with_exact_reason(monkeypatch):
+    save_ai_value("enabled", "true")
+    row = queued()
+    monkeypatch.setattr(
+        message_sender, "apply_ai_guardrails", AsyncMock(side_effect=AIReviewRequired("timeout"))
+    )
+    client = SimpleNamespace(
+        get_messages=AsyncMock(return_value=[message()]), send_message=AsyncMock()
+    )
+    await decide(row.id, row.fingerprint[:12], "retry", 111, client)
+    assert review_store.get(row.id).status == "pending"
+    assert review_store.get(row.id).reason == "timeout"
+    client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ai_retry_cannot_send_raw_text_when_ai_disabled():
+    row = queued()
+    client = SimpleNamespace(get_messages=AsyncMock(), send_message=AsyncMock())
+    await decide(row.id, row.fingerprint[:12], "retry", 111, client)
+    client.get_messages.assert_not_awaited()
+    client.send_message.assert_not_awaited()
+    assert review_store.get(row.id).status == "pending"

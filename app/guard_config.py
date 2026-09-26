@@ -17,7 +17,7 @@ class GuardSettings:
     context_ttl_hours: float = 24
     cache_ttl_seconds: float = 600
     cache_size: int = 256
-    timeout_seconds: float = 20
+    timeout_seconds: float = 60
     failure_limit: int = 2
     cooldown_seconds: float = 60
 
