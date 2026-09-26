@@ -31,7 +31,7 @@ def record_decision(result: ModerationResult, chat_id, message_id, started: floa
     counts["review_messages"] += result.action == "REVIEW"
     counts["sanitized_messages"] += result.label == Label.SANITIZE
     logger.info(
-        "Guard decision chat_id=%s message_id=%s source=%s label=%s confidence=%.2f cached=%s elapsed=%.2fs ai_call_ratio=%.3f",
+        "Guard decision chat_id=%s message_id=%s source=%s label=%s confidence=%.2f cached=%s elapsed=%.2fs ai_call_ratio=%.3f action=%s",
         chat_id,
         message_id,
         result.source,
@@ -40,6 +40,7 @@ def record_decision(result: ModerationResult, chat_id, message_id, started: floa
         cached,
         time.monotonic() - started,
         runtime.snapshot()["ai_call_ratio"],
+        result.action,
     )
     return result
 
@@ -54,6 +55,11 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
             ModerationResult(Label.OK, 1, text, "DISABLED"), chat_id, message_id, started
         )
     if len(text) > limits.max_input_chars:
+        logger.warning(
+            "Guard review reason=input_too_long chars=%d limit=%d",
+            len(text),
+            limits.max_input_chars,
+        )
         return record_decision(ModerationResult(Label.REVIEW, 1), chat_id, message_id, started)
 
     normalized = normalize_text(text, limits.max_candidates)
@@ -75,6 +81,13 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
     if cached:
         return record_decision(cached, chat_id, message_id, started, cached=True)
     result = evaluate_rules(normalized, context)
+    logger.info(
+        "Local guard label=%s confidence=%.2f threshold=%.2f next=%s",
+        result.label.value,
+        result.confidence,
+        limits.confidence_threshold,
+        "AI" if result.confidence < limits.confidence_threshold else "local_decision",
+    )
     if result.confidence < limits.confidence_threshold:
         result = await ai_fallback(
             normalized, context, provider, config, limits, chat_id, message_id
@@ -92,6 +105,10 @@ async def ai_fallback(normalized, context, provider, config, limits, chat_id, me
     runtime.metrics["ai_fallbacks"] += 1
     if runtime.unavailable(provider):
         runtime.metrics["circuit_skips"] += 1
+        logger.warning(
+            "AI bypassed reason=circuit_open retry_in=%.1fs action=REVIEW",
+            max(0, runtime.failures[provider][1] - time.monotonic()),
+        )
         return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE")
     runtime.metrics["ai_calls"] += 1
     logger.info("AI guard fallback triggered chat_id=%s message_id=%s", chat_id, message_id)
@@ -105,10 +122,19 @@ async def ai_fallback(normalized, context, provider, config, limits, chat_id, me
     )
     try:
         result = await ai_service.classify(normalized.original, context, variants, config, limits)
-        runtime.failures.pop(provider, None)
+        if runtime.failures.pop(provider, None):
+            logger.info("AI recovered circuit=closed")
         return result
     except AIProcessingError:
+        runtime.metrics["ai_errors"] += 1
         runtime.failed(provider, limits.failure_limit, limits.cooldown_seconds)
+        logger.warning(
+            "AI unavailable consecutive_failures=%d failure_limit=%d circuit=%s cooldown=%.0fs action=REVIEW",
+            runtime.failures[provider][0],
+            limits.failure_limit,
+            "open" if runtime.unavailable(provider) else "closed",
+            limits.cooldown_seconds if runtime.unavailable(provider) else 0,
+        )
         return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE")
 
 
@@ -117,6 +143,7 @@ def finalize(result: ModerationResult, text: str) -> ModerationResult:
         approved = result.text if result.label == Label.REWRITE else text
         clean = sanitize_text(approved, remove_links=True)
         if not publication_is_clean(clean):
+            logger.warning("Guard review reason=output_failed_final_sanitization")
             result = ModerationResult(Label.REVIEW, 0, source=result.source)
         else:
             result = replace(result, text=clean)

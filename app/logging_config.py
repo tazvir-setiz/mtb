@@ -1,25 +1,38 @@
 import logging
 import logging.handlers
 import sys
+import time
 from pathlib import Path
 
 from app.config import settings
+from app.log_context import ContextFilter
 
 
 def setup_logging() -> None:
-    log_format = "%(asctime)s | %(levelname)-8s | %(name)s:%(filename)s:%(lineno)d | %(message)s"
+    log_format = "%(asctime)s UTC | %(levelname)-8s | %(name)s:%(lineno)d | %(trace)s | %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
+    formatter.converter = time.gmtime
 
     root = logging.getLogger()
     root.setLevel(settings.log_level)
+    for handler in root.handlers[:]:
+        if getattr(handler, "forwarder_handler", False):
+            root.removeHandler(handler)
+            handler.close()
+
+    def attach(handler):
+        handler.forwarder_handler = True
+        handler.addFilter(ContextFilter())
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
 
     console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(formatter)
-    root.addHandler(console)
+    attach(console)
 
     logging.getLogger("telethon").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     if not settings.log_to_file:
         return
 
@@ -31,9 +44,7 @@ def setup_logging() -> None:
         backupCount=5,
         encoding="utf-8",
     )
-    app_file.setFormatter(formatter)
-    app_file.setLevel(logging.INFO)
-    root.addHandler(app_file)
+    attach(app_file)
 
     error_file = logging.handlers.RotatingFileHandler(
         "logs/error.log",
@@ -41,6 +52,5 @@ def setup_logging() -> None:
         backupCount=5,
         encoding="utf-8",
     )
-    error_file.setFormatter(formatter)
-    error_file.setLevel(logging.ERROR)
-    root.addHandler(error_file)
+    error_file.setLevel(logging.WARNING)
+    attach(error_file)

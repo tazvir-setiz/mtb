@@ -31,6 +31,7 @@ async def classify(
     text: str, context: dict, candidates: tuple[str, ...], config: AISettings, limits: GuardSettings
 ):
     if not config.api_key:
+        logger.error("AI guard failure reason=missing_api_key action=REVIEW")
         raise AIProcessingError("AI API key is missing")
     user_data = {"ctx": context, "msg": text}
     if candidates:
@@ -45,7 +46,13 @@ async def classify(
         "max_tokens": limits.max_output_tokens,
     }
     started = time.monotonic()
-    logger.info("AI guard request model=%s input_chars=%d", config.model, len(text))
+    logger.info(
+        "AI guard request model=%s input_chars=%d timeout=%.1fs max_output_tokens=%d",
+        config.model,
+        len(text),
+        limits.timeout_seconds,
+        limits.max_output_tokens,
+    )
     try:
         timeout = httpx.Timeout(limits.timeout_seconds, connect=min(5, limits.timeout_seconds))
         async with asyncio.timeout(limits.timeout_seconds):
@@ -68,6 +75,10 @@ async def classify(
         )
         return result
     except AIProcessingError:
+        logger.warning(
+            "AI guard failure reason=invalid_or_incomplete_output elapsed=%.2fs action=REVIEW",
+            time.monotonic() - started,
+        )
         raise
     except Exception as exc:
         status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None

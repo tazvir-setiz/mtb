@@ -15,6 +15,7 @@ from app.database.repository import (
     ForwardJobRepository,
     SettingsRepository,
 )
+from app.log_context import traced
 from app.services.forward_results import record_result, set_job_status
 from app.telegram.forward_errors import FRIENDLY_ERRORS, ForwardErrorType, classify_error
 from app.telegram.forward_progress import ProgressCallback, ProgressSnapshot
@@ -48,6 +49,7 @@ async def _send_with_retry(
         return await fetch_and_send_message(client, msg_id, source_id, destination_id, signature)
 
 
+@traced
 async def forward_range(
     client: TelegramClient,
     job_id: int,
@@ -58,6 +60,12 @@ async def forward_range(
 ) -> None:
     _stop_flags.pop(job_id, None)
     total = len(message_ids)
+    logger.info(
+        "Transfer started source=%s destination=%s total=%d",
+        source_channel_id,
+        destination_channel_id,
+        total,
+    )
     processed = success = skipped = failed = 0
     set_job_status(job_id, JobStatus.RUNNING)
 
@@ -88,7 +96,7 @@ async def forward_range(
         error = None
         if already:
             status = MessageStatus.DUPLICATE
-            logger.debug("Message %d skipped (already forwarded).", msg_id)
+            logger.info("Message %d skipped (already forwarded).", msg_id)
         else:
             try:
                 dest_msg = await _send_with_retry(
@@ -117,7 +125,12 @@ async def forward_range(
                 if error_type == ForwardErrorType.UNKNOWN:
                     logger.exception("Unknown error while forwarding message %d", msg_id)
                 else:
-                    logger.error("Failed to forward message %d: %s (%s)", msg_id, exc, error_type)
+                    logger.error(
+                        "Failed to forward message %d: type=%s reason=%s",
+                        msg_id,
+                        type(exc).__name__,
+                        error_type.value,
+                    )
 
         record_result(
             job_id,
@@ -132,6 +145,14 @@ async def forward_range(
         failed += int(status == MessageStatus.FAILED)
         skipped += int(status in (MessageStatus.SKIPPED, MessageStatus.DUPLICATE))
         processed += 1
+        logger.info(
+            "Transfer progress processed=%d/%d sent=%d skipped=%d failed=%d",
+            processed,
+            total,
+            success,
+            skipped,
+            failed,
+        )
 
         now = loop.time()
         if on_progress and (

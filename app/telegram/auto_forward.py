@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections import Counter
+from contextlib import asynccontextmanager
 
 from telethon import TelegramClient, events
 
@@ -13,6 +16,7 @@ from app.database.repository import (
     ForwardJobRepository,
     SettingsRepository,
 )
+from app.log_context import traced
 from app.telegram.forward_errors import FRIENDLY_ERRORS, ForwardErrorType, classify_error
 from app.telegram.message_sender import send_message
 
@@ -25,6 +29,42 @@ _handler = None  # type: ignore[var-annotated]
 _registered_client: TelegramClient | None = None
 
 _processing_lock = asyncio.Lock()
+_waiting = 0
+_counts = Counter()
+
+
+def status_snapshot():
+    return dict(
+        listener_active=_handler is not None,
+        waiting=_waiting,
+        processing=_processing_lock.locked(),
+        **_counts,
+    )
+
+
+@asynccontextmanager
+async def processing_slot():
+    global _waiting
+    started = time.monotonic()
+    _waiting += 1
+    _counts["received"] += 1
+    logger.info("Message received waiting=%d processing=%s", _waiting, _processing_lock.locked())
+    try:
+        await _processing_lock.acquire()
+    finally:
+        _waiting -= 1
+    try:
+        logger.info(
+            "Processing started queue_wait=%.2fs waiting=%d", time.monotonic() - started, _waiting
+        )
+        yield
+    finally:
+        _processing_lock.release()
+        logger.info(
+            "Processing finished total_elapsed=%.2fs waiting=%d",
+            time.monotonic() - started,
+            _waiting,
+        )
 
 
 def is_enabled() -> bool:
@@ -51,12 +91,15 @@ def _get_auto_job_id(source_id: int, destination_id: int) -> int:
         return job.id
 
 
+@traced
 async def _on_new_message(
     event, source_id: int, destination_id: int, job_id: int, *, listener=None
 ) -> None:
-    async with _processing_lock:
+    async with processing_slot():
         # Removed handlers may still have callbacks queued behind an active send.
         if listener is not None and listener is not _handler:
+            _counts["stale"] += 1
+            logger.info("Message skipped reason=listener_replaced_or_disabled")
             return
         msg_id = event.message.id
         logger.info("Auto-forward: New message detected (ID: %d)", msg_id)
@@ -66,7 +109,8 @@ async def _on_new_message(
             signature = SettingsRepository.get(session, "signature_text")
 
         if already:
-            logger.debug("Auto-forward: Message %d already exists. Skipping.", msg_id)
+            _counts["duplicates"] += 1
+            logger.info("Auto-forward: Message %d already exists. Skipping.", msg_id)
             return
 
         try:
@@ -74,7 +118,10 @@ async def _on_new_message(
                 event.client, event.message, source_id, destination_id, signature
             )
             if dest_msg is None:
-                logger.warning("Auto-forward: Message %d skipped by AI Guardrails.", msg_id)
+                _counts["skipped"] += 1
+                logger.info(
+                    "Auto-forward: Message %d skipped (guard drop or empty content).", msg_id
+                )
                 with get_session() as session:
                     ForwardedMessageRepository.record(
                         session,
@@ -88,6 +135,7 @@ async def _on_new_message(
                 return
 
             dest_id = getattr(dest_msg, "id", None)
+            _counts["sent"] += 1
 
             with get_session() as session:
                 ForwardedMessageRepository.record(
@@ -104,12 +152,16 @@ async def _on_new_message(
             )
 
         except Exception as exc:
+            _counts["failed"] += 1
             err_type = classify_error(exc)
             if err_type == ForwardErrorType.UNKNOWN:
                 logger.exception("Auto-forward: Unknown error processing message %d", msg_id)
             else:
                 logger.error(
-                    "Auto-forward failed for message %d: %s (%s)", msg_id, str(exc), err_type
+                    "Auto-forward failed for message %d: type=%s reason=%s",
+                    msg_id,
+                    type(exc).__name__,
+                    err_type.value,
                 )
 
             with get_session() as session:

@@ -6,6 +6,7 @@ from telethon.extensions import html as telethon_html
 from telethon.tl.types import Message
 
 from app.config import settings
+from app.log_context import traced
 from app.services.ai_policy import AIReviewRequired
 from app.services.ai_service import apply_ai_guardrails
 from app.services.ai_settings import load_ai_settings
@@ -14,6 +15,7 @@ from app.services.text_sanitizer import sanitize_text
 logger = logging.getLogger(__name__)
 
 
+@traced
 async def send_message(
     client: TelegramClient,
     original: Message,
@@ -23,7 +25,7 @@ async def send_message(
 ) -> Message | None:
     msg_id = getattr(original, "id", None)
     ai_enabled = load_ai_settings(settings).enabled
-    logger.debug(
+    logger.info(
         "پردازش پیام %s (مبدأ: %s → مقصد: %s، AI: %s)",
         msg_id,
         source_id,
@@ -70,7 +72,7 @@ async def send_message(
     if media and type(media).__name__ == "MessageMediaWebPage":
         media = None
 
-    logger.debug(
+    logger.info(
         "ارسال پیام %s به مقصد %s (طول متن نهایی: %d)", msg_id, destination_id, len(processed_html)
     )
     sent = await client.send_message(
@@ -86,6 +88,7 @@ async def send_message(
     return sent
 
 
+@traced
 async def fetch_and_send_message(
     client: TelegramClient,
     msg_id: int,
