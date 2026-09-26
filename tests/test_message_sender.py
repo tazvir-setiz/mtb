@@ -30,7 +30,7 @@ async def test_processed_html_and_signature(monkeypatch, processed, expected):
     await message_sender.send_message(
         client, make_message(media=media), -1001, -1002, "<i>signature</i>"
     )
-    ai.assert_awaited_once_with("original")
+    ai.assert_awaited_once_with("original", chat_id=-1001, message_id=7)
     client.send_message.assert_awaited_once_with(
         entity=-1002, message=expected, file=media, parse_mode="html", link_preview=False
     )

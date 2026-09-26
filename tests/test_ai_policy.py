@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -68,7 +69,13 @@ async def test_ai_response_contract(monkeypatch, outcome):
             "choices": [
                 {
                     "message": {
-                        "content": "[نیازمند بررسی]" if outcome == "review" else "[تایید شده] safe"
+                        "content": json.dumps(
+                            {
+                                "label": "REVIEW" if outcome == "review" else "OK",
+                                "confidence": 0.95,
+                                "text": None,
+                            }
+                        )
                     }
                 }
             ]
@@ -83,12 +90,13 @@ async def test_ai_response_contract(monkeypatch, outcome):
     manager.__aenter__.return_value = client
     monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda **_: manager)
     if outcome == "approved":
-        assert await ai_service.apply_ai_guardrails("original") == "safe"
+        assert await ai_service.apply_ai_guardrails("original") == "original"
     else:
-        with pytest.raises(AIReviewRequired if outcome == "review" else AIProcessingError):
+        with pytest.raises(AIReviewRequired):
             await ai_service.apply_ai_guardrails("original")
     payload = client.post.call_args.kwargs["json"]
-    assert payload["messages"][1] == {"role": "user", "content": "original"}
+    assert json.loads(payload["messages"][1]["content"])["msg"] == "original"
+    assert payload["max_tokens"] == 200
 
 
 def test_username_sanitization_and_hidden_links():

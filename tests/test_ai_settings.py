@@ -118,13 +118,15 @@ async def test_next_ai_request_uses_saved_provider_model_and_key(monkeypatch):
     response = httpx.Response(
         200,
         request=httpx.Request("POST", "https://example.test"),
-        json={"choices": [{"message": {"content": "[تایید شده] safe"}}]},
+        json={
+            "choices": [{"message": {"content": '{"label":"OK","confidence":0.95,"text":null}'}}]
+        },
     )
     client = SimpleNamespace(post=AsyncMock(return_value=response))
     manager = AsyncMock()
     manager.__aenter__.return_value = client
     monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda **_: manager)
-    assert await ai_service.apply_ai_guardrails("text") == "safe"
+    assert await ai_service.apply_ai_guardrails("text") == "text"
     call = client.post.call_args
     assert call.args == ("https://example.test/v1/chat/completions",)
     assert call.kwargs["json"]["model"] == "custom-model"

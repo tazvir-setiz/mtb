@@ -33,6 +33,11 @@ def _database_lifetime():
 
 @pytest.fixture(autouse=True)
 def _fresh_db():
+    from app.services.guard_runtime import runtime
+
+    runtime.cache.clear()
+    runtime.failures.clear()
+    runtime.metrics.clear()
     Base.metadata.drop_all(engine)
     init_db()
     yield
