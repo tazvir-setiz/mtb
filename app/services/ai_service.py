@@ -55,7 +55,8 @@ async def classify(
                     "can produce neutral compliant reporting. Preserve supported facts, attribution and core meaning; "
                     "never invent facts or reverse a claim. "
                     "Do not invent missing context or approve merely because this is a second assessment. "
-                    "Use REVIEW/POLITICAL only if no faithful compliant rewrite is possible."
+                    "Use ABUSE to drop pure insults with no substantive meaning to preserve. "
+                    "Otherwise use REVIEW/POLITICAL if no faithful compliant rewrite is possible."
                     if reconsider
                     else ""
                 ),

@@ -200,6 +200,7 @@ def remember_context(result: ModerationResult, chat_id, text: str, limits) -> No
         Label.INJECTION,
         Label.SPAM,
         Label.PORN,
+        Label.ABUSE,
         Label.REVIEW,
     }:
         change = dict(result.context_update)

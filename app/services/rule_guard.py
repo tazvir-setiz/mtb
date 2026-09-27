@@ -30,7 +30,12 @@ SPAM = (
     "claim airdrop",
     "referral bonus",
 )
-ABUSE = ("کیر", "کس ننت", "fuck", "koskesh")
+ABUSE = ("کیر", "کس ننت", "کسکش", "fuck", "koskesh")
+PURE_ABUSE = re.compile(
+    r"(?:(?:تو|شما|خیلی|واقعا|عجب|ای|یه|یک)\s+)*"
+    r"(?:کسکش(?:ی)?|کیر|کس ننت|fuck you|koskesh)"
+    r"(?:\s+(?:هستی|هستید|هستین|ای|خیلی))*[.!،؟!?\s]*"
+)
 POLITICAL = ("حکومت", "دولت", "انتخابات", "اعتراض", "government", "protest", "election")
 EDUCATIONAL = re.compile(
     r"آموزش|مقاله|گزارش|نمونه|نقل|حمله|نباید|نکن|هشدار|example|article|attack|report|security|quote|\bnot\b|\bnever\b|don't|warning",
@@ -62,13 +67,19 @@ def political_topics(text: str) -> list[str]:
 
 def evaluate_rules(text: NormalizedText, context: dict) -> ModerationResult:
     base = text.normalized
-    quoted = bool(EDUCATIONAL.search(base) or any(c in base for c in ('"', "«", "»", "`")))
+    quoted = bool(
+        EDUCATIONAL.search(base)
+        or any(c in base for c in ('"', "«", "»", "`"))
+        or re.search(r"<(?:blockquote|code|pre)\b", base)
+    )
     if contains_phrase(text, INJECTION):
         return ModerationResult(
             Label.REVIEW if quoted else Label.INJECTION, 0.4 if quoted else 0.99
         )
     if contains_phrase(text, SPAM):
         return ModerationResult(Label.REVIEW if quoted else Label.SPAM, 0.4 if quoted else 0.96)
+    if not quoted and PURE_ABUSE.fullmatch(normalize(visible_text(text.original))):
+        return ModerationResult(Label.ABUSE, 0.99, reason="pure_abuse")
     if contains_phrase(text, ABUSE) or text.flags:
         return ModerationResult(Label.REVIEW, 0.3)
     plain = visible_text(text.original)

@@ -7,6 +7,7 @@ class Label(str, Enum):
     SPAM = "SPAM"
     POLITICAL = "POLITICAL"
     PORN = "PORN"
+    ABUSE = "ABUSE"
     REWRITE = "REWRITE"
     SANITIZE = "SANITIZE"
     OK = "OK"
@@ -24,7 +25,7 @@ class ModerationResult:
 
     @property
     def action(self) -> str:
-        if self.label in {Label.INJECTION, Label.SPAM, Label.PORN}:
+        if self.label in {Label.INJECTION, Label.SPAM, Label.PORN, Label.ABUSE}:
             return "DROP"
         if self.label in {Label.POLITICAL, Label.REVIEW}:
             return "REVIEW"
