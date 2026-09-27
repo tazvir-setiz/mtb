@@ -97,14 +97,29 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
         if result.source == "UNAVAILABLE":
             return record_decision(result, chat_id, message_id, started)
 
+    rechecked = result.source == "AI" and result.action == "REVIEW"
+    if rechecked:
+        runtime.metrics["automatic_rechecks"] += 1
+        logger.info(
+            "Guard automatic reassessment first_label=%s confidence=%.2f",
+            result.label.value,
+            result.confidence,
+        )
+        result = await ai_fallback(
+            normalized, context, provider, config, limits, chat_id, message_id, reconsider=True
+        )
     result = finalize(result, text)
+    if rechecked and result.action == "PUBLISH":
+        runtime.metrics["resolved_by_recheck"] += 1
     remember_context(result, chat_id, normalized.normalized, limits)
     if result.action != "REVIEW":
         runtime.remember(key, result, limits.cache_ttl_seconds, limits.cache_size)
     return record_decision(result, chat_id, message_id, started)
 
 
-async def ai_fallback(normalized, context, provider, config, limits, chat_id, message_id):
+async def ai_fallback(
+    normalized, context, provider, config, limits, chat_id, message_id, *, reconsider=False
+):
     runtime.metrics["ai_fallbacks"] += 1
     if runtime.unavailable(provider):
         runtime.metrics["circuit_skips"] += 1
@@ -124,7 +139,9 @@ async def ai_fallback(normalized, context, provider, config, limits, chat_id, me
         )
     )
     try:
-        result = await ai_service.classify(normalized.original, context, variants, config, limits)
+        result = await ai_service.classify(
+            normalized.original, context, variants, config, limits, reconsider=reconsider
+        )
         if runtime.failures.pop(provider, None):
             logger.info("AI recovered circuit=closed")
         return result

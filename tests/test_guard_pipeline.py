@@ -65,7 +65,8 @@ async def test_local_decisions_do_not_call_ai(enabled, text, label, output):
 async def test_ambiguous_or_obfuscated_messages_use_ai(enabled, text):
     result = await moderation_service.moderate(1, 1, text)
     assert result.action == "REVIEW"
-    enabled.assert_awaited_once()
+    assert enabled.await_count == 2
+    assert enabled.call_args.kwargs["reconsider"] is True
 
 
 @pytest.mark.asyncio
@@ -261,7 +262,7 @@ async def test_uncertain_decisions_are_not_cached(enabled):
     enabled.return_value = ModerationResult(Label.OK, 0.95, source="AI")
     result = await moderation_service.moderate(1, 1, "Original text")
     assert result.action == "PUBLISH"
-    assert enabled.await_count == 2
+    assert enabled.await_count == 3
 
 
 def test_large_legacy_prompt_is_not_sent(monkeypatch):
@@ -269,4 +270,58 @@ def test_large_legacy_prompt_is_not_sent(monkeypatch):
         ai_service, "settings", replace(ai_service.settings, ai_guardrails="old prompt " * 1000)
     )
     assert ai_service.compact_prompt() == ai_service.DEFAULT_PROMPT
-    assert len(ai_service.compact_prompt()) < 1600
+    assert len(ai_service.compact_prompt()) < 1800
+
+
+@pytest.mark.asyncio
+async def test_neutral_news_is_automatically_reassessed_and_keeps_attribution(enabled):
+    news = "مقام ارشد ایرانی به رویترز: حتی در صورت پذیرش پیشنهاد تهران درباره هرمز، امتیاز هسته‌ای نمی‌دهیم"
+    enabled.side_effect = [
+        ModerationResult(Label.POLITICAL, 0.93, source="AI"),
+        ModerationResult(Label.OK, 0.90, source="AI"),
+    ]
+    result = await moderation_service.moderate(1, 139, news)
+    assert result.action == "PUBLISH"
+    assert result.text == news
+    assert enabled.call_args_list[0].kwargs["reconsider"] is False
+    assert enabled.call_args_list[1].kwargs["reconsider"] is True
+    assert runtime.metrics["resolved_by_recheck"] == 1
+
+
+@pytest.mark.asyncio
+async def test_reassessment_can_rewrite_fixable_language(enabled):
+    enabled.side_effect = [
+        ModerationResult(Label.REVIEW, 0.6, source="AI"),
+        ModerationResult(Label.REWRITE, 0.95, "متن محترمانه", "AI"),
+    ]
+    result = await moderation_service.moderate(1, 1, "عبارت نیازمند اصلاح لحن")
+    assert result.text == "متن محترمانه"
+    assert result.action == "PUBLISH"
+
+
+@pytest.mark.asyncio
+async def test_reassessment_is_bounded_and_still_blocks_uncertainty(enabled):
+    result = await moderation_service.moderate(1, 1, "موضوع نامشخص")
+    assert result.action == "REVIEW"
+    assert enabled.await_count == 2
+    assert runtime.metrics["resolved_by_recheck"] == 0
+
+
+@pytest.mark.asyncio
+async def test_reassessment_outage_does_not_release_original(enabled):
+    enabled.side_effect = [
+        ModerationResult(Label.POLITICAL, 0.93, source="AI"),
+        AIProcessingError("offline"),
+    ]
+    result = await moderation_service.moderate(1, 1, "گزارش خبری")
+    assert result.action == "REVIEW"
+    assert result.source == "UNAVAILABLE"
+    assert result.text is None
+
+
+@pytest.mark.asyncio
+async def test_clear_ai_drop_is_not_reassessed(enabled):
+    enabled.return_value = ModerationResult(Label.SPAM, 0.99, source="AI")
+    result = await moderation_service.moderate(1, 1, "تبلیغ ناشناخته")
+    assert result.action == "DROP"
+    enabled.assert_awaited_once()

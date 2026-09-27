@@ -29,7 +29,13 @@ def compact_prompt() -> str:
 
 
 async def classify(
-    text: str, context: dict, candidates: tuple[str, ...], config: AISettings, limits: GuardSettings
+    text: str,
+    context: dict,
+    candidates: tuple[str, ...],
+    config: AISettings,
+    limits: GuardSettings,
+    *,
+    reconsider: bool = False,
 ):
     if not config.api_key:
         logger.error("AI guard failure reason=missing_api_key action=REVIEW")
@@ -40,7 +46,18 @@ async def classify(
     payload = {
         "model": config.model,
         "messages": [
-            {"role": "system", "content": compact_prompt()},
+            {
+                "role": "system",
+                "content": compact_prompt()
+                + (
+                    "\nSecond assessment: distinguish neutral reporting/quoted statements from the author's advocacy. "
+                    "Preserve facts and attribution. Use REWRITE only for fixable abusive wording. "
+                    "Do not invent missing context or approve merely because this is a second assessment. "
+                    "If still uncertain or advocating politics, retain REVIEW/POLITICAL."
+                    if reconsider
+                    else ""
+                ),
+            },
             {"role": "user", "content": json.dumps(user_data, ensure_ascii=False)},
         ],
         "temperature": 0.1,
