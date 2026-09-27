@@ -122,7 +122,20 @@ async def test_next_ai_request_uses_saved_provider_model_and_key(monkeypatch):
             "choices": [{"message": {"content": '{"label":"OK","confidence":0.95,"text":null}'}}]
         },
     )
-    client = SimpleNamespace(post=AsyncMock(return_value=response))
+    verification_response = httpx.Response(
+        200,
+        request=response.request,
+        json={
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"policy_pass":true,"meaning_preserved":true,"issues":[],"repairable":false}'
+                    }
+                }
+            ]
+        },
+    )
+    client = SimpleNamespace(post=AsyncMock(side_effect=[response, verification_response]))
     manager = AsyncMock()
     manager.__aenter__.return_value = client
     monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda **_: manager)
@@ -133,4 +146,4 @@ async def test_next_ai_request_uses_saved_provider_model_and_key(monkeypatch):
     assert call.kwargs["headers"]["Authorization"] == "Bearer test-key"
     save_ai_value("enabled", "false")
     assert await ai_service.apply_ai_guardrails("original") == "original"
-    assert client.post.await_count == 1
+    assert client.post.await_count == 2

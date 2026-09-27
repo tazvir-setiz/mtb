@@ -6,9 +6,9 @@ from dataclasses import replace
 
 from app.guard_config import guard_settings
 from app.services import ai_service
-from app.services.ai_policy import AIProcessingError
 from app.services.ai_settings import load_ai_settings
 from app.services.context_manager import load_context, update_context
+from app.services.guard.pipeline import PIPELINE_VERSION, GuardPipeline
 from app.services.guard_models import Label, ModerationResult
 from app.services.guard_runtime import runtime
 from app.services.rule_guard import evaluate_rules, political_topics
@@ -45,7 +45,9 @@ def record_decision(result: ModerationResult, chat_id, message_id, started: floa
     return result
 
 
-async def moderate(chat_id: int | None, message_id: int | None, text: str) -> ModerationResult:
+async def moderate(
+    chat_id: int | None, message_id: int | None, text: str, *, draft=False
+) -> ModerationResult:
     started = time.monotonic()
     runtime.metrics["total_messages"] += 1
     config = load_ai_settings(ai_service.settings)
@@ -69,6 +71,7 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
     provider = fingerprint((config.base_url, config.model, config.api_key))
     key = fingerprint(
         (
+            PIPELINE_VERSION,
             chat_id,
             text,
             normalized.normalized,
@@ -79,133 +82,25 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
             username_replacement(),
         )
     )
-    cached = runtime.cached(key)
+    cached = runtime.cached(key) if not draft else None
     if cached:
         return record_decision(cached, chat_id, message_id, started, cached=True)
     result = evaluate_rules(normalized, context)
-    logger.info(
-        "Local guard label=%s confidence=%.2f threshold=%.2f next=%s",
-        result.label.value,
-        result.confidence,
-        limits.confidence_threshold,
-        "AI" if result.confidence < limits.confidence_threshold else "local_decision",
-    )
-    if result.confidence < limits.confidence_threshold:
-        result = await ai_fallback(
-            normalized, context, provider, config, limits, chat_id, message_id
-        )
-        if result.source == "UNAVAILABLE":
-            return record_decision(result, chat_id, message_id, started)
-
-    rechecked = result.source == "AI" and result.action == "REVIEW"
-    if rechecked:
-        runtime.metrics["automatic_rechecks"] += 1
-        logger.info(
-            "Guard automatic reassessment first_label=%s confidence=%.2f",
-            result.label.value,
-            result.confidence,
-        )
-        result = await ai_fallback(
-            normalized, context, provider, config, limits, chat_id, message_id, reconsider=True
-        )
-    if result.source == "AI" and result.label == Label.ABUSE:
-        runtime.metrics["abuse_audits"] += 1
-        logger.info(
-            "Guard abuse audit first_confidence=%.2f next=independent_assessment", result.confidence
-        )
-        result = await ai_fallback(
-            normalized, context, provider, config, limits, chat_id, message_id, audit_abuse=True
-        )
-        logger.info("Guard abuse audit result=%s action=%s", result.label.value, result.action)
-        rechecked = True
-    result = finalize(result, text)
-    if result.label == Label.REWRITE and result.action == "PUBLISH":
-        runtime.metrics["rewrite_checks"] += 1
-        verified = await ai_fallback(
-            normalize_text(result.text, limits.max_candidates),
-            context,
-            provider,
-            config,
-            limits,
-            chat_id,
-            message_id,
-        )
-        if verified.source == "UNAVAILABLE":
-            result = verified
-        elif (
-            verified.label not in {Label.OK, Label.SANITIZE}
-            or verified.confidence < limits.ai_confidence_threshold
-        ):
-            result = ModerationResult(
-                Label.REVIEW, verified.confidence, source="AI", reason="rewrite_failed"
-            )
-    if rechecked and result.action == "PUBLISH":
-        runtime.metrics["resolved_by_recheck"] += 1
+    custom = ai_service.settings.ai_guardrails.strip()
+    custom = bool(custom and custom != ai_service.DEFAULT_PROMPT.strip())
+    if (
+        custom
+        or (draft and result.label != Label.ABUSE)
+        or result.confidence < limits.confidence_threshold
+    ):
+        pipeline = GuardPipeline(config, limits, context, ai_service.compact_prompt())
+        result = await pipeline.run(text, draft=draft)
+    else:
+        result = finalize(result, text)
     remember_context(result, chat_id, normalized.normalized, limits)
-    if result.action != "REVIEW" and not (result.source == "AI" and result.label == Label.ABUSE):
+    if not draft and result.action == "PUBLISH":
         runtime.remember(key, result, limits.cache_ttl_seconds, limits.cache_size)
     return record_decision(result, chat_id, message_id, started)
-
-
-async def ai_fallback(
-    normalized,
-    context,
-    provider,
-    config,
-    limits,
-    chat_id,
-    message_id,
-    *,
-    reconsider=False,
-    audit_abuse=False,
-):
-    runtime.metrics["ai_fallbacks"] += 1
-    if runtime.unavailable(provider):
-        runtime.metrics["circuit_skips"] += 1
-        logger.warning(
-            "AI bypassed reason=circuit_open retry_in=%.1fs action=REVIEW",
-            max(0, runtime.failures[provider][1] - time.monotonic()),
-        )
-        return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE", reason="circuit_open")
-    runtime.metrics["ai_calls"] += 1
-    logger.info("AI guard fallback triggered chat_id=%s message_id=%s", chat_id, message_id)
-    reversed_words = " ".join(word[::-1] for word in normalized.normalized.split())
-    variants = tuple(
-        dict.fromkeys(
-            value[:300]
-            for value in (*normalized.candidates[1:2], reversed_words)
-            if value != normalized.normalized
-        )
-    )
-    try:
-        result = await ai_service.classify(
-            normalized.original,
-            context,
-            variants,
-            config,
-            limits,
-            reconsider=reconsider,
-            **({"audit_abuse": True} if audit_abuse else {}),
-        )
-        if runtime.failures.pop(provider, None):
-            logger.info("AI recovered circuit=closed")
-        return result
-    except AIProcessingError as exc:
-        runtime.metrics["ai_errors"] += 1
-        runtime.failed(provider, limits.failure_limit, limits.cooldown_seconds)
-        logger.warning(
-            "AI unavailable consecutive_failures=%d failure_limit=%d circuit=%s cooldown=%.0fs action=REVIEW",
-            runtime.failures[provider][0],
-            limits.failure_limit,
-            "open" if runtime.unavailable(provider) else "closed",
-            limits.cooldown_seconds if runtime.unavailable(provider) else 0,
-        )
-        return ModerationResult(
-            Label.REVIEW,
-            0,
-            source="UNAVAILABLE",
-            reason=getattr(exc, "reason", "service_unavailable"),
-        )
 
 
 def finalize(result: ModerationResult, text: str) -> ModerationResult:

@@ -84,6 +84,21 @@ async def test_ai_response_contract(monkeypatch, outcome):
     if outcome == "invalid_json":
         response = httpx.Response(200, request=response.request, content=b"invalid json")
     client = SimpleNamespace(post=AsyncMock(return_value=response))
+    verification_response = httpx.Response(
+        200,
+        request=response.request,
+        json={
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"policy_pass":true,"meaning_preserved":true,"issues":[],"repairable":false}'
+                    }
+                }
+            ]
+        },
+    )
+    if outcome == "approved":
+        client.post.side_effect = [response, verification_response]
     if outcome == "network":
         client.post.side_effect = httpx.ConnectError("offline")
     manager = AsyncMock()

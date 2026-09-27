@@ -7,6 +7,7 @@ from app.guard_config import GuardSettings
 from app.services import ai_service, moderation_service, review_store
 from app.services.ai_settings import save_ai_value
 from app.services.context_manager import update_context
+from app.services.guard.contracts import Verification
 from app.services.guard_models import Label, ModerationResult
 from app.services.output_validator import validate_output
 from app.services.rule_guard import evaluate_rules
@@ -20,6 +21,8 @@ def ai(monkeypatch):
     save_ai_value("api_key", "test-key")
     mock = AsyncMock()
     monkeypatch.setattr(ai_service, "classify", mock)
+    mock.verifier = AsyncMock(return_value=Verification(True, True))
+    monkeypatch.setattr(ai_service, "verify", mock.verifier)
     return mock
 
 
@@ -97,4 +100,5 @@ async def test_substantive_abusive_message_still_gets_verified_rewrite(ai):
     result = await moderation_service.moderate(1, 1, "خیلی دوستت دارم مثل کیر")
     assert result.action == "PUBLISH"
     assert result.text == "خیلی دوستت دارم."
-    assert ai.await_count == 2
+    assert ai.await_count == 1
+    ai.verifier.assert_awaited_once()

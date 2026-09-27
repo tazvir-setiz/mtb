@@ -22,6 +22,9 @@ class ModerationResult:
     source: str = "RULE"
     context_update: dict = field(default_factory=dict)
     reason: str = ""
+    violations: tuple[tuple[str, str], ...] = ()
+    has_substance: bool | None = None
+    ambiguities: tuple[str, ...] = ()
 
     @property
     def action(self) -> str:

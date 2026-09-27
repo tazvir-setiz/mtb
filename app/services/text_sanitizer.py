@@ -28,8 +28,9 @@ def username_replacement() -> str:
     return value if value and VALID_USERNAME.fullmatch(value) else ""
 
 
-def sanitize_text(text: str, *, remove_links: bool) -> str:
-    replacement = username_replacement()
+def sanitize_text(text: str, *, remove_links: bool, replacement: str | None = None) -> str:
+    if replacement is None:
+        replacement = username_replacement()
 
     def transform(data: str) -> str:
         if remove_links:
@@ -39,10 +40,11 @@ def sanitize_text(text: str, *, remove_links: bool) -> str:
     return HTMLSanitizer(transform, remove_links).render(text)
 
 
-def publication_is_clean(text: str) -> bool:
+def publication_is_clean(text: str, *, replacement: str | None = None) -> bool:
     plain = unescape(re.sub(r"<[^>]*>", " ", text))
     plain = unquote(plain)
     if URL.search(plain) or SHORT_URL.search(plain):
         return False
-    replacement = username_replacement()
+    if replacement is None:
+        replacement = username_replacement()
     return all(match[0] == replacement for match in USERNAME.finditer(plain))

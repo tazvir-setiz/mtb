@@ -25,7 +25,12 @@ class AIRequestError(AIProcessingError):
 
 
 async def post_completion(client, config, payload):
+    from app.services.guard.budget import active_budget
+
     for attempt in (1, 2):
+        budget = active_budget.get()
+        if budget:
+            budget.request()
         try:
             response = await client.post(
                 config.base_url, json=payload, headers={"Authorization": f"Bearer {config.api_key}"}

@@ -73,11 +73,9 @@ def evaluate_rules(text: NormalizedText, context: dict) -> ModerationResult:
         or re.search(r"<(?:blockquote|code|pre)\b", base)
     )
     if contains_phrase(text, INJECTION):
-        return ModerationResult(
-            Label.REVIEW if quoted else Label.INJECTION, 0.4 if quoted else 0.99
-        )
+        return ModerationResult(Label.REVIEW, 0.4)
     if contains_phrase(text, SPAM):
-        return ModerationResult(Label.REVIEW if quoted else Label.SPAM, 0.4 if quoted else 0.96)
+        return ModerationResult(Label.REVIEW, 0.4)
     if not quoted and PURE_ABUSE.fullmatch(normalize(visible_text(text.original))):
         return ModerationResult(Label.ABUSE, 0.99, reason="pure_abuse")
     if contains_phrase(text, ABUSE) or text.flags:

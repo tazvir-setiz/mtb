@@ -18,6 +18,9 @@ class GuardSettings:
     cache_ttl_seconds: float = 600
     cache_size: int = 256
     timeout_seconds: float = 60
+    total_timeout_seconds: float = 120
+    max_stages: int = 6
+    max_requests: int = 8
     failure_limit: int = 2
     cooldown_seconds: float = 60
 

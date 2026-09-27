@@ -16,6 +16,11 @@ from app.telegram.client import ensure_started
 
 logger = logging.getLogger(__name__)
 REASONS = {
+    "missing_evidence": "مدل برای حذف پیام شاهد معتبر یا دلیل کافی ارائه نکرد",
+    "meaning_changed": "بازنویسی معنی یا اطلاعات اصلی را تغییر داده است",
+    "invalid_verification": "پاسخ مرحلهٔ بررسی نهایی معتبر نبود",
+    "conflicting_decisions": "مراحل گارد درباره دلیل حذف توافق ندارند",
+    "budget_exhausted": "سقف زمان یا مراحل بررسی تمام شد؛ ارسال انجام نشد",
     "ai_draft": "پیش‌نویس بازنگری AI آمادهٔ تصمیم شماست؛ هنوز ارسال نشده",
     "manual_draft": "ویرایش شما ذخیره شد؛ برای ارسال تأیید کنید",
     "ai_rejected": "AI پیشنهاد رد داده؛ تصمیم نهایی با شماست",
