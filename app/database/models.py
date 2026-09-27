@@ -100,6 +100,14 @@ class ForwardedMessage(Base):
     job: Mapped[ForwardJob] = relationship(back_populates="messages")
 
 
+class JobMessageResult(Base):
+    __tablename__ = "job_message_results"
+
+    job_id: Mapped[int] = mapped_column(ForeignKey("forward_jobs.id"), primary_key=True)
+    message_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    status: Mapped[MessageStatus] = mapped_column(Enum(MessageStatus))
+
+
 class Settings(Base):
     __tablename__ = "settings"
 

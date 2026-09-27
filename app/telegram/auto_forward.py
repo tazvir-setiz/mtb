@@ -17,6 +17,7 @@ from app.database.repository import (
     SettingsRepository,
 )
 from app.log_context import traced
+from app.services.message_locks import message_lock
 from app.telegram.forward_errors import FRIENDLY_ERRORS, ForwardErrorType, classify_error
 from app.telegram.message_sender import send_message
 
@@ -95,7 +96,7 @@ def _get_auto_job_id(source_id: int, destination_id: int) -> int:
 async def _on_new_message(
     event, source_id: int, destination_id: int, job_id: int, *, listener=None
 ) -> None:
-    async with processing_slot():
+    async with processing_slot(), message_lock(source_id, event.message.id, destination_id):
         # Removed handlers may still have callbacks queued behind an active send.
         if listener is not None and listener is not _handler:
             _counts["stale"] += 1

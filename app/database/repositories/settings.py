@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import ForwardedMessage, ForwardJob
+from app.database.models import ForwardedMessage, ForwardJob, JobMessageResult
 from app.database.models import Settings as SettingsModel
 
 
@@ -28,6 +28,8 @@ class SettingsRepository:
 
     @staticmethod
     def clear_all_data(session: Session) -> None:
+        session.query(JobMessageResult).delete()
+        session.query(SettingsModel).filter(SettingsModel.key.startswith("job_selection:")).delete()
         session.query(ForwardedMessage).delete()
         session.query(ForwardJob).delete()
         session.flush()

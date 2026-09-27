@@ -18,7 +18,7 @@ DEFAULT_PROMPT = (BASE_DIR / "app/prompts/guardrails.txt").read_text(encoding="u
 
 def compact_prompt() -> str:
     custom = settings.ai_guardrails.strip()
-    if custom and custom != DEFAULT_PROMPT.strip() and len(custom) <= 800:
+    if custom and custom != DEFAULT_PROMPT.strip():
         return (
             DEFAULT_PROMPT
             + "\nAdditional policy:\n"

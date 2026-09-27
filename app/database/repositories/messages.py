@@ -42,6 +42,8 @@ class ForwardedMessageRepository:
             )
         ).scalar_one_or_none()
         if record:
+            if record.status == MessageStatus.SUCCESS:
+                return record
             record.status = status
             record.destination_message_id = destination_message_id
             record.error = error

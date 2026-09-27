@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from telegram.ext import ContextTypes
@@ -10,6 +11,7 @@ from app.database.repository import (
     ChannelRepository,
     ForwardedMessageRepository,
     ForwardJobRepository,
+    SettingsRepository,
 )
 from app.services.progress_service import ProgressReporter
 from app.telegram.client import ensure_started
@@ -39,11 +41,24 @@ def create_job(source_id: int, dest_id: int, start_id: int, end_id: int) -> int:
 
 
 def create_job_for_ids(source_id: int, dest_id: int, ids: list[int]) -> int:
+    ids = sorted(set(ids))
     with get_session() as session:
         job = ForwardJobRepository.create(
             session, source_id, dest_id, min(ids), max(ids), total_messages=len(ids)
         )
+        SettingsRepository.set(session, f"job_selection:{job.id}", json.dumps(ids))
         return job.id
+
+
+def remaining_ids(session, job):
+    raw = SettingsRepository.get(session, f"job_selection:{job.id}")
+    if raw is not None:
+        ids = json.loads(raw)
+    elif job.total_messages == job.end_message_id - job.start_message_id + 1:
+        ids = range(job.start_message_id, job.end_message_id + 1)
+    else:
+        raise ValueError("فهرست انتخاب این انتقال قدیمی ذخیره نشده؛ شناسه‌ها را دوباره انتخاب کنید.")
+    return [value for value in ids if value > (job.last_processed_message_id or 0)]
 
 
 async def run_transfer(

@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.database.database import get_session
+from app.database.models import JobStatus
 from app.database.repository import ForwardJobRepository
 from app.handlers.states import KEY_CURRENT_JOB_ID, KEY_PROGRESS_MESSAGE_ID, State, set_state
 from app.services import transfer_service
@@ -24,14 +25,15 @@ async def resume_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     with get_session() as session:
         job = ForwardJobRepository.get(session, job_id)
-        remaining = list(
-            range(
-                job.last_processed_message_id + 1
-                if job.last_processed_message_id
-                else job.start_message_id,
-                job.end_message_id + 1,
-            )
-        )
+        if not job or job.status != JobStatus.PAUSED:
+            await update.callback_query.answer("این عملیات در وضعیت توقف نیست.", show_alert=True)
+            return
+        try:
+            remaining = transfer_service.remaining_ids(session, job)
+        except ValueError as exc:
+            await update.callback_query.message.reply_text(str(exc))
+            return
+        ForwardJobRepository.update_status(session, job, JobStatus.RUNNING)
         source_id, dest_id = job.source_channel_id, job.destination_channel_id
 
     set_state(context.user_data, State.TRANSFERRING)

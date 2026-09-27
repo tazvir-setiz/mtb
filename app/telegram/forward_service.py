@@ -17,6 +17,7 @@ from app.database.repository import (
 )
 from app.log_context import traced
 from app.services.forward_results import record_result, set_job_status
+from app.services.message_locks import message_lock
 from app.telegram.forward_errors import FRIENDLY_ERRORS, ForwardErrorType, classify_error
 from app.telegram.forward_progress import ProgressCallback, ProgressSnapshot
 from app.telegram.message_sender import fetch_and_send_message
@@ -28,6 +29,17 @@ _stop_flags: dict[int, bool] = {}
 
 def request_stop(job_id: int) -> None:
     _stop_flags[job_id] = True
+
+
+async def report_progress(callback, snapshot):
+    try:
+        await callback(snapshot)
+    except Exception as exc:
+        logger.warning(
+            "Progress notification failed job_id=%s type=%s; transfer continues",
+            snapshot.job_id,
+            type(exc).__name__,
+        )
 
 
 async def _send_with_retry(
@@ -44,7 +56,7 @@ async def _send_with_retry(
     except FloodWaitError as exc:
         logger.warning("FloodWait for message %d: waiting %d seconds.", msg_id, exc.seconds)
         if on_progress:
-            await on_progress(snapshot)
+            await report_progress(on_progress, snapshot)
         await asyncio.sleep(exc.seconds + 1)
         return await fetch_and_send_message(client, msg_id, source_id, destination_id, signature)
 
@@ -80,67 +92,69 @@ async def forward_range(
             logger.info("Job %d manually stopped.", job_id)
             set_job_status(job_id, JobStatus.PAUSED)
             if on_progress:
-                await on_progress(
+                await report_progress(
+                    on_progress,
                     ProgressSnapshot(
                         job_id, total, processed, success, skipped, failed, stopped=True
-                    )
+                    ),
                 )
             return
 
-        with get_session() as session:
-            already = ForwardedMessageRepository.exists(
-                session, source_channel_id, msg_id, destination_channel_id
-            )
-
-        destination_message_id = None
-        error = None
-        if already:
-            status = MessageStatus.DUPLICATE
-            logger.info("Message %d skipped (already forwarded).", msg_id)
-        else:
-            try:
-                dest_msg = await _send_with_retry(
-                    client,
-                    msg_id,
-                    source_channel_id,
-                    destination_channel_id,
-                    signature,
-                    ProgressSnapshot(job_id, total, processed, success, skipped, failed),
-                    on_progress,
+        async with message_lock(source_channel_id, msg_id, destination_channel_id):
+            with get_session() as session:
+                already = ForwardedMessageRepository.exists(
+                    session, source_channel_id, msg_id, destination_channel_id
                 )
-                if dest_msg is None:
-                    status = MessageStatus.SKIPPED
-                    error = "حذف شده توسط هوش مصنوعی"
-                    logger.info("Message %d skipped by AI guardrails.", msg_id)
-                else:
-                    status = MessageStatus.SUCCESS
-                    destination_message_id = getattr(dest_msg, "id", None)
-                    logger.info(
-                        "Message %d -> %s sent successfully.", msg_id, destination_message_id
-                    )
-            except Exception as exc:
-                status = MessageStatus.FAILED
-                error_type = classify_error(exc)
-                error = FRIENDLY_ERRORS[error_type]
-                if error_type == ForwardErrorType.UNKNOWN:
-                    logger.exception("Unknown error while forwarding message %d", msg_id)
-                else:
-                    logger.error(
-                        "Failed to forward message %d: type=%s reason=%s",
-                        msg_id,
-                        type(exc).__name__,
-                        error_type.value,
-                    )
 
-        record_result(
-            job_id,
-            source_channel_id,
-            msg_id,
-            destination_channel_id,
-            status,
-            destination_message_id=destination_message_id,
-            error=error,
-        )
+            destination_message_id = None
+            error = None
+            if already:
+                status = MessageStatus.DUPLICATE
+                logger.info("Message %d skipped (already forwarded).", msg_id)
+            else:
+                try:
+                    dest_msg = await _send_with_retry(
+                        client,
+                        msg_id,
+                        source_channel_id,
+                        destination_channel_id,
+                        signature,
+                        ProgressSnapshot(job_id, total, processed, success, skipped, failed),
+                        on_progress,
+                    )
+                    if dest_msg is None:
+                        status = MessageStatus.SKIPPED
+                        error = "حذف شده توسط هوش مصنوعی"
+                        logger.info("Message %d skipped by AI guardrails.", msg_id)
+                    else:
+                        status = MessageStatus.SUCCESS
+                        destination_message_id = getattr(dest_msg, "id", None)
+                        logger.info(
+                            "Message %d -> %s sent successfully.", msg_id, destination_message_id
+                        )
+                except Exception as exc:
+                    status = MessageStatus.FAILED
+                    error_type = classify_error(exc)
+                    error = FRIENDLY_ERRORS[error_type]
+                    if error_type == ForwardErrorType.UNKNOWN:
+                        logger.exception("Unknown error while forwarding message %d", msg_id)
+                    else:
+                        logger.error(
+                            "Failed to forward message %d: type=%s reason=%s",
+                            msg_id,
+                            type(exc).__name__,
+                            error_type.value,
+                        )
+
+            record_result(
+                job_id,
+                source_channel_id,
+                msg_id,
+                destination_channel_id,
+                status,
+                destination_message_id=destination_message_id,
+                error=error,
+            )
         success += int(status == MessageStatus.SUCCESS)
         failed += int(status == MessageStatus.FAILED)
         skipped += int(status in (MessageStatus.SKIPPED, MessageStatus.DUPLICATE))
@@ -159,7 +173,9 @@ async def forward_range(
             now - last_update >= settings.progress_update_interval or processed == total
         ):
             last_update = now
-            await on_progress(ProgressSnapshot(job_id, total, processed, success, skipped, failed))
+            await report_progress(
+                on_progress, ProgressSnapshot(job_id, total, processed, success, skipped, failed)
+            )
         await asyncio.sleep(settings.forward_delay)
 
     _stop_flags.pop(job_id, None)

@@ -1,15 +1,15 @@
 import logging
 
-from sqlalchemy import select
 from telethon.extensions import html
 
 from app.config import settings
 from app.database.database import get_session
-from app.database.models import ForwardedMessage, ForwardJob, MessageStatus
+from app.database.models import ForwardJob, MessageStatus
 from app.database.repository import ForwardedMessageRepository, SettingsRepository
 from app.services import review_drafts, review_store
 from app.services.ai_policy import AIProcessingError, AIReviewRequired
 from app.services.ai_settings import load_ai_settings
+from app.services.forward_results import record_result
 from app.services.review_rewriter import rewrite_draft
 from app.telegram.forward_errors import ForwardErrorType, classify_error
 
@@ -20,30 +20,17 @@ def record_resolution(row, status, destination_message_id=None):
     if row.job_id is None:
         return
     with get_session() as session:
-        old = session.scalar(
-            select(ForwardedMessage).where(
-                ForwardedMessage.source_channel_id == row.source_id,
-                ForwardedMessage.source_message_id == row.message_id,
-                ForwardedMessage.destination_channel_id == row.destination_id,
-            )
-        )
-        job = session.get(ForwardJob, row.job_id)
-        if not job:
+        if not session.get(ForwardJob, row.job_id):
             return
-        if job and old and old.status == MessageStatus.FAILED and job.failed_messages > 0:
-            job.failed_messages -= 1
-            job.successful_messages += int(status == MessageStatus.SUCCESS)
-            job.skipped_messages += int(status == MessageStatus.SKIPPED)
-        ForwardedMessageRepository.record(
-            session,
-            row.job_id,
-            row.source_id,
-            row.message_id,
-            row.destination_id,
-            status,
-            destination_message_id=destination_message_id,
-            error="رد شده توسط مدیر" if status == MessageStatus.SKIPPED else None,
-        )
+    record_result(
+        row.job_id,
+        row.source_id,
+        row.message_id,
+        row.destination_id,
+        status,
+        destination_message_id=destination_message_id,
+        error="رد شده توسط مدیر" if status == MessageStatus.SKIPPED else None,
+    )
 
 
 async def decide(review_id, version, action, admin_id, client):

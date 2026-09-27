@@ -268,12 +268,14 @@ async def test_uncertain_decisions_are_not_cached(enabled):
     assert enabled.await_count == 3
 
 
-def test_large_legacy_prompt_is_not_sent(monkeypatch):
+def test_large_custom_prompt_keeps_policy_and_json_contract(monkeypatch):
     monkeypatch.setattr(
         ai_service, "settings", replace(ai_service.settings, ai_guardrails="old prompt " * 1000)
     )
-    assert ai_service.compact_prompt() == ai_service.DEFAULT_PROMPT
-    assert len(ai_service.compact_prompt()) < 2200
+    prompt = ai_service.compact_prompt()
+    assert ("old prompt " * 1000).strip() in prompt
+    assert prompt.startswith(ai_service.DEFAULT_PROMPT)
+    assert prompt.endswith("Never return bracket category tags.")
 
 
 @pytest.mark.asyncio
