@@ -1,13 +1,15 @@
 import logging
 
 from sqlalchemy import select
+from telethon.extensions import html
 
 from app.config import settings
 from app.database.database import get_session
 from app.database.models import ForwardedMessage, ForwardJob, MessageStatus
 from app.database.repository import ForwardedMessageRepository, SettingsRepository
-from app.services import review_store
+from app.services import review_drafts, review_store
 from app.services.ai_policy import AIReviewRequired
+from app.services.ai_service import apply_ai_guardrails
 from app.services.ai_settings import load_ai_settings
 from app.telegram.forward_errors import ForwardErrorType, classify_error
 
@@ -50,7 +52,7 @@ async def decide(review_id, version, action, admin_id, client):
     if not settings.is_admin(admin_id):
         return "دسترسی غیرمجاز است."
     row = review_store.get(review_id)
-    if not row or row.fingerprint[:12] != version:
+    if not row or review_drafts.version(row) != version:
         return "این درخواست تغییر کرده است. /reviews را دوباره بزنید."
     if action == "reset":
         if review_store.reopen_uncertain(row.id, admin_id):
@@ -89,6 +91,26 @@ async def decide(review_id, version, action, admin_id, client):
         if duplicate:
             review_store.set_status(row.id, "sent", duplicate.destination_message_id)
             return "این پیام قبلاً به همین مقصد ارسال شده است."
+        draft = review_drafts.get(row.id)
+        if getattr(original, "poll", None) and (draft or action == "retry"):
+            review_store.requeue(row.id, "poll")
+            return "ویرایش یا بازنویسی نظرسنجی پشتیبانی نمی‌شود؛ می‌توانید اصل نظرسنجی را تأیید یا رد کنید."
+        if action == "retry":
+            candidate = (
+                draft.text
+                if draft
+                else html.unparse(original.message or "", original.entities or [])
+            )
+            candidate = await apply_ai_guardrails(
+                candidate, chat_id=row.source_id, message_id=row.message_id
+            )
+            if candidate == "__DROP__":
+                review_store.requeue(row.id, "ai_rejected")
+                return (
+                    "گارد پیشنهاد رد داد؛ هنوز ارسال نشده است. می‌توانید رد، تأیید یا ویرایش کنید."
+                )
+            review_drafts.save(row.id, version, candidate, "ai_draft", from_ai=True)
+            return "بازنگری آماده است؛ پس از مشاهده، تأیید، رد یا ویرایش کنید. هنوز ارسال نشده است."
         sending = True
         sent = await _send_message(
             client,
@@ -97,6 +119,7 @@ async def decide(review_id, version, action, admin_id, client):
             row.destination_id,
             signature,
             approved=action == "approve",
+            replacement_html=draft.text if draft else None,
         )
         destination_message_id = getattr(sent, "id", None)
         review_store.set_status(row.id, "sent" if sent else "rejected", destination_message_id)
@@ -109,12 +132,6 @@ async def decide(review_id, version, action, admin_id, client):
             admin_id,
             destination_message_id,
         )
-        if action == "retry":
-            return (
-                "✅ پیام پس از بررسی و پالایش AI ارسال شد."
-                if sent
-                else "⛔ گارد پیام را حذف کرد؛ ارسال نشد."
-            )
         return (
             "✅ پیام با تأیید شما ارسال شد." if sent else "پیام پس از پاک‌سازی خالی بود؛ ارسال نشد."
         )

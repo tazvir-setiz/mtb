@@ -5,15 +5,21 @@ from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter, TelegramError
+from telethon.extensions import html
 
 from app.config import settings
+from app.handlers import review_edit
 from app.handlers.auth import is_authorized, reject
-from app.services import review_store
+from app.services import review_drafts, review_store
 from app.services.review_service import decide
 from app.telegram.client import ensure_started
 
 logger = logging.getLogger(__name__)
 REASONS = {
+    "ai_draft": "پیش‌نویس بازنگری AI آمادهٔ تصمیم شماست؛ هنوز ارسال نشده",
+    "manual_draft": "ویرایش شما ذخیره شد؛ برای ارسال تأیید کنید",
+    "ai_rejected": "AI پیشنهاد رد داده؛ تصمیم نهایی با شماست",
+    "rewrite_failed": "بازنویسی نتوانست از بررسی نهایی قوانین عبور کند",
     "timeout": "مهلت پاسخ AI تمام شد؛ می‌توانید بررسی با AI را دوباره اجرا کنید",
     "response_truncated": "پاسخ مدل به سقف توکن رسید و ناقص ماند",
     "provider_refusal": "سرویس پاسخ قابل انتشار تولید نکرد",
@@ -55,18 +61,21 @@ def card(row):
         f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"
         f"مقصد ثابت این درخواست: {row.destination_id}\nدلیل: {reason}\n\n"
         f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
-        "«بررسی دوباره با AI» پالایش را اجرا می‌کند. «ارسال متن اصلی» بدون بازنویسی AI است؛ لینک‌ها و آیدی‌ها پاک‌سازی "
+        "«بررسی دوباره با AI» پیش‌نویس می‌سازد و خودکار ارسال نمی‌کند. تأیید، نسخهٔ فعلی را می‌فرستد؛ لینک‌ها و آیدی‌ها پاک‌سازی "
         "و امضای فعلی اضافه می‌شود. نظرسنجی با تأیید شما مستقیم فوروارد می‌شود."
     )
     buttons = []
     if row.status == "pending":
-        suffix = f"{row.id}:{row.fingerprint[:12]}"
+        suffix = f"{row.id}:{review_drafts.version(row)}"
         buttons.append(
             [InlineKeyboardButton("🤖 بررسی دوباره با AI", callback_data=f"review:retry:{suffix}")]
         )
         buttons.append(
             [
-                InlineKeyboardButton("✅ ارسال متن اصلی", callback_data=f"review:approve:{suffix}"),
+                InlineKeyboardButton(
+                    "✅ تأیید نسخهٔ فعلی", callback_data=f"review:approve:{suffix}"
+                ),
+                InlineKeyboardButton("✏️ ویرایش", callback_data=f"review:edit:{suffix}"),
                 InlineKeyboardButton("⛔ رد پیام", callback_data=f"review:reject:{suffix}"),
             ]
         )
@@ -77,7 +86,7 @@ def card(row):
                 [
                     InlineKeyboardButton(
                         "مقصد را بررسی کردم؛ بازگشت به صف",
-                        callback_data=f"review:reset:{row.id}:{row.fingerprint[:12]}",
+                        callback_data=f"review:reset:{row.id}:{review_drafts.version(row)}",
                     )
                 ]
             )
@@ -94,7 +103,18 @@ def card(row):
 
 
 async def send_card(bot, admin_id, row):
+    draft = review_drafts.get(row.id)
     text, markup = card(row)
+    version = review_drafts.version(row, draft)
+    if draft:
+        plain, _ = html.parse(draft.text)
+        for start in range(0, len(plain), 1500):
+            await bot.send_message(
+                chat_id=admin_id,
+                text="متن کامل پیش‌نویس:\n" + plain[start : start + 1500],
+                parse_mode=None,
+                disable_web_page_preview=True,
+            )
     await bot.send_message(
         chat_id=admin_id,
         text=text,
@@ -102,6 +122,7 @@ async def send_card(bot, admin_id, row):
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
+    return version
 
 
 async def notify_pending(bot):
@@ -117,8 +138,10 @@ async def notify_pending(bot):
                     if admin_id in json.loads(row.notified):
                         continue
                     try:
-                        await send_card(bot, admin_id, row)
-                        review_store.mark_notified(row.id, admin_id, row.fingerprint, row.status)
+                        version = await send_card(bot, admin_id, row)
+                        review_store.mark_notified(
+                            row.id, admin_id, row.fingerprint, row.status, version
+                        )
                     except RetryAfter as exc:
                         delay = exc.retry_after
                         await asyncio.sleep(
@@ -177,9 +200,14 @@ async def on_callback(update, context):
         return
     if (
         len(parts) != 4
-        or parts[1] not in {"approve", "reject", "reset", "retry"}
+        or parts[1] not in {"approve", "reject", "reset", "retry", "edit"}
         or not parts[2].isdigit()
     ):
+        return
+    if parts[1] == "edit":
+        row = review_store.get(int(parts[2]))
+        if row:
+            await review_edit.begin(update, context, row, parts[3])
         return
     try:
         client = await ensure_started() if parts[1] in {"approve", "retry"} else None
@@ -195,3 +223,6 @@ async def on_callback(update, context):
     except TelegramError:
         pass
     await update.effective_message.reply_text(result)
+    row = review_store.get(int(parts[2]))
+    if row and row.status == "pending":
+        await send_card(context.bot, update.effective_user.id, row)

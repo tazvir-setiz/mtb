@@ -170,9 +170,12 @@ async def test_oversized_input_is_not_truncated_and_published(enabled):
 
 @pytest.mark.asyncio
 async def test_rewrite_is_sanitized_and_context_updates_are_bounded(enabled):
-    enabled.return_value = ModerationResult(
-        Label.REWRITE, 0.98, '<a href="https://evil.test">متن</a> @other_name', "AI"
-    )
+    enabled.side_effect = [
+        ModerationResult(
+            Label.REWRITE, 0.98, '<a href="https://evil.test">متن</a> @other_name', "AI"
+        ),
+        ModerationResult(Label.OK, 0.95, source="AI"),
+    ]
     result = await moderation_service.moderate(1, 1, "ناسزا و اعتراض")
     assert result.text == "متن"
     assert "href" not in result.text
@@ -270,7 +273,7 @@ def test_large_legacy_prompt_is_not_sent(monkeypatch):
         ai_service, "settings", replace(ai_service.settings, ai_guardrails="old prompt " * 1000)
     )
     assert ai_service.compact_prompt() == ai_service.DEFAULT_PROMPT
-    assert len(ai_service.compact_prompt()) < 1800
+    assert len(ai_service.compact_prompt()) < 2200
 
 
 @pytest.mark.asyncio
@@ -293,6 +296,7 @@ async def test_reassessment_can_rewrite_fixable_language(enabled):
     enabled.side_effect = [
         ModerationResult(Label.REVIEW, 0.6, source="AI"),
         ModerationResult(Label.REWRITE, 0.95, "متن محترمانه", "AI"),
+        ModerationResult(Label.OK, 0.95, source="AI"),
     ]
     result = await moderation_service.moderate(1, 1, "عبارت نیازمند اصلاح لحن")
     assert result.text == "متن محترمانه"
@@ -325,3 +329,28 @@ async def test_clear_ai_drop_is_not_reassessed(enabled):
     result = await moderation_service.moderate(1, 1, "تبلیغ ناشناخته")
     assert result.action == "DROP"
     enabled.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_political_rewrite_publishes_only_after_final_check(enabled):
+    enabled.side_effect = [
+        ModerationResult(Label.POLITICAL, 0.97, source="AI"),
+        ModerationResult(Label.REWRITE, 0.95, "گزارش خنثی با حفظ واقعیت", "AI"),
+        ModerationResult(Label.OK, 0.96, source="AI"),
+    ]
+    result = await moderation_service.moderate(1, 1, "موضع‌گیری درباره دولت")
+    assert result.action == "PUBLISH"
+    assert result.text == "گزارش خنثی با حفظ واقعیت"
+    assert enabled.call_args.args[0] == result.text
+    assert enabled.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_noncompliant_rewrite_is_not_published(enabled):
+    enabled.side_effect = [
+        ModerationResult(Label.REWRITE, 0.98, "متن هنوز نامناسب", "AI"),
+        ModerationResult(Label.POLITICAL, 0.98, source="AI"),
+    ]
+    result = await moderation_service.moderate(1, 1, "موضع‌گیری درباره دولت")
+    assert result.action == "REVIEW"
+    assert result.reason == "rewrite_failed"

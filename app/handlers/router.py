@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
-from app.handlers import ai_settings, source, transfer, username_settings
+from app.handlers import ai_settings, review_edit, source, transfer, username_settings
 from app.handlers import settings as settings_handlers
 from app.handlers.auth import is_authorized, reject
 from app.handlers.callback_routes import CALLBACK_ROUTES
@@ -59,7 +59,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     state = get_state(context.user_data)
     try:
-        if state in (State.SOURCE_CHANNEL, State.DESTINATION_CHANNEL):
+        if state == State.REVIEW_EDIT:
+            await review_edit.save(update, context)
+        elif state in (State.SOURCE_CHANNEL, State.DESTINATION_CHANNEL):
             await source.handle_channel_input(update, context)
         elif state in (State.RANGE_INPUT_START, State.RANGE_INPUT_END, State.IDS_INPUT):
             await transfer.handle_text_input(update, context, state)

@@ -9,7 +9,7 @@ from app.database.database import get_session
 from app.database.models import MessageStatus
 from app.database.repository import ForwardedMessageRepository, ForwardJobRepository
 from app.handlers import reviews
-from app.services import review_store
+from app.services import review_drafts, review_service, review_store
 from app.services.ai_policy import AIReviewRequired
 from app.services.ai_settings import save_ai_value
 from app.services.review_service import decide
@@ -262,13 +262,19 @@ async def test_ai_retry_rewrites_instead_of_bypassing_guard(monkeypatch):
     save_ai_value("enabled", "true")
     row = queued()
     guard = AsyncMock(return_value="متن بازنویسی شده")
-    monkeypatch.setattr(message_sender, "apply_ai_guardrails", guard)
+    monkeypatch.setattr(review_service, "apply_ai_guardrails", guard)
     client = SimpleNamespace(
         get_messages=AsyncMock(return_value=[message()]),
         send_message=AsyncMock(return_value=SimpleNamespace(id=90)),
     )
     await decide(row.id, row.fingerprint[:12], "retry", 111, client)
     guard.assert_awaited_once()
+    client.send_message.assert_not_awaited()
+    assert review_store.get(row.id).status == "pending"
+    assert review_drafts.get(row.id).text == "متن بازنویسی شده"
+    await decide(row.id, row.fingerprint[:12], "approve", 111, client)
+    client.send_message.assert_not_awaited()
+    await decide(row.id, review_drafts.version(review_store.get(row.id)), "approve", 111, client)
     assert client.send_message.call_args.kwargs["message"] == "متن بازنویسی شده"
     assert review_store.get(row.id).status == "sent"
 
@@ -278,7 +284,7 @@ async def test_ai_retry_failure_stays_pending_with_exact_reason(monkeypatch):
     save_ai_value("enabled", "true")
     row = queued()
     monkeypatch.setattr(
-        message_sender, "apply_ai_guardrails", AsyncMock(side_effect=AIReviewRequired("timeout"))
+        review_service, "apply_ai_guardrails", AsyncMock(side_effect=AIReviewRequired("timeout"))
     )
     client = SimpleNamespace(
         get_messages=AsyncMock(return_value=[message()]), send_message=AsyncMock()

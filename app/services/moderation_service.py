@@ -109,6 +109,26 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
             normalized, context, provider, config, limits, chat_id, message_id, reconsider=True
         )
     result = finalize(result, text)
+    if result.label == Label.REWRITE and result.action == "PUBLISH":
+        runtime.metrics["rewrite_checks"] += 1
+        verified = await ai_fallback(
+            normalize_text(result.text, limits.max_candidates),
+            context,
+            provider,
+            config,
+            limits,
+            chat_id,
+            message_id,
+        )
+        if verified.source == "UNAVAILABLE":
+            result = verified
+        elif (
+            verified.label not in {Label.OK, Label.SANITIZE}
+            or verified.confidence < limits.ai_confidence_threshold
+        ):
+            result = ModerationResult(
+                Label.REVIEW, verified.confidence, source="AI", reason="rewrite_failed"
+            )
     if rechecked and result.action == "PUBLISH":
         runtime.metrics["resolved_by_recheck"] += 1
     remember_context(result, chat_id, normalized.normalized, limits)

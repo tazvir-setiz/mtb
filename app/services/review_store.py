@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from telethon.extensions import html
 
 from app.database.database import get_session
-from app.database.models import ReviewRequest
+from app.database.models import ReviewDraft, ReviewRequest
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,10 @@ def enqueue(original, source_id, destination_id, job_id, reason):
         elif row.fingerprint == fingerprint or row.status in {"sending", "sent"}:
             return row
         row.job_id = job_id
+        if row.id is not None:
+            draft = session.get(ReviewDraft, row.id)
+            if draft:
+                session.delete(draft)
         row.fingerprint = fingerprint
         row.preview = (original.message or "[پیام رسانه‌ای یا نظرسنجی بدون متن]")[:2500]
         row.reason = reason[:100]
@@ -116,13 +120,16 @@ def set_status(review_id, status, destination_message_id=None):
         row.destination_message_id = destination_message_id
 
 
-def mark_notified(review_id, admin_id, fingerprint=None, status=None):
+def mark_notified(review_id, admin_id, fingerprint=None, status=None, version=None):
+    from app.services import review_drafts
+
     with get_session() as session:
         row = session.get(ReviewRequest, review_id)
         if (
             not row
             or (fingerprint and row.fingerprint != fingerprint)
             or (status and row.status != status)
+            or (version and review_drafts.version(row) != version)
         ):
             return
         row.notified = json.dumps(sorted(set(json.loads(row.notified)) | {admin_id}))

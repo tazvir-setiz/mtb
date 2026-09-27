@@ -41,7 +41,9 @@ async def send_message(
 
 
 @traced
-async def _send_message(client, original, source_id, destination_id, signature, *, approved=False):
+async def _send_message(
+    client, original, source_id, destination_id, signature, *, approved=False, replacement_html=None
+):
     msg_id = getattr(original, "id", None)
     ai_enabled = load_ai_settings(settings).enabled
     logger.info(
@@ -68,7 +70,11 @@ async def _send_message(client, original, source_id, destination_id, signature, 
         )
         return result[0] if isinstance(result, list) else result
 
-    current_html = telethon_html.unparse(original.message or "", original.entities or [])
+    current_html = (
+        replacement_html
+        if replacement_html is not None
+        else telethon_html.unparse(original.message or "", original.entities or [])
+    )
     processed_html = (
         sanitize_text(current_html, remove_links=True)
         if approved

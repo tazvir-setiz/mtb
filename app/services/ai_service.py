@@ -51,9 +51,11 @@ async def classify(
                 "content": compact_prompt()
                 + (
                     "\nSecond assessment: distinguish neutral reporting/quoted statements from the author's advocacy. "
-                    "Preserve facts and attribution. Use REWRITE only for fixable abusive wording. "
+                    "Try REWRITE for political advocacy as well as abuse if removing slogans, incitement or hostile tone "
+                    "can produce neutral compliant reporting. Preserve supported facts, attribution and core meaning; "
+                    "never invent facts or reverse a claim. "
                     "Do not invent missing context or approve merely because this is a second assessment. "
-                    "If still uncertain or advocating politics, retain REVIEW/POLITICAL."
+                    "Use REVIEW/POLITICAL only if no faithful compliant rewrite is possible."
                     if reconsider
                     else ""
                 ),

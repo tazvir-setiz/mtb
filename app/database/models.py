@@ -125,3 +125,10 @@ class ReviewRequest(Base):
     decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     destination_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ReviewDraft(Base):
+    __tablename__ = "review_drafts"
+    review_id: Mapped[int] = mapped_column(ForeignKey("review_requests.id"), primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    revision: Mapped[str] = mapped_column(String(32))
