@@ -108,6 +108,16 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
         result = await ai_fallback(
             normalized, context, provider, config, limits, chat_id, message_id, reconsider=True
         )
+    if result.source == "AI" and result.label == Label.ABUSE:
+        runtime.metrics["abuse_audits"] += 1
+        logger.info(
+            "Guard abuse audit first_confidence=%.2f next=independent_assessment", result.confidence
+        )
+        result = await ai_fallback(
+            normalized, context, provider, config, limits, chat_id, message_id, audit_abuse=True
+        )
+        logger.info("Guard abuse audit result=%s action=%s", result.label.value, result.action)
+        rechecked = True
     result = finalize(result, text)
     if result.label == Label.REWRITE and result.action == "PUBLISH":
         runtime.metrics["rewrite_checks"] += 1
@@ -132,13 +142,22 @@ async def moderate(chat_id: int | None, message_id: int | None, text: str) -> Mo
     if rechecked and result.action == "PUBLISH":
         runtime.metrics["resolved_by_recheck"] += 1
     remember_context(result, chat_id, normalized.normalized, limits)
-    if result.action != "REVIEW":
+    if result.action != "REVIEW" and not (result.source == "AI" and result.label == Label.ABUSE):
         runtime.remember(key, result, limits.cache_ttl_seconds, limits.cache_size)
     return record_decision(result, chat_id, message_id, started)
 
 
 async def ai_fallback(
-    normalized, context, provider, config, limits, chat_id, message_id, *, reconsider=False
+    normalized,
+    context,
+    provider,
+    config,
+    limits,
+    chat_id,
+    message_id,
+    *,
+    reconsider=False,
+    audit_abuse=False,
 ):
     runtime.metrics["ai_fallbacks"] += 1
     if runtime.unavailable(provider):
@@ -160,7 +179,13 @@ async def ai_fallback(
     )
     try:
         result = await ai_service.classify(
-            normalized.original, context, variants, config, limits, reconsider=reconsider
+            normalized.original,
+            context,
+            variants,
+            config,
+            limits,
+            reconsider=reconsider,
+            **({"audit_abuse": True} if audit_abuse else {}),
         )
         if runtime.failures.pop(provider, None):
             logger.info("AI recovered circuit=closed")

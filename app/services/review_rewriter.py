@@ -29,6 +29,10 @@ async def rewrite_draft(text, *, chat_id=None, message_id=None):
         return "__DROP__"
     logger.info("Review rewrite started message_id=%s input_chars=%d", message_id, len(text))
     result = await ai_service.classify(text, context, (), config, limits, rewrite=True)
+    if result.label == Label.ABUSE:
+        result = await ai_service.classify(
+            text, context, (), config, limits, rewrite=True, audit_abuse=True
+        )
     if result.action == "DROP":
         return "__DROP__"
     if result.label != Label.REWRITE:

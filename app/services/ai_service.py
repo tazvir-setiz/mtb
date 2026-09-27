@@ -37,6 +37,7 @@ async def classify(
     *,
     reconsider: bool = False,
     rewrite: bool = False,
+    audit_abuse: bool = False,
 ):
     if not config.api_key:
         logger.error("AI guard failure reason=missing_api_key action=REVIEW")
@@ -50,6 +51,17 @@ async def classify(
             {
                 "role": "system",
                 "content": compact_prompt()
+                + (
+                    "\nIndependently assess whether any substantive claim, opinion or information "
+                    "survives removal of insults. Political hostility, sarcasm and demeaning words "
+                    "alone do not make the whole message pure abuse. Apply the same criteria to all "
+                    "political sides. Prefer REWRITE when meaningful content can be preserved; "
+                    "return OK if already compliant. Do not guess ambiguous group identities or "
+                    "present disputed claims as verified facts. Return ABUSE only when nothing "
+                    "but insults remains; otherwise REVIEW if a faithful rewrite is impossible."
+                    if audit_abuse
+                    else ""
+                )
                 + (
                     "\nTask: write a revised draft for the administrator, not just a classification. "
                     "Return REWRITE with the full revised Telegram HTML text when substantive meaning "
@@ -80,11 +92,18 @@ async def classify(
     }
     started = time.monotonic()
     logger.info(
-        "AI guard request model=%s input_chars=%d timeout=%.1fs max_output_tokens=%d",
+        "AI guard request model=%s input_chars=%d timeout=%.1fs max_output_tokens=%d stage=%s",
         config.model,
         len(text),
         limits.timeout_seconds,
         limits.max_output_tokens,
+        "abuse_audit"
+        if audit_abuse
+        else "rewrite"
+        if rewrite
+        else "reassessment"
+        if reconsider
+        else "classify",
     )
     try:
         timeout = httpx.Timeout(limits.timeout_seconds, connect=min(5, limits.timeout_seconds))
