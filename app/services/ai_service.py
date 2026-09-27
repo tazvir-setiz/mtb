@@ -36,6 +36,7 @@ async def classify(
     limits: GuardSettings,
     *,
     reconsider: bool = False,
+    rewrite: bool = False,
 ):
     if not config.api_key:
         logger.error("AI guard failure reason=missing_api_key action=REVIEW")
@@ -49,6 +50,16 @@ async def classify(
             {
                 "role": "system",
                 "content": compact_prompt()
+                + (
+                    "\nTask: write a revised draft for the administrator, not just a classification. "
+                    "Return REWRITE with the full revised Telegram HTML text when substantive meaning "
+                    "can be preserved in compliance with every rule. Improve wording even if the input "
+                    "is already publishable. Preserve facts and attribution; never invent a message. "
+                    "For pure insults with nothing to preserve return ABUSE. "
+                    "If faithful compliant rewriting is impossible, return REVIEW or a drop label."
+                    if rewrite
+                    else ""
+                )
                 + (
                     "\nSecond assessment: distinguish neutral reporting/quoted statements from the author's advocacy. "
                     "Try REWRITE for political advocacy as well as abuse if removing slogans, incitement or hostile tone "

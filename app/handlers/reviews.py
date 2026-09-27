@@ -61,14 +61,14 @@ def card(row):
         f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"
         f"مقصد ثابت این درخواست: {row.destination_id}\nدلیل: {reason}\n\n"
         f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
-        "«بررسی دوباره با AI» پیش‌نویس می‌سازد و خودکار ارسال نمی‌کند. تأیید، نسخهٔ فعلی را می‌فرستد؛ لینک‌ها و آیدی‌ها پاک‌سازی "
+        "«بازنویسی با AI» متن تازهٔ مطابق گارد یا پیشنهاد حذف می‌سازد و خودکار ارسال نمی‌کند. تأیید، نسخهٔ فعلی را می‌فرستد؛ لینک‌ها و آیدی‌ها پاک‌سازی "
         "و امضای فعلی اضافه می‌شود. نظرسنجی با تأیید شما مستقیم فوروارد می‌شود."
     )
     buttons = []
     if row.status == "pending":
         suffix = f"{row.id}:{review_drafts.version(row)}"
         buttons.append(
-            [InlineKeyboardButton("🤖 بررسی دوباره با AI", callback_data=f"review:retry:{suffix}")]
+            [InlineKeyboardButton("🤖 بازنویسی با AI", callback_data=f"review:retry:{suffix}")]
         )
         buttons.append(
             [
@@ -225,4 +225,7 @@ async def on_callback(update, context):
     await update.effective_message.reply_text(result)
     row = review_store.get(int(parts[2]))
     if row and row.status == "pending":
-        await send_card(context.bot, update.effective_user.id, row)
+        version = await send_card(context.bot, update.effective_user.id, row)
+        review_store.mark_notified(
+            row.id, update.effective_user.id, row.fingerprint, row.status, version
+        )

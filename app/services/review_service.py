@@ -8,9 +8,9 @@ from app.database.database import get_session
 from app.database.models import ForwardedMessage, ForwardJob, MessageStatus
 from app.database.repository import ForwardedMessageRepository, SettingsRepository
 from app.services import review_drafts, review_store
-from app.services.ai_policy import AIReviewRequired
-from app.services.ai_service import apply_ai_guardrails
+from app.services.ai_policy import AIProcessingError, AIReviewRequired
 from app.services.ai_settings import load_ai_settings
+from app.services.review_rewriter import rewrite_draft
 from app.telegram.forward_errors import ForwardErrorType, classify_error
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ async def decide(review_id, version, action, admin_id, client):
                 if draft
                 else html.unparse(original.message or "", original.entities or [])
             )
-            candidate = await apply_ai_guardrails(
+            candidate = await rewrite_draft(
                 candidate, chat_id=row.source_id, message_id=row.message_id
             )
             if candidate == "__DROP__":
@@ -135,9 +135,14 @@ async def decide(review_id, version, action, admin_id, client):
         return (
             "✅ پیام با تأیید شما ارسال شد." if sent else "پیام پس از پاک‌سازی خالی بود؛ ارسال نشد."
         )
-    except AIReviewRequired as exc:
-        review_store.requeue(row.id, str(exc))
-        return "هنوز تأیید خودکار دریافت نشد؛ دلیل تازه در اعلان بررسی و /reviews نمایش داده می‌شود."
+    except (AIReviewRequired, AIProcessingError) as exc:
+        reason = (
+            str(exc)
+            if isinstance(exc, AIReviewRequired)
+            else getattr(exc, "reason", "service_unavailable")
+        )
+        review_store.requeue(row.id, reason)
+        return "بازنویسی معتبر ساخته نشد؛ متن قبلی حفظ شد. دلیل در اعلان تازه آمده است؛ می‌توانید ویرایش یا رد کنید."
     except Exception as exc:
         definite = classify_error(exc) in {
             ForwardErrorType.FLOOD_WAIT,

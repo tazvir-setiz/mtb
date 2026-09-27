@@ -12,6 +12,7 @@ from app.handlers import reviews
 from app.services import review_drafts, review_service, review_store
 from app.services.ai_policy import AIReviewRequired
 from app.services.ai_settings import save_ai_value
+from app.services.ai_transport import AIRequestError
 from app.services.review_service import decide
 from app.telegram import message_sender
 from app.telegram.forward_service import forward_range
@@ -262,7 +263,7 @@ async def test_ai_retry_rewrites_instead_of_bypassing_guard(monkeypatch):
     save_ai_value("enabled", "true")
     row = queued()
     guard = AsyncMock(return_value="متن بازنویسی شده")
-    monkeypatch.setattr(review_service, "apply_ai_guardrails", guard)
+    monkeypatch.setattr(review_service, "rewrite_draft", guard)
     client = SimpleNamespace(
         get_messages=AsyncMock(return_value=[message()]),
         send_message=AsyncMock(return_value=SimpleNamespace(id=90)),
@@ -280,11 +281,12 @@ async def test_ai_retry_rewrites_instead_of_bypassing_guard(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ai_retry_failure_stays_pending_with_exact_reason(monkeypatch):
+@pytest.mark.parametrize("error", [AIReviewRequired("timeout"), AIRequestError("timeout")])
+async def test_ai_retry_failure_stays_pending_with_exact_reason(monkeypatch, error):
     save_ai_value("enabled", "true")
     row = queued()
     monkeypatch.setattr(
-        review_service, "apply_ai_guardrails", AsyncMock(side_effect=AIReviewRequired("timeout"))
+        review_service, "rewrite_draft", AsyncMock(side_effect=error)
     )
     client = SimpleNamespace(
         get_messages=AsyncMock(return_value=[message()]), send_message=AsyncMock()

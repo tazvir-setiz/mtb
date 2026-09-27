@@ -76,7 +76,8 @@ async def test_reasoning_only_response_has_specific_failure(monkeypatch, finish,
 
 
 @pytest.mark.asyncio
-async def test_rewrite_request_disables_thinking_and_keeps_output(monkeypatch):
+@pytest.mark.parametrize("rewrite", [False, True])
+async def test_rewrite_request_disables_thinking_and_keeps_output(monkeypatch, rewrite):
     result = {"label": "REWRITE", "confidence": 0.9, "text": "خیلی دوستت دارم."}
     response = httpx.Response(
         200,
@@ -86,8 +87,12 @@ async def test_rewrite_request_disables_thinking_and_keeps_output(monkeypatch):
     manager = AsyncMock()
     manager.__aenter__.return_value.post.return_value = response
     monkeypatch.setattr("app.services.ai_service.httpx.AsyncClient", lambda **_: manager)
-    output = await classify("خیلی دوستت دارم مثل کیر", {}, (), CONFIG, GuardSettings())
+    output = await classify(
+        "خیلی دوستت دارم مثل کیر", {}, (), CONFIG, GuardSettings(), rewrite=rewrite
+    )
     assert output.text == result["text"]
+    payload = manager.__aenter__.return_value.post.call_args.kwargs["json"]
+    assert ("Task: write a revised draft" in payload["messages"][0]["content"]) is rewrite
     assert manager.__aenter__.return_value.post.call_args.kwargs["json"]["thinking"] == {
         "type": "disabled"
     }

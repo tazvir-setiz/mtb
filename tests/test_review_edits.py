@@ -97,7 +97,7 @@ def test_cancel_discards_editor_state_but_not_saved_draft():
 async def test_ai_drop_after_referral_keeps_human_actions(monkeypatch):
     row = queued()
     save_ai_value("enabled", "true")
-    monkeypatch.setattr(review_service, "apply_ai_guardrails", AsyncMock(return_value="__DROP__"))
+    monkeypatch.setattr(review_service, "rewrite_draft", AsyncMock(return_value="__DROP__"))
     client = SimpleNamespace(
         get_messages=AsyncMock(return_value=[original()]), send_message=AsyncMock()
     )
