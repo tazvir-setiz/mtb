@@ -8,9 +8,9 @@ import httpx
 from app.config import BASE_DIR, settings
 from app.guard_config import GuardSettings
 from app.services.ai_policy import AIProcessingError, AIReviewRequired
+from app.services.ai_response import validated_completion
 from app.services.ai_settings import AISettings
-from app.services.ai_transport import AIRequestError, model_options, post_completion
-from app.services.output_validator import validate_output
+from app.services.ai_transport import AIRequestError, model_options
 
 logger = logging.getLogger(__name__)
 DEFAULT_PROMPT = (BASE_DIR / "app/prompts/guardrails.txt").read_text(encoding="utf-8")
@@ -144,35 +144,11 @@ async def classify(
         timeout = httpx.Timeout(limits.timeout_seconds, connect=min(5, limits.timeout_seconds))
         async with asyncio.timeout(limits.timeout_seconds):
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await post_completion(client, config, payload)
-                data = response.json()
-                choice = data["choices"][0]
-                usage = data.get("usage") or {}
-                logger.info(
-                    "AI completion finish=%s output_tokens=%s reasoning_tokens=%s thinking=%s",
-                    choice.get("finish_reason"),
-                    usage.get("completion_tokens"),
-                    (usage.get("completion_tokens_details") or {}).get("reasoning_tokens"),
-                    payload.get("thinking", {}).get("type", "provider_default"),
+                result = await validated_completion(
+                    client, config, payload, limits, text, verification=verify_original is not None
                 )
-                if choice.get("finish_reason") in {"length", "content_filter", "tool_calls"}:
-                    raise AIRequestError(
-                        "response_truncated"
-                        if choice.get("finish_reason") == "length"
-                        else "provider_refusal"
-                    )
                 if verify_original is not None:
-                    from app.services.guard.contracts import validate_verification
-
-                    result = validate_verification(choice["message"]["content"])
-                    logger.info(
-                        "AI verification policy_pass=%s meaning_preserved=%s issues=%d",
-                        result.policy_pass,
-                        result.meaning_preserved,
-                        len(result.issues),
-                    )
                     return result
-                result = validate_output(choice["message"]["content"], limits, original=text)
         logger.info(
             "AI guard response label=%s confidence=%.2f elapsed=%.2fs",
             result.label.value,
@@ -183,11 +159,12 @@ async def classify(
     except AIProcessingError as exc:
         reason = getattr(exc, "reason", "invalid_output")
         logger.warning(
-            "AI guard failure reason=%s elapsed=%.2fs action=REVIEW",
+            "AI guard failure reason=%s detail=%s elapsed=%.2fs action=REVIEW",
             reason,
+            getattr(exc, "detail", None),
             time.monotonic() - started,
         )
-        raise AIRequestError(reason) from None
+        raise AIRequestError(reason, detail=getattr(exc, "detail", None)) from None
     except Exception as exc:
         status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
         reason = (
@@ -211,7 +188,7 @@ async def classify(
             status,
             time.monotonic() - started,
         )
-        raise AIRequestError(reason) from None
+        raise AIRequestError(reason, detail=getattr(exc, "detail", None)) from None
 
 
 async def apply_ai_guardrails(

@@ -1,29 +1,18 @@
-import json
 import math
-import re
 
 from app.guard_config import GuardSettings
-from app.services.ai_policy import AIProcessingError
 from app.services.guard_models import Label, ModerationResult
-
-
-def unique_fields(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate JSON field")
-        result[key] = value
-    return result
+from app.services.response_format import OutputFormatError, response_object
+from app.services.response_format import unique_fields as unique_fields
 
 
 def validate_output(
     raw: str, limits: GuardSettings, *, original: str | None = None
 ) -> ModerationResult:
+    detail = "schema"
     try:
-        if not isinstance(raw, str) or len(raw) > limits.max_input_chars * 2 + 2000:
-            raise ValueError()
-        fenced = re.fullmatch(r"\s*```(?:json)?\s*\n(.*?)\n```\s*", raw, re.S)
-        data = json.loads(fenced.group(1) if fenced else raw, object_pairs_hook=unique_fields)
+        data = response_object(raw, limits.max_input_chars * 2 + 2000)
+        detail = "unknown_fields"
         if not isinstance(data, dict) or set(data) - {
             "label",
             "confidence",
@@ -34,7 +23,9 @@ def validate_output(
             "ambiguities",
         }:
             raise ValueError()
+        detail = "label"
         label = Label(data["label"])
+        detail = "confidence"
         confidence = data["confidence"]
         if (
             type(confidence) not in (int, float)
@@ -42,15 +33,18 @@ def validate_output(
             or not 0 <= confidence <= 1
         ):
             raise ValueError()
+        detail = "rewrite_text"
         text = data.get("text")
         if text is not None and (not isinstance(text, str) or len(text) > limits.max_input_chars):
             raise ValueError()
         if label == Label.REWRITE and (not text or not text.strip() or "```" in text):
             raise ValueError()
+        detail = "has_substance"
         substance = data.get("has_substance")
         if substance is not None and type(substance) is not bool:
             raise ValueError()
-        ambiguities = data.get("ambiguities", [])
+        detail = "ambiguities"
+        ambiguities = data.get("ambiguities") if data.get("ambiguities") is not None else []
         if (
             not isinstance(ambiguities, list)
             or len(ambiguities) > 8
@@ -60,7 +54,8 @@ def validate_output(
             )
         ):
             raise ValueError()
-        violations = data.get("violations", [])
+        detail = "violations"
+        violations = data.get("violations") if data.get("violations") is not None else []
         if not isinstance(violations, list) or len(violations) > 8:
             raise ValueError()
         evidence = []
@@ -78,7 +73,8 @@ def validate_output(
             if original is not None and quote not in original:
                 raise ValueError()
             evidence.append((rule, quote))
-        update = data.get("context_update", {})
+        detail = "context_update"
+        update = data.get("context_update") if data.get("context_update") is not None else {}
         if not isinstance(update, dict) or set(update) - {
             "political",
             "topics_add",
@@ -104,8 +100,10 @@ def validate_output(
             raise ValueError()
         if any(not isinstance(v, str) or len(k) > 48 or len(v) > 48 for k, v in aliases.items()):
             raise ValueError()
+    except OutputFormatError:
+        raise
     except (ValueError, TypeError, KeyError, RecursionError):
-        raise AIProcessingError("Invalid structured guard response") from None
+        raise OutputFormatError(detail) from None
     threshold = (
         limits.ai_confidence_threshold
         if label in {Label.OK, Label.SANITIZE, Label.REWRITE}

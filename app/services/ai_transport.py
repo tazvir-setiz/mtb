@@ -19,8 +19,9 @@ def model_options(config):
 
 
 class AIRequestError(AIProcessingError):
-    def __init__(self, reason):
+    def __init__(self, reason, detail=None):
         self.reason = reason
+        self.detail = detail
         super().__init__(reason)
 
 

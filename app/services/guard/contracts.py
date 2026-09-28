@@ -1,4 +1,3 @@
-import json
 from dataclasses import dataclass
 
 from app.services.ai_transport import AIRequestError
@@ -17,12 +16,10 @@ class Verification:
 
 
 def validate_verification(raw):
-    from app.services.output_validator import unique_fields
+    from app.services.response_format import OutputFormatError, response_object
 
     try:
-        if not isinstance(raw, str) or len(raw) > 6000:
-            raise ValueError()
-        data = json.loads(raw, object_pairs_hook=unique_fields)
+        data = response_object(raw, 6000)
         if not isinstance(data, dict) or set(data) != {
             "policy_pass",
             "meaning_preserved",
@@ -47,5 +44,7 @@ def validate_verification(raw):
         return Verification(
             data["policy_pass"], data["meaning_preserved"], tuple(issues), data["repairable"]
         )
+    except OutputFormatError as exc:
+        raise AIRequestError("invalid_verification", detail=exc.detail) from None
     except (ValueError, KeyError, TypeError, RecursionError):
-        raise AIRequestError("invalid_verification") from None
+        raise AIRequestError("invalid_verification", detail="verification_schema") from None
