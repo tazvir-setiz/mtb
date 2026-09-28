@@ -15,7 +15,7 @@ from app.services.text_normalizer import normalize_text
 from app.services.text_sanitizer import publication_is_clean, sanitize_text, username_replacement
 
 logger = logging.getLogger(__name__)
-PIPELINE_VERSION = "2"
+PIPELINE_VERSION = "2.1"
 
 
 class GuardPipeline:
@@ -109,11 +109,18 @@ class GuardPipeline:
             first_label = result.label
             result = await self.call("drop_audit", original, audit_abuse=True)
             if result.action == "DROP":
-                if result.label == first_label:
+                if result.label != first_label:
+                    return ModerationResult(
+                        Label.REVIEW, 0, source="AI", reason="conflicting_decisions"
+                    )
+                if result.label != Label.ABUSE:
                     return result
-                return ModerationResult(
-                    Label.REVIEW, 0, source="AI", reason="conflicting_decisions"
+                runtime.metrics["abuse_rewrite_attempts"] += 1
+                result = await self.call(
+                    "abuse_rewrite", original, rewrite=True, salvage_abuse=True
                 )
+                if result.label not in {Label.REWRITE, Label.ABUSE, Label.REVIEW}:
+                    return ModerationResult(Label.REVIEW, 0, source="AI", reason="rewrite_failed")
         if result.action != "PUBLISH":
             return result
         if draft and result.label != Label.REWRITE:

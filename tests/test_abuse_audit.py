@@ -56,7 +56,7 @@ async def test_confirmed_ai_abuse_is_not_cached(model):
     model.return_value = result(Label.ABUSE)
     for message_id in (1, 2):
         assert (await moderation_service.moderate(1, message_id, TEXT)).action == "DROP"
-    assert model.await_count == 4
+    assert model.await_count == 6
     assert not runtime.cache
 
 

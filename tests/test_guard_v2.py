@@ -96,8 +96,10 @@ async def test_repair_loop_is_bounded(model):
 async def test_all_model_drops_require_audit(model, label):
     model[0].return_value = decision(label)
     assert (await moderation_service.moderate(1, 1, "unknown message")).action == "DROP"
-    assert model[0].await_count == 2
-    assert model[0].call_args.kwargs["audit_abuse"]
+    assert model[0].await_count == (3 if label == Label.ABUSE else 2)
+    assert model[0].call_args_list[1].kwargs["audit_abuse"]
+    if label == Label.ABUSE:
+        assert model[0].call_args.kwargs["salvage_abuse"]
     model[1].assert_not_awaited()
 
 

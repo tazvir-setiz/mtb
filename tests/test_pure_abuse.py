@@ -82,8 +82,8 @@ async def test_model_can_drop_other_pure_insults_without_review(ai):
     ai.return_value = validate_output('{"label":"ABUSE","confidence":0.99}', GuardSettings())
     result = await moderation_service.moderate(1, 1, "ناسزای خارج از قواعد محلی")
     assert result.action == "DROP"
-    assert ai.await_count == 2
-    assert ai.call_args.kwargs["audit_abuse"] is True
+    assert ai.await_count == 3
+    assert ai.call_args.kwargs["salvage_abuse"] is True
 
 
 def test_uncertain_ai_abuse_does_not_automatically_drop():
