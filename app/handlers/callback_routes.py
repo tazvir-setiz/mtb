@@ -8,6 +8,7 @@ from app.handlers import (
     ai_settings,
     dashboard,
     destination,
+    guard_settings,
     reviews,
     source,
     statistics,
@@ -19,6 +20,11 @@ from app.handlers import settings as settings_handlers
 CallbackHandler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
 
 CALLBACK_ROUTES: dict[tuple[str, str], CallbackHandler] = {
+    ("guard", "show"): guard_settings.show,
+    ("guard", "cycle"): guard_settings.cycle,
+    ("guard", "export"): guard_settings.export,
+    ("guard", "import"): guard_settings.ask,
+    ("guard", "apply"): guard_settings.apply,
     ("menu", "reviews"): reviews.show_pending,
     ("settings", "ai"): ai_settings.show,
     ("ai", "toggle"): ai_settings.toggle,

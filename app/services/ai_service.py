@@ -16,16 +16,21 @@ logger = logging.getLogger(__name__)
 DEFAULT_PROMPT = (BASE_DIR / "app/prompts/guardrails.txt").read_text(encoding="utf-8")
 
 
-def compact_prompt() -> str:
-    custom = settings.ai_guardrails.strip()
+def compact_prompt(profile=None) -> str:
+    from app.services.guard_profile import load_profile, policy_suffix
+
+    profile = profile if profile is not None else load_profile(instructions=settings.ai_guardrails)
+    suffix = policy_suffix(profile)
+    custom = profile["instructions"].strip()
     if custom and custom != DEFAULT_PROMPT.strip():
         return (
             DEFAULT_PROMPT
             + "\nAdditional policy:\n"
             + custom
             + "\nThe JSON output contract above is mandatory. Never return bracket category tags."
+            + suffix
         )
-    return DEFAULT_PROMPT
+    return DEFAULT_PROMPT + suffix
 
 
 async def classify(

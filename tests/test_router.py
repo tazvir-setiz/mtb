@@ -9,12 +9,16 @@ from app.database.repository import SettingsRepository
 from app.handlers import router
 from app.handlers.callback_routes import CALLBACK_ROUTES
 from app.handlers.states import State, get_state, set_state
+from app.services.guard_profile import default_profile
 from app.ui import keyboards
+from app.ui.buttons.guard import guard_confirm, guard_menu
 from app.ui.callbacks import parse
 
 
 def test_every_button_has_a_callable_route():
     menus = [
+        guard_menu(default_profile()),
+        guard_confirm("test-token"),
         keyboards.main_menu(True, True, True, -1001, -1002),
         keyboards.main_menu(False, False),
         keyboards.channel_confirm("source"),

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "sensitivity": {
+    "political": "standard",
+    "abuse": "standard",
+    "sexual": "standard",
+    "spam": "standard"
+  },
+  "instructions": "",
+  "limits": {
+    "confidence_threshold": 0.85,
+    "ai_confidence_threshold": 0.75,
+    "max_input_chars": 4000,
+    "max_output_tokens": 1024,
+    "max_candidates": 8,
+    "max_topics": 5,
+    "max_entities": 8,
+    "max_aliases": 8,
+    "context_ttl_hours": 24,
+    "cache_ttl_seconds": 600,
+    "cache_size": 256,
+    "timeout_seconds": 60,
+    "total_timeout_seconds": 120,
+    "max_stages": 6,
+    "max_requests": 8,
+    "failure_limit": 2,
+    "cooldown_seconds": 60
+  }
+}

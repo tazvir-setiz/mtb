@@ -28,6 +28,11 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     await query.answer()
     namespace, action, _arg = parse(query.data or "")
+    if namespace != "guard" and get_state(getattr(context, "user_data", {}) or {}) in (
+        State.GUARD_IMPORT,
+        State.GUARD_CONFIRM,
+    ):
+        reset(context.user_data)
     if get_state(getattr(context, "user_data", {}) or {}) in ai_settings.INPUT_FIELDS:
         reset(context.user_data)
 

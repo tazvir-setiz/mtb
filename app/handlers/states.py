@@ -4,6 +4,8 @@ from enum import Enum
 
 
 class State(str, Enum):
+    GUARD_IMPORT = "GUARD_IMPORT"
+    GUARD_CONFIRM = "GUARD_CONFIRM"
     REVIEW_EDIT = "REVIEW_EDIT"
     AI_KEY_INPUT = "AI_KEY_INPUT"
     AI_URL_INPUT = "AI_URL_INPUT"
@@ -41,6 +43,7 @@ def get_state(user_data: dict) -> State:
 
 def reset(user_data: dict) -> None:
     for key in (
+        "guard_pending",
         "review_edit",
         KEY_PENDING_CHANNEL_KIND,
         KEY_PENDING_CHANNEL,

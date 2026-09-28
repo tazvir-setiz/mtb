@@ -15,6 +15,7 @@ def settings_menu() -> InlineKeyboardMarkup:
             [_cb("✍️ امضا / زیرنویس", "settings:signature", style=STYLE_PRIMARY)],
             [_cb("👤 آیدی‌های داخل پیام", "settings:usernames", style=STYLE_PRIMARY)],
             [_cb("🤖 تنظیمات هوش مصنوعی", "settings:ai", style=STYLE_PRIMARY)],
+            [_cb("🛡 حساسیت و فایل تنظیمات گارد", "guard:show", style=STYLE_PRIMARY)],
             [_cb("⏱ فاصله ارسال", "settings:delay")],
             [_cb("🗑 پاک کردن داده‌های عملیات", "settings:clear_data", style=STYLE_DANGER)],
             [_cb("‹ بازگشت", "nav:back")],

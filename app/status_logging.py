@@ -3,8 +3,8 @@ import json
 import logging
 import time
 
-from app.guard_config import guard_settings
 from app.services.ai_settings import load_ai_settings
+from app.services.guard_profile import load_profile
 from app.services.guard_runtime import runtime
 from app.telegram import auto_forward
 
@@ -23,7 +23,7 @@ def log_status(client, started):
         ai.enabled,
         ai.model,
         bool(ai.api_key),
-        guard_settings.timeout_seconds,
+        load_profile()["limits"]["timeout_seconds"],
         json.dumps(runtime.snapshot(), sort_keys=True),
     )
 

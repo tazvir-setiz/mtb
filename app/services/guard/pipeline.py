@@ -19,7 +19,8 @@ PIPELINE_VERSION = "2"
 
 
 class GuardPipeline:
-    def __init__(self, config, limits, context, policy):
+    def __init__(self, config, limits, context, policy, disabled_labels=()):
+        self.disabled_labels = disabled_labels
         self.config, self.limits, self.context, self.policy = config, limits, context, policy
         self.provider = hashlib.sha256(
             repr((config.base_url, config.model, config.api_key)).encode()
@@ -50,7 +51,7 @@ class GuardPipeline:
         try:
             async with asyncio.timeout(limits.timeout_seconds):
                 function = ai_service.verify if stage == "verify" else ai_service.classify
-                normalized = normalize_text(text)
+                normalized = normalize_text(text, self.limits.max_candidates)
                 variants = (
                     normalized.candidates[1:3] if normalized.flags and stage != "verify" else ()
                 )
@@ -58,6 +59,8 @@ class GuardPipeline:
                     text, self.context, variants, self.config, limits, policy=self.policy, **kwargs
                 )
             runtime.failures.pop(self.provider, None)
+            if getattr(result, "label", None) in self.disabled_labels:
+                return ModerationResult(Label.REVIEW, 0, source="AI", reason="policy_mismatch")
             return result
         except (AIProcessingError, TimeoutError) as exc:
             runtime.metrics["ai_errors"] += 1

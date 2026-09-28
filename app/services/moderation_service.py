@@ -4,12 +4,13 @@ import logging
 import time
 from dataclasses import replace
 
-from app.guard_config import guard_settings
+from app.guard_config import GuardSettings, guard_settings
 from app.services import ai_service
 from app.services.ai_settings import load_ai_settings
 from app.services.context_manager import load_context, update_context
 from app.services.guard.pipeline import PIPELINE_VERSION, GuardPipeline
 from app.services.guard_models import Label, ModerationResult
+from app.services.guard_profile import custom_policy, load_profile
 from app.services.guard_runtime import runtime
 from app.services.rule_guard import evaluate_rules, political_topics
 from app.services.text_normalizer import normalize_text
@@ -51,7 +52,9 @@ async def moderate(
     started = time.monotonic()
     runtime.metrics["total_messages"] += 1
     config = load_ai_settings(ai_service.settings)
-    limits = guard_settings
+    profile = load_profile(guard_settings, instructions=ai_service.settings.ai_guardrails)
+    limits = GuardSettings(**profile["limits"])
+    policy = ai_service.compact_prompt(profile)
     if not config.enabled:
         return record_decision(
             ModerationResult(Label.OK, 1, text, "DISABLED"), chat_id, message_id, started
@@ -78,7 +81,7 @@ async def moderate(
             context,
             provider,
             vars(limits),
-            ai_service.compact_prompt(),
+            policy,
             username_replacement(),
         )
     )
@@ -86,14 +89,21 @@ async def moderate(
     if cached:
         return record_decision(cached, chat_id, message_id, started, cached=True)
     result = evaluate_rules(normalized, context)
-    custom = ai_service.settings.ai_guardrails.strip()
-    custom = bool(custom and custom != ai_service.DEFAULT_PROMPT.strip())
     if (
-        custom
+        custom_policy(profile)
         or (draft and result.label != Label.ABUSE)
         or result.confidence < limits.confidence_threshold
     ):
-        pipeline = GuardPipeline(config, limits, context, ai_service.compact_prompt())
+        categories = {
+            "political": Label.POLITICAL,
+            "abuse": Label.ABUSE,
+            "sexual": Label.PORN,
+            "spam": Label.SPAM,
+        }
+        disabled = tuple(
+            categories[name] for name, mode in profile["sensitivity"].items() if mode == "off"
+        )
+        pipeline = GuardPipeline(config, limits, context, policy, disabled_labels=disabled)
         result = await pipeline.run(text, draft=draft)
     else:
         result = finalize(result, text)

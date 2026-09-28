@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 
 from app.config import settings
-from app.handlers import reviews, start
+from app.handlers import guard_settings, reviews, start
 from app.handlers.commands import (
     command_cancel,
     command_help,
@@ -47,5 +47,6 @@ def build_application() -> Application:
     application.add_handler(CallbackQueryHandler(reviews.on_callback, pattern=r"^review:"))
     application.add_handler(CallbackQueryHandler(on_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    application.add_handler(MessageHandler(filters.Document.ALL, guard_settings.receive))
 
     return application
