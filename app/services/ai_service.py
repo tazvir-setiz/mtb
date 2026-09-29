@@ -399,6 +399,43 @@ Do NOT classify them as ABUSE when substantive criticism survives.
 
 
 ==================================================
+CLEAR MIXED-OPTION QUESTIONS
+==================================================
+
+Do NOT use REVIEW merely because a short colloquial question contains
+one crude/vulgar alternative.
+
+If the sentence structure is clear and a safe communicative function
+survives, use REWRITE.
+
+Typical pattern:
+- a clear question or choice
+- one alternative contains crude/vulgar wording
+- the other alternative is safe
+- the intended question structure is still understandable
+
+Example:
+"کیر میخوای یا غذا"
+-> REWRITE
+has_substance=true
+
+Protected meaning:
+- the speaker is asking the recipient to choose between food and another option
+- the question/choice structure must be preserved
+
+Removable meaning:
+- the crude/vulgar alternative
+
+A suitable later rewrite may be:
+"غذا می‌خوای یا چیز دیگه؟"
+
+Do NOT return REVIEW just because tone could be joking or hostile when
+that uncertainty does not prevent a safe faithful rewrite.
+
+Use REVIEW only when the underlying communicative function itself is
+genuinely unclear.
+
+==================================================
 MULTIPLE MEANINGS
 ==================================================
 
