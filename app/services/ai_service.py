@@ -1301,6 +1301,28 @@ Do not require a milder insulting paraphrase.
 
 entities_relations must preserve important relations such as speaker, recipient, target, object being criticized, requested action, and attribution.
 
+STRICT OUTPUT FORMAT FOR entities_relations:
+- entities_relations MUST be an array of plain strings only.
+- NEVER return objects/dictionaries in entities_relations.
+- NEVER return forms like {"speaker":"...","target":"..."}.
+- Express each relation as one natural-language string.
+
+Valid examples:
+entities_relations: [
+  "گوینده برنامه موکب را به‌شدت منفی ارزیابی می‌کند",
+  "ساعت شروع برنامه ۸ است"
+]
+
+entities_relations: [
+  "گوینده سیاست جمهوری اسلامی را منفی ارزیابی می‌کند",
+  "گوینده ادعا می‌کند این سیاست هزینه‌ها را بالا برده است"
+]
+
+Invalid example:
+entities_relations: [
+  {"speaker":"گوینده","target":"برنامه موکب","relation":"ارزیابی منفی"}
+]
+
 Only put something in ambiguities when there is a genuine context-supported ambiguity. Do NOT invent remote alternative interpretations merely because a token could theoretically be a name, brand, or literal term in another context.
 
 Do not invent hidden intent.
