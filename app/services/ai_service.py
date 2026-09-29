@@ -282,6 +282,26 @@ does NOT contain a protected proposition such as:
 
 The attack itself is the prohibited meaning.
 
+This rule is TARGET-NEUTRAL and also applies to politicians, public
+officials, religious figures, celebrities, and other named persons.
+
+Examples:
+
+"رئیس‌جمهور آمریکا احمق است"
+-> ABUSE
+has_substance=false
+
+"رهبر جمهوری اسلامی احمق است"
+-> ABUSE
+has_substance=false
+
+Do NOT reinterpret a bare personal insult toward a political/public
+figure as substantive political criticism merely because the target is
+political.
+
+If there is an independent criticism of a policy/action plus an insult,
+preserve the criticism and use REWRITE.
+
 
 ==================================================
 REWRITE
@@ -1226,6 +1246,51 @@ Do not protect the insulting proposition merely by translating it into a milder 
 protected_meaning: []
 removable_meaning: ["حمله و توهین مستقیم به مخاطب"]
 
+The same applies when the target is a politician or public figure.
+
+"رئیس‌جمهور آمریکا احمق است"
+protected_meaning: []
+removable_meaning: ["توهین مستقیم به یک شخص"]
+
+"رهبر جمهوری اسلامی احمق است"
+protected_meaning: []
+removable_meaning: ["توهین مستقیم به یک شخص"]
+
+Do NOT protect a milder version such as "او خیلی بد است" unless the
+original contains a separate substantive criticism beyond the insult.
+
+RELIGIOUS/POLITICAL SUBSTANTIVE CRITICISM WITH FACTS:
+When a message contains degrading wording about a religious ceremony,
+political policy, institution, or program BUT also contains independent
+substantive criticism or factual content, split them carefully.
+
+Example:
+"این برنامه موکب افتضاحه ولی ساعت شروعش ۸ است"
+protected_meaning:
+1. "گوینده برنامه موکب را به‌شدت منفی ارزیابی می‌کند"
+2. "ساعت شروع برنامه ۸ است"
+removable_meaning:
+- "افتضاح" only if policy requires neutralizing that degrading wording
+
+Example:
+"این مراسم مسخره است، مسیر حرکتش از میدان اصلی شروع می‌شود"
+protected_meaning:
+1. "گوینده مراسم را به‌شدت منفی ارزیابی می‌کند"
+2. "مسیر حرکت از میدان اصلی شروع می‌شود"
+removable_meaning:
+- "مسخره" as the degrading wording
+
+Example:
+"این سیاست جمهوری اسلامی آشغاله چون هزینه‌ها را بالا برده"
+protected_meaning:
+1. "گوینده سیاست جمهوری اسلامی را به‌شدت منفی ارزیابی می‌کند"
+2. "گوینده ادعا می‌کند این سیاست هزینه‌ها را بالا برده"
+removable_meaning:
+- "آشغال" as vulgar/degrading wording
+
+Do NOT drop the negative evaluation when a rewrite is required.
+Do NOT merge an independent factual/causal claim into the evaluation.
+
 REPORTED OR QUOTED ABUSE:
 Distinguish the reporting event from the abusive proposition.
 
@@ -1294,6 +1359,24 @@ When vulgar wording carries a legitimate negative evaluation that decomposition 
 
 MULTIPLE PROTECTED MEANINGS:
 "این غذای کـیـری خیلی گرونه" has BOTH a strong negative evaluation of the food and the factual claim that it is very expensive. A valid rewrite must preserve BOTH, e.g. "این غذا خیلی بده و خیلی گرونه". "این غذا خیلی گرونه" is invalid because it loses the negative evaluation. "این غذا خیلی بده" is invalid because it loses the price claim.
+
+The same preservation rule applies to religious and political subjects.
+Do NOT weaken or delete substantive criticism merely because the subject
+is religious or political.
+
+"این برنامه موکب افتضاحه ولی ساعت شروعش ۸ است"
+-> "این برنامه موکب خیلی بد است ولی ساعت شروعش ۸ است"
+
+"این مراسم مسخره است، مسیر حرکتش از میدان اصلی شروع می‌شود"
+-> "به نظرم این مراسم خیلی بد است، مسیر حرکتش از میدان اصلی شروع می‌شود"
+
+"این سیاست جمهوری اسلامی آشغاله چون هزینه‌ها را بالا برده"
+-> "این سیاست جمهوری اسلامی خیلی بد است چون هزینه‌ها را بالا برده"
+
+"این سیاست آمریکا آشغاله چون هزینه‌ها را بالا برده"
+-> "این سیاست آمریکا خیلی بد است چون هزینه‌ها را بالا برده"
+
+Preserve target, polarity, intensity, causal/factual claims, and numbers.
 
 OBFUSCATED OFFENSIVE WORDING:
 Obfuscation does not make prohibited wording safe. Treat spaced, punctuated, stretched, decorated, or separated offensive forms according to context. Do not copy them merely because their characters are separated.
@@ -1583,7 +1666,11 @@ async def judge_meaning(
         "abusive proposition or replace it with a milder insult. For example, if original says "
         "'او گفت «فلانی کسکش است»' and decomposition protects the reporting event, "
         "'او به فلانی توهین کرد' preserves the required meaning. "
-        "For substantive negative judgments, preserve the negative polarity/intensity when it is protected. "
+        "For substantive negative judgments, preserve the negative polarity/intensity when it is protected. " +
+        "This applies equally to criticism of religious ceremonies/programs and political policies/institutions: " +
+        "do not mark a candidate meaning_changed merely because vulgar/degrading wording was replaced by a neutral " +
+        "negative phrase such as 'خیلی بد', as long as the protected target, negative polarity/intensity, facts, " +
+        "causal claims, numbers, and relations are preserved. "
         "For example, if decomposition protects BOTH that food is strongly negatively evaluated and that "
         "it is very expensive, a candidate preserving only the price is meaning_changed. "
         "Check negation, positive/negative polarity, subject/object, questions/requests, conditions, "
