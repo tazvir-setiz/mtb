@@ -79,7 +79,7 @@ def validate_output(raw: str, limits: GuardSettings, *, original: str | None = N
         if label in {Label.OK, Label.SANITIZE, Label.REWRITE}
         else limits.confidence_threshold
     )
-    if confidence < threshold:
+    if confidence < threshold and label != Label.REWRITE:
         return ModerationResult(Label.REVIEW, confidence, source="AI", reason="low_confidence")
 
     result = ModerationResult(
