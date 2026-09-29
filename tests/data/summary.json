@@ -1,0 +1,17 @@
+{
+  "pure_abuse": 15,
+  "safe_plus_abuse": 10,
+  "substantive_negative_judgment": 12,
+  "request_plus_abuse": 10,
+  "fact_plus_abuse": 10,
+  "quoted_negated_educational": 10,
+  "false_positive_context": 12,
+  "obfuscation": 8,
+  "threat": 8,
+  "group_hate": 8,
+  "sexual_explicit": 6,
+  "spam": 8,
+  "prompt_injection": 8,
+  "safe": 17,
+  "ambiguous": 8
+}
