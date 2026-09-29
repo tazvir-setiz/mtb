@@ -17,13 +17,6 @@ class Verification:
 
 @dataclass(frozen=True)
 class RewriteDraft:
-    """
-    Output contract for the writer stage.
-
-    This object deliberately has no moderation label. The writer is not allowed
-    to decide ABUSE/OK/POLITICAL/etc. It either produces a complete candidate or
-    explains why it could not produce one.
-    """
     success: bool
     text: str | None = None
     preserved_meaning: str | None = None
@@ -35,17 +28,15 @@ def validate_verification(raw):
 
     try:
         data = response_object(raw, 6000)
-        if not isinstance(data, dict) or set(data) != {
-            "policy_pass",
-            "meaning_preserved",
-            "issues",
-            "repairable",
-        }:
+        required = {"policy_pass", "meaning_preserved", "issues"}
+        allowed = required | {"repairable"}
+
+        if not isinstance(data, dict) or not required.issubset(data) or set(data) - allowed:
             raise ValueError()
-        if any(
-            type(data[k]) is not bool for k in ("policy_pass", "meaning_preserved", "repairable")
-        ):
+
+        if any(type(data[k]) is not bool for k in ("policy_pass", "meaning_preserved")):
             raise ValueError()
+
         issues = data["issues"]
         if (
             not isinstance(issues, list)
@@ -53,11 +44,28 @@ def validate_verification(raw):
             or any(not isinstance(x, str) or not x.strip() or len(x) > 300 for x in issues)
         ):
             raise ValueError()
+
         passed = data["policy_pass"] and data["meaning_preserved"]
-        if passed and (issues or data["repairable"]) or not passed and not issues:
+
+        if "repairable" in data:
+            if type(data["repairable"]) is not bool:
+                raise ValueError()
+            repairable = data["repairable"]
+        else:
+            repairable = bool(not passed and issues)
+
+        if passed:
+            if issues:
+                raise ValueError()
+            repairable = False
+        elif not issues:
             raise ValueError()
+
         return Verification(
-            data["policy_pass"], data["meaning_preserved"], tuple(issues), data["repairable"]
+            data["policy_pass"],
+            data["meaning_preserved"],
+            tuple(issues),
+            repairable,
         )
     except OutputFormatError as exc:
         raise AIRequestError("invalid_verification", detail=exc.detail) from None

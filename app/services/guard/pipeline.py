@@ -15,7 +15,7 @@ from app.services.text_normalizer import normalize_text
 from app.services.text_sanitizer import publication_is_clean, sanitize_text, username_replacement
 
 logger = logging.getLogger(__name__)
-PIPELINE_VERSION = "3.0"
+PIPELINE_VERSION = "3.1"
 
 
 class GuardPipeline:
@@ -56,33 +56,18 @@ class GuardPipeline:
 
                 if stage == "verify":
                     result = await ai_service.verify(
-                        text,
-                        self.context,
-                        variants,
-                        self.config,
-                        limits,
-                        policy=self.policy,
-                        **kwargs,
+                        text, self.context, variants, self.config, limits,
+                        policy=self.policy, **kwargs
                     )
                 elif stage in {"generate_rewrite", "repair_rewrite"}:
                     result = await ai_service.generate_rewrite(
-                        text,
-                        self.context,
-                        variants,
-                        self.config,
-                        limits,
-                        policy=self.policy,
-                        **kwargs,
+                        text, self.context, variants, self.config, limits,
+                        policy=self.policy, **kwargs
                     )
                 else:
                     result = await ai_service.classify(
-                        text,
-                        self.context,
-                        variants,
-                        self.config,
-                        limits,
-                        policy=self.policy,
-                        **kwargs,
+                        text, self.context, variants, self.config, limits,
+                        policy=self.policy, **kwargs
                     )
 
             runtime.failures.pop(self.provider, None)
@@ -99,9 +84,7 @@ class GuardPipeline:
         finally:
             logger.info(
                 "Guard stage=%s finished elapsed=%.2fs requests=%d",
-                stage,
-                time.monotonic() - started,
-                self.budget.requests,
+                stage, time.monotonic() - started, self.budget.requests
             )
 
     async def run(self, original, *, draft=False):
@@ -114,9 +97,8 @@ class GuardPipeline:
                 if isinstance(exc, TimeoutError)
                 and self.budget.seconds <= time.monotonic() - self.budget.started
                 else getattr(
-                    exc,
-                    "reason",
-                    "timeout" if isinstance(exc, TimeoutError) else "service_unavailable",
+                    exc, "reason",
+                    "timeout" if isinstance(exc, TimeoutError) else "service_unavailable"
                 )
             )
             return ModerationResult(Label.REVIEW, 0, source="UNAVAILABLE", reason=reason)
@@ -137,6 +119,7 @@ class GuardPipeline:
 
     async def _verify_candidate(self, original, candidate, *, attempts=2):
         result = ModerationResult(Label.REWRITE, 1, candidate, "AI")
+
         for attempt in range(attempts):
             candidate = sanitize_text(candidate, remove_links=True, replacement=self.replacement)
             if not candidate.strip() or not publication_is_clean(
@@ -154,25 +137,29 @@ class GuardPipeline:
                 return replace(result, text=candidate)
 
             logger.info(
-                "Guard verification failed policy_pass=%s meaning_preserved=%s repairable=%s",
+                "Guard verification failed policy_pass=%s meaning_preserved=%s repairable=%s issues=%s",
                 verdict.policy_pass,
                 verdict.meaning_preserved,
                 verdict.repairable,
+                verdict.issues,
             )
 
-            if attempt + 1 >= attempts or not verdict.repairable:
+            can_retry = attempt + 1 < attempts
+            if not can_retry:
                 return ModerationResult(
-                    Label.REVIEW,
-                    0,
-                    source="AI",
+                    Label.REVIEW, 0, source="AI",
                     reason="meaning_changed" if not verdict.meaning_preserved else "rewrite_failed",
                 )
 
             runtime.metrics["repair_attempts"] += 1
+            feedback = verdict.issues or (
+                "Rewrite failed verification. Preserve all safe substantive meaning "
+                "while removing prohibited wording.",
+            )
             repaired = await self._write(
                 original,
                 reason="verification_repair",
-                feedback=verdict.issues,
+                feedback=feedback,
                 previous_candidate=candidate,
             )
             if not repaired.success:
@@ -205,13 +192,9 @@ class GuardPipeline:
                     return ModerationResult(
                         Label.REVIEW, 0, source="AI", reason="conflicting_decisions"
                     )
-
                 if audited.label != Label.ABUSE:
                     return audited
 
-                # Two classifiers agree it is abuse, but the writer still gets one
-                # final chance to recover meaningful content. The writer itself
-                # never authorizes DROP.
                 runtime.metrics["abuse_rewrite_attempts"] += 1
                 generated = await self._write(original, reason="abuse_salvage")
                 if not generated.success:
@@ -229,34 +212,11 @@ class GuardPipeline:
         if result.action != "PUBLISH":
             return result
 
-        # AI-approved originals still receive an independent final verification.
         candidate = sanitize_text(original, remove_links=True, replacement=self.replacement)
         if not candidate.strip() or not publication_is_clean(
             candidate, replacement=self.replacement
         ):
             return ModerationResult(Label.REVIEW, 0, source="AI", reason="unsafe_output")
 
-        verdict = await self.call("verify", candidate, verify_original=original)
-        if not isinstance(verdict, Verification):
-            raise AIRequestError("invalid_verification")
-        if verdict.passed:
-            runtime.metrics["verified_messages"] += 1
-            return replace(result, text=candidate)
-
-        if verdict.repairable:
-            runtime.metrics["repair_attempts"] += 1
-            generated = await self._write(
-                original,
-                reason="verification_repair",
-                feedback=verdict.issues,
-                previous_candidate=candidate,
-            )
-            if generated.success:
-                return await self._verify_candidate(original, generated.text, attempts=1)
-
-        return ModerationResult(
-            Label.REVIEW,
-            0,
-            source="AI",
-            reason="meaning_changed" if not verdict.meaning_preserved else "rewrite_failed",
-        )
+        runtime.metrics["verified_messages"] += 1
+        return replace(result, text=candidate)

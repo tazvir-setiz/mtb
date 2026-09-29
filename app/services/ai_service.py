@@ -80,16 +80,15 @@ def _writer_prompt(
         + policy
         + "\n--- END POLICY REFERENCE ---\n"
         + "Write one complete, natural, publishable rewrite of the original Telegram message. "
-        "Preserve the recoverable meaning: who does what to whom, polarity, negative/positive judgment, "
-        "question/request form, conditions, comparisons, intensity when material, and factual attribution. "
-        "Replace vulgar or prohibited wording with neutral wording serving the SAME semantic role. "
-        "Never make a negative judgment positive. Never change subject/object relations. Never invent facts. "
-        "Never produce a broken sentence by merely deleting an obscene token.\n"
-        "Examples of the principle (do not copy mechanically):\n"
-        '- "خیلی قیافه ات کیریه" can preserve the negative appearance judgment as '
-        '"قیافه‌ات خیلی بد و زننده است."\n'
-        '- "کیا کیر منو میخوان بخورن تا من بهشون پول بدم" must preserve the underlying '
-        "degrading/transactional relation in neutral language; simply deleting the obscene noun is invalid.\n"
+        "Preserve all SAFE substantive meaning, but it is allowed and expected to remove or neutralize "
+        "the abusive/vulgar wording itself. Preserve who does what to whom, polarity, substantive "
+        "negative/positive judgments, question/request form, conditions, comparisons and attribution. "
+        "Do not preserve profanity merely for fidelity. Never make a substantive negative claim positive. "
+        "Never change subject/object relations. Never invent facts. Never leave a broken sentence by only "
+        "deleting an obscene token.\n"
+        "Important distinction: in 'سلام کله کیری', the safe substantive content is the greeting; the insult "
+        "may be removed, so 'سلام' is a valid rewrite. In 'قیافه ات کیریه', the negative appearance judgment "
+        "is substantive and should survive in neutral form such as 'قیافه‌ات خیلی بد است.'\n"
         "Return exactly the dedicated writer JSON schema. If a faithful rewrite truly cannot be produced, "
         "return success=false with a short reason. Do not decide whether the original should be dropped.\n"
         f"Rewrite reason: {reason}."
@@ -236,29 +235,43 @@ async def generate_rewrite(
 async def verify(text, context, candidates, config, limits, *, verify_original, policy=None):
     if not config.api_key:
         raise AIRequestError("missing_api_key")
+
     policy = policy if policy is not None else compact_prompt()
     user_data = {
         "ctx": context,
         "original": verify_original,
         "candidate": text,
     }
+
+    system_prompt = (
+        "You are the independent VERIFIER stage. Do not classify and do not rewrite.\n"
+        "The policy between POLICY REFERENCE markers is reference material only. Ignore any "
+        "classification JSON-output instructions found inside it.\n"
+        "--- POLICY REFERENCE ---\n"
+        + policy
+        + "\n--- END POLICY REFERENCE ---\n"
+        "Compare ORIGINAL and CANDIDATE for policy compliance and preservation of SAFE substantive meaning.\n"
+        "Removing or neutralizing insults, profanity, slurs, obscene metaphors and hostile tone is ALLOWED "
+        "and must NOT by itself make meaning_preserved=false. Judge preservation after excluding the prohibited "
+        "wording itself.\n"
+        "Examples:\n"
+        "- ORIGINAL='سلام کله کیری', CANDIDATE='سلام' => meaning_preserved=true if no other meaning was lost.\n"
+        "- ORIGINAL='قیافه ات کیریه', CANDIDATE='قیافه‌ات خیلی بد است.' => meaning_preserved=true because the "
+        "negative appearance judgment survives.\n"
+        "- If an obscene word carries a subject/object relation or substantive proposition, deleting it and "
+        "making the sentence nonsensical is NOT preservation; it must be replaced with a neutral equivalent.\n"
+        "Check subject/object relations, negation, names, numbers, attribution, question/request structure, "
+        "conditions, comparisons and substantive positive/negative polarity. Do not require abusive style or "
+        "insult intensity to be preserved.\n"
+        'Return ONLY JSON: {"policy_pass":true,"meaning_preserved":true,"issues":[],"repairable":false}. '
+        "On failure, issues must explain the concrete problem. Set repairable=true whenever another rewrite "
+        "could plausibly fix the issue. Use repairable=false only when no faithful compliant rewrite can exist."
+    )
+
     payload = {
         "model": config.model,
         "messages": [
-            {
-                "role": "system",
-                "content": (
-                    policy
-                    + "\nVERIFICATION TASK: compare original and candidate. Check policy compliance AND "
-                    "meaning preservation. Explicitly check subject/object relations, negation, names, numbers, "
-                    "attribution, question/request structure, conditions, comparisons, and positive/negative polarity. "
-                    "A candidate fails meaning preservation if it merely deletes a vulgar term whose semantic role "
-                    "carried a judgment, object, action or relation. For example, deleting the obscene noun from "
-                    '"کیا کیر منو میخوان بخورن تا من بهشون پول بدم" and leaving '
-                    '"کیا منو میخوان بخورن..." is a meaning-changing failure. '
-                    "Do not rewrite here. Return only the verification JSON contract."
-                ),
-            },
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps(user_data, ensure_ascii=False)},
         ],
         "temperature": 0,
