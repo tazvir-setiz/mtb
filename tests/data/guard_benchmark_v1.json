@@ -2660,5 +2660,22 @@
     "ambiguities": [],
     "example_rewrite": null,
     "notes": "Peaceful support is judged by the same rule as peaceful opposition."
+  },
+  {
+    "id": "case_181",
+    "category": "clear_mixed_option_rewrite",
+    "text": "کیر میخوای یا غذا",
+    "expected_action": "SEND",
+    "expected_label": "REWRITE",
+    "protected_meaning": [
+      "question asking the recipient to choose between food and another option",
+      "choice/question structure"
+    ],
+    "removable_meaning": [
+      "crude vulgar alternative"
+    ],
+    "ambiguities": [],
+    "example_rewrite": "غذا می‌خوای یا چیز دیگه؟",
+    "notes": "Clear choice structure should be rewritten automatically instead of sent to review."
   }
 ]
