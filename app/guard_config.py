@@ -9,7 +9,7 @@ class GuardSettings:
     confidence_threshold: float = 0.85
     ai_confidence_threshold: float = 0.75
     max_input_chars: int = 4000
-    max_output_tokens: int = 1024
+    max_output_tokens: int = 1800
     max_candidates: int = 8
     max_topics: int = 5
     max_entities: int = 8
@@ -18,9 +18,9 @@ class GuardSettings:
     cache_ttl_seconds: float = 600
     cache_size: int = 256
     timeout_seconds: float = 60
-    total_timeout_seconds: float = 120
-    max_stages: int = 6
-    max_requests: int = 8
+    total_timeout_seconds: float = 150
+    max_stages: int = 12
+    max_requests: int = 12
     failure_limit: int = 2
     cooldown_seconds: float = 60
 

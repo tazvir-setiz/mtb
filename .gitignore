@@ -18,3 +18,4 @@ logs/
 *.session-journal
 *.session-wal
 *.session-shm
+/guard_benchmark_report.json

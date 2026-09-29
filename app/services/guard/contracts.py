@@ -4,124 +4,127 @@ from app.services.ai_transport import AIRequestError
 
 
 @dataclass(frozen=True)
-class Verification:
-    policy_pass: bool
-    meaning_preserved: bool
-    issues: tuple[str, ...] = ()
-    repairable: bool = False
+class MeaningDecomposition:
+    protected_meaning: tuple[str, ...]
+    removable_meaning: tuple[str, ...]
+    entities_relations: tuple[str, ...]
+    ambiguities: tuple[str, ...] = ()
 
     @property
-    def passed(self):
-        return self.policy_pass and self.meaning_preserved and not self.issues
+    def has_protected_meaning(self) -> bool:
+        return bool(self.protected_meaning)
 
 
 @dataclass(frozen=True)
 class RewriteDraft:
     success: bool
     text: str | None = None
-    preserved_meaning: str | None = None
     reason: str | None = None
 
 
-def validate_verification(raw):
-    from app.services.response_format import OutputFormatError, response_object
+@dataclass(frozen=True)
+class PolicyVerdict:
+    passed: bool
+    issues: tuple[str, ...] = ()
+    repairable: bool = False
 
+
+@dataclass(frozen=True)
+class MeaningVerdict:
+    passed: bool
+    issues: tuple[str, ...] = ()
+    repairable: bool = False
+
+
+def _response(raw, maximum=12000):
+    from app.services.response_format import response_object
+    return response_object(raw, maximum)
+
+
+def _strings(value, *, maximum=12, item_max=500):
+    if (
+        not isinstance(value, list)
+        or len(value) > maximum
+        or any(not isinstance(x, str) or not x.strip() or len(x) > item_max for x in value)
+    ):
+        raise ValueError()
+    return tuple(x.strip() for x in value)
+
+
+def validate_meaning(raw):
     try:
-        data = response_object(raw, 6000)
-        required = {"policy_pass", "meaning_preserved", "issues"}
-        allowed = required | {"repairable"}
-
-        if not isinstance(data, dict) or not required.issubset(data) or set(data) - allowed:
-            raise ValueError()
-
-        if any(type(data[k]) is not bool for k in ("policy_pass", "meaning_preserved")):
-            raise ValueError()
-
-        issues = data["issues"]
-        if (
-            not isinstance(issues, list)
-            or len(issues) > 8
-            or any(not isinstance(x, str) or not x.strip() or len(x) > 300 for x in issues)
-        ):
-            raise ValueError()
-
-        passed = data["policy_pass"] and data["meaning_preserved"]
-
-        if "repairable" in data:
-            if type(data["repairable"]) is not bool:
-                raise ValueError()
-            repairable = data["repairable"]
-        else:
-            repairable = bool(not passed and issues)
-
-        if passed:
-            if issues:
-                raise ValueError()
-            repairable = False
-        elif not issues:
-            raise ValueError()
-
-        return Verification(
-            data["policy_pass"],
-            data["meaning_preserved"],
-            tuple(issues),
-            repairable,
-        )
-    except OutputFormatError as exc:
-        raise AIRequestError("invalid_verification", detail=exc.detail) from None
-    except (ValueError, KeyError, TypeError, RecursionError):
-        raise AIRequestError("invalid_verification", detail="verification_schema") from None
-
-
-def validate_rewrite_draft(raw, max_chars: int):
-    from app.services.response_format import OutputFormatError, response_object
-
-    try:
-        data = response_object(raw, max_chars * 2 + 3000)
-        if not isinstance(data, dict) or set(data) != {
-            "success",
-            "text",
-            "preserved_meaning",
-            "reason",
+        data = _response(raw)
+        if set(data) != {
+            "protected_meaning",
+            "removable_meaning",
+            "entities_relations",
+            "ambiguities",
         }:
             raise ValueError()
+        return MeaningDecomposition(
+            _strings(data["protected_meaning"]),
+            _strings(data["removable_meaning"]),
+            _strings(data["entities_relations"]),
+            _strings(data["ambiguities"]),
+        )
+    except Exception as exc:
+        if isinstance(exc, AIRequestError):
+            raise
+        raise AIRequestError("invalid_meaning", detail="meaning_schema") from None
 
-        success = data["success"]
-        text = data["text"]
-        preserved = data["preserved_meaning"]
-        reason = data["reason"]
 
-        if type(success) is not bool:
+def validate_rewrite_draft(raw, max_chars):
+    try:
+        data = _response(raw, max_chars * 2 + 3000)
+        if set(data) != {"success", "text", "reason"} or type(data["success"]) is not bool:
             raise ValueError()
-
-        if success:
+        if data["success"]:
             if (
-                not isinstance(text, str)
-                or not text.strip()
-                or len(text) > max_chars
-                or "```" in text
+                not isinstance(data["text"], str)
+                or not data["text"].strip()
+                or len(data["text"]) > max_chars
+                or data["reason"] is not None
             ):
-                raise ValueError()
-            if (
-                not isinstance(preserved, str)
-                or not preserved.strip()
-                or len(preserved) > 600
-            ):
-                raise ValueError()
-            if reason is not None:
                 raise ValueError()
         else:
-            if text is not None or preserved is not None:
+            if data["text"] is not None or not isinstance(data["reason"], str) or not data["reason"].strip():
                 raise ValueError()
-            if (
-                not isinstance(reason, str)
-                or not reason.strip()
-                or len(reason) > 300
-            ):
-                raise ValueError()
-
-        return RewriteDraft(success, text, preserved, reason)
-    except OutputFormatError as exc:
-        raise AIRequestError("invalid_rewrite", detail=exc.detail) from None
-    except (ValueError, KeyError, TypeError, RecursionError):
+        return RewriteDraft(data["success"], data["text"], data["reason"])
+    except Exception as exc:
+        if isinstance(exc, AIRequestError):
+            raise
         raise AIRequestError("invalid_rewrite", detail="rewrite_schema") from None
+
+
+def _validate_judge(raw, cls, reason):
+    try:
+        data = _response(raw, 6000)
+        required = {"passed", "issues"}
+        allowed = required | {"repairable"}
+        if not required.issubset(data) or set(data) - allowed:
+            raise ValueError()
+        if type(data["passed"]) is not bool:
+            raise ValueError()
+        issues = _strings(data["issues"], maximum=8, item_max=300)
+        repairable = data.get("repairable", bool(not data["passed"] and issues))
+        if type(repairable) is not bool:
+            raise ValueError()
+        if data["passed"] and issues:
+            raise ValueError()
+        if not data["passed"] and not issues:
+            raise ValueError()
+        if data["passed"]:
+            repairable = False
+        return cls(data["passed"], issues, repairable)
+    except Exception as exc:
+        if isinstance(exc, AIRequestError):
+            raise
+        raise AIRequestError(reason, detail="judge_schema") from None
+
+
+def validate_policy_verdict(raw):
+    return _validate_judge(raw, PolicyVerdict, "invalid_policy_verdict")
+
+
+def validate_meaning_verdict(raw):
+    return _validate_judge(raw, MeaningVerdict, "invalid_meaning_verdict")

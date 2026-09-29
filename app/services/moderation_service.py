@@ -25,70 +25,51 @@ def fingerprint(value) -> str:
     ).hexdigest()
 
 
-def record_decision(result: ModerationResult, chat_id, message_id, started: float, cached=False):
+def record_decision(result, chat_id, message_id, started, cached=False):
     counts = runtime.metrics
     counts["cache_hits" if cached else f"{result.source.lower()}_decisions"] += 1
     counts["blocked_messages"] += result.action == "DROP"
     counts["review_messages"] += result.action == "REVIEW"
-    counts["sanitized_messages"] += result.label == Label.SANITIZE
     logger.info(
-        "Guard decision chat_id=%s message_id=%s source=%s label=%s confidence=%.2f cached=%s elapsed=%.2fs ai_call_ratio=%.3f action=%s",
-        chat_id,
-        message_id,
-        result.source,
-        result.label.value,
-        result.confidence,
-        cached,
-        time.monotonic() - started,
-        runtime.snapshot()["ai_call_ratio"],
-        result.action,
+        "Guard decision chat_id=%s message_id=%s source=%s label=%s confidence=%.2f "
+        "cached=%s elapsed=%.2fs ai_call_ratio=%.3f action=%s",
+        chat_id, message_id, result.source, result.label.value, result.confidence,
+        cached, time.monotonic() - started, runtime.snapshot()["ai_call_ratio"], result.action
     )
     return result
 
 
-async def moderate(
-    chat_id: int | None, message_id: int | None, text: str, *, draft=False
-) -> ModerationResult:
+async def moderate(chat_id, message_id, text, *, draft=False):
     started = time.monotonic()
     runtime.metrics["total_messages"] += 1
     config = load_ai_settings(ai_service.settings)
     profile = load_profile(guard_settings, instructions=ai_service.settings.ai_guardrails)
     limits = GuardSettings(**profile["limits"])
     policy = ai_service.compact_prompt(profile)
+
     if not config.enabled:
-        return record_decision(
-            ModerationResult(Label.OK, 1, text, "DISABLED"), chat_id, message_id, started
-        )
+        return record_decision(ModerationResult(Label.OK, 1, text, "DISABLED"), chat_id, message_id, started)
+
     if len(text) > limits.max_input_chars:
-        logger.warning(
-            "Guard review reason=input_too_long chars=%d limit=%d",
-            len(text),
-            limits.max_input_chars,
-        )
         return record_decision(
-            ModerationResult(Label.REVIEW, 1, reason="input_too_long"), chat_id, message_id, started
+            ModerationResult(Label.REVIEW, 1, reason="input_too_long"),
+            chat_id, message_id, started
         )
 
     normalized = normalize_text(text, limits.max_candidates)
     context = load_context(chat_id, limits)
     provider = fingerprint((config.base_url, config.model, config.api_key))
-    key = fingerprint(
-        (
-            PIPELINE_VERSION,
-            chat_id,
-            text,
-            normalized.normalized,
-            context,
-            provider,
-            vars(limits),
-            policy,
-            username_replacement(),
-        )
-    )
+    key = fingerprint((
+        PIPELINE_VERSION, chat_id, text, normalized.normalized,
+        context, provider, vars(limits), policy, username_replacement(),
+    ))
+
     cached = runtime.cached(key) if not draft else None
     if cached:
         return record_decision(cached, chat_id, message_id, started, cached=True)
+
     result = evaluate_rules(normalized, context)
+
     if (
         custom_policy(profile)
         or (draft and result.label != Label.ABUSE)
@@ -101,37 +82,38 @@ async def moderate(
             "spam": Label.SPAM,
         }
         disabled = tuple(
-            categories[name] for name, mode in profile["sensitivity"].items() if mode == "off"
+            categories[name]
+            for name, mode in profile["sensitivity"].items()
+            if mode == "off"
         )
         pipeline = GuardPipeline(config, limits, context, policy, disabled_labels=disabled)
         result = await pipeline.run(text, draft=draft)
     else:
         result = finalize(result, text)
+
     remember_context(result, chat_id, normalized.normalized, limits)
+
     if not draft and result.action == "PUBLISH":
         runtime.remember(key, result, limits.cache_ttl_seconds, limits.cache_size)
+
     return record_decision(result, chat_id, message_id, started)
 
 
-def finalize(result: ModerationResult, text: str) -> ModerationResult:
+def finalize(result, text):
     if result.action == "PUBLISH":
         approved = result.text if result.label == Label.REWRITE else text
         clean = sanitize_text(approved, remove_links=True)
         if not publication_is_clean(clean):
-            logger.warning("Guard review reason=output_failed_final_sanitization")
             result = ModerationResult(Label.REVIEW, 0, source=result.source, reason="unsafe_output")
         else:
             result = replace(result, text=clean)
     return result
 
 
-def remember_context(result: ModerationResult, chat_id, text: str, limits) -> None:
+def remember_context(result, chat_id, text, limits):
     if result.confidence >= limits.confidence_threshold and result.label not in {
-        Label.INJECTION,
-        Label.SPAM,
-        Label.PORN,
-        Label.ABUSE,
-        Label.REVIEW,
+        Label.INJECTION, Label.SPAM, Label.PORN, Label.ABUSE,
+        Label.HATE, Label.THREAT, Label.REVIEW,
     }:
         change = dict(result.context_update)
         if result.label == Label.POLITICAL:
