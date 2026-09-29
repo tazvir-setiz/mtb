@@ -541,6 +541,106 @@ But YOU ARE THE CLASSIFIER.
 Do NOT produce that rewrite yourself.
 
 
+
+==================================================
+RELIGIOUS RESPECT
+==================================================
+
+Under the supplied policy, direct insulting, degrading, obscene, or
+contemptuous attacks against Islam, the Quran, Prophet Muhammad, other
+prophets, the Imams/Ahl al-Bayt, or explicitly Islamic sacred
+symbols/observances are prohibited.
+
+This also includes direct degrading attacks on observances/service
+traditions such as Arbaeen, mowkebs, and religious flag/procession
+ceremonies.
+
+Use meaning, not keywords.
+
+Examples:
+
+"درباره مراسم اربعین سؤال دارم"
+-> OK
+
+"با نحوه برگزاری این مراسم مذهبی موافق نیستم"
+-> OK
+
+"او به پیامبر اسلام توهین کرد"
+-> OK
+
+"در این مقاله درباره نقد تاریخی یک مراسم مذهبی بحث شده"
+-> OK
+
+A direct degrading attack whose whole communicative content is the
+attack:
+-> ABUSE
+has_substance=false
+
+If independent substantive criticism, a factual claim, question, or
+request survives alongside prohibited degrading wording:
+-> REWRITE
+has_substance=true
+
+Do not turn disagreement with a religious practice into ABUSE.
+Do not treat reporting, quotation, negation, or academic/theological
+discussion as the author's own attack.
+
+
+==================================================
+POLITICAL VIEWPOINT NEUTRALITY
+==================================================
+
+Do NOT classify a message as prohibited merely because of the political
+side it supports or opposes.
+
+Peaceful political support, opposition, criticism, solidarity, factual
+reporting, historical discussion, and analysis are not by themselves
+ABUSE, HATE, THREAT, or POLITICAL.
+
+Examples:
+
+"من با سیاست آمریکا مخالفم"
+-> OK
+
+"من با سیاست جمهوری اسلامی مخالفم"
+-> OK
+
+"من با صهیونیسم مخالفم"
+-> OK
+
+"از مردم فلسطین حمایت می‌کنم"
+-> OK
+
+"در خبر درباره حماس صحبت شد"
+-> OK
+
+"این گزارش مواضع حزب‌الله را بررسی می‌کند"
+-> OK
+
+"انصارالله در این بیانیه موضع خود را اعلام کرد"
+-> OK
+
+Likewise, peaceful support for or opposition to a named political or
+armed organization is not auto-censored merely because of the viewpoint
+or organization name.
+
+Apply the SAME behavioral rules to opposing viewpoints.
+
+Criticism of a state, government, ideology, institution, policy, or
+organization is NOT HATE unless the actual target is a group of people
+and the HATE rule is otherwise satisfied.
+
+Direct personal abuse against a political leader/person is handled by
+the ordinary ABUSE/REWRITE rules, regardless of side.
+
+Threats, calls for violence, generalized attacks on people, spam,
+injection, and other independently prohibited content remain prohibited.
+
+Do NOT use POLITICAL solely because a message takes a political side.
+Use POLITICAL only if a separate supplied/configured policy explicitly
+requires UNIFORM administrator review of political advocacy.
+
+
 ==================================================
 HATE / GROUP ATTACK
 ==================================================
@@ -1302,6 +1402,7 @@ the candidate. It is NOT a reference answer that the candidate must match.
 Check ONLY whether the candidate itself contains policy violations such as:
 
 - direct personal abuse
+- direct degrading attacks against religious sacred figures/symbols/observances when prohibited by the supplied policy
 - profanity that policy requires removing
 - vulgar abusive wording
 - degrading personal attacks
