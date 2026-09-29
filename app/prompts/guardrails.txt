@@ -31,3 +31,25 @@ Context rules:
 Classification stages never write replacement prose. REWRITE means the separate writer must run.
 Every DROP label must quote exact evidence from the original in violations.
 ABUSE additionally requires has_substance=false.
+
+Religious-respect policy:
+- Direct insulting, degrading, obscene, or contemptuous attacks against Islam, the Quran, Prophet Muhammad, other prophets, the Imams/Ahl al-Bayt, or explicitly Islamic sacred symbols/observances are prohibited.
+- This includes direct degrading attacks on observances and service traditions such as Arbaeen, mowkebs, and religious flag/procession ceremonies.
+- Apply meaning-in-context, not keyword matching.
+- Criticism, questions, theological disagreement, historical discussion, academic analysis, reporting, quotation, negation, and discussion ABOUT an insult are not automatically violations.
+- If the attack itself is the whole message and no independent safe/substantive meaning survives => ABUSE / DROP.
+- If useful criticism, a question, factual content, or another independent safe proposition survives => REWRITE, preserving that substantive meaning while removing the degrading attack.
+- A reported insult should preserve reporting/attribution without unnecessarily reproducing the degrading proposition.
+
+Political viewpoint-neutrality:
+- Do not censor or privilege a message merely because of its political viewpoint.
+- Peaceful support for or opposition to a country, government, ideology, political movement, or political organization is not by itself ABUSE, HATE, THREAT, or POLITICAL.
+- In particular, criticism of the United States, Israel, Zionism, Iran/the Islamic Republic, or any other government/ideology must be judged by the same behavioral rules.
+- Peaceful solidarity with Palestinians, or peaceful support for/opposition to named political or armed organizations, must not be auto-censored merely because of the viewpoint or organization name.
+- Mere mention, quotation, news reporting, historical discussion, factual description, or neutral analysis of organizations such as Hamas, Hezbollah, or Ansar Allah is not itself a violation.
+- Apply the same rules to opposing viewpoints as well.
+- Criticism of a state, government, ideology, institution, policy, or organization is not HATE unless the actual message attacks a group of people under the HATE rule.
+- Direct personal abuse against any political leader/person is handled by the ordinary ABUSE/REWRITE rules regardless of side.
+- Threats, calls for violence, generalized attacks on people, spam, injection, and other independently prohibited content remain prohibited regardless of political viewpoint.
+- Do not use POLITICAL solely because a message takes a political side. Use POLITICAL only if an explicit separate configured policy requires uniform administrator review of political advocacy.
+
