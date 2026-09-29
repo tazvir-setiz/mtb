@@ -23,8 +23,10 @@ def validate_output(
             "ambiguities",
         }:
             raise ValueError()
+
         detail = "label"
         label = Label(data["label"])
+
         detail = "confidence"
         confidence = data["confidence"]
         if (
@@ -33,16 +35,19 @@ def validate_output(
             or not 0 <= confidence <= 1
         ):
             raise ValueError()
-        detail = "rewrite_text"
+
+        # Classification and writing are deliberately separated. A classifier
+        # may request REWRITE but may never provide the rewritten text.
+        detail = "classification_text"
         text = data.get("text")
-        if text is not None and (not isinstance(text, str) or len(text) > limits.max_input_chars):
+        if text is not None:
             raise ValueError()
-        if label == Label.REWRITE and (not text or not text.strip() or "```" in text):
-            raise ValueError()
+
         detail = "has_substance"
         substance = data.get("has_substance")
         if substance is not None and type(substance) is not bool:
             raise ValueError()
+
         detail = "ambiguities"
         ambiguities = data.get("ambiguities") if data.get("ambiguities") is not None else []
         if (
@@ -54,6 +59,7 @@ def validate_output(
             )
         ):
             raise ValueError()
+
         detail = "violations"
         violations = data.get("violations") if data.get("violations") is not None else []
         if not isinstance(violations, list) or len(violations) > 8:
@@ -73,6 +79,7 @@ def validate_output(
             if original is not None and quote not in original:
                 raise ValueError()
             evidence.append((rule, quote))
+
         detail = "context_update"
         update = data.get("context_update") if data.get("context_update") is not None else {}
         if not isinstance(update, dict) or set(update) - {
@@ -104,6 +111,7 @@ def validate_output(
         raise
     except (ValueError, TypeError, KeyError, RecursionError):
         raise OutputFormatError(detail) from None
+
     threshold = (
         limits.ai_confidence_threshold
         if label in {Label.OK, Label.SANITIZE, Label.REWRITE}
@@ -111,20 +119,23 @@ def validate_output(
     )
     if confidence < threshold:
         return ModerationResult(Label.REVIEW, confidence, source="AI", reason="low_confidence")
+
     result = ModerationResult(
         label,
         confidence,
-        text,
+        None,
         "AI",
         update,
         violations=tuple(evidence),
         has_substance=substance,
         ambiguities=tuple(ambiguities),
     )
+
     if (
         original is not None
         and result.action == "DROP"
         and (not evidence or (label == Label.ABUSE and substance is not False))
     ):
         return ModerationResult(Label.REVIEW, confidence, source="AI", reason="missing_evidence")
+
     return result

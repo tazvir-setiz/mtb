@@ -31,11 +31,15 @@ SPAM = (
     "referral bonus",
 )
 ABUSE = ("کیر", "کس ننت", "کسکش", "fuck", "koskesh")
+
+# Only unmistakable standalone insults are locally dropped. Ambiguous or
+# semantically richer vulgar sentences go to AI classification/rewrite.
 PURE_ABUSE = re.compile(
     r"(?:(?:تو|شما|خیلی|واقعا|عجب|ای|یه|یک)\s+)*"
-    r"(?:کسکش(?:ی)?|کیر|کس ننت|fuck you|koskesh)"
+    r"(?:کسکش(?:ی)?|کس ننت|fuck you|koskesh)"
     r"(?:\s+(?:هستی|هستید|هستین|ای|خیلی))*[.!،؟!?\s]*"
 )
+
 POLITICAL = ("حکومت", "دولت", "انتخابات", "اعتراض", "government", "protest", "election")
 EDUCATIONAL = re.compile(
     r"آموزش|مقاله|گزارش|نمونه|نقل|حمله|نباید|نکن|هشدار|example|article|attack|report|security|quote|\bnot\b|\bnever\b|don't|warning",
@@ -80,6 +84,7 @@ def evaluate_rules(text: NormalizedText, context: dict) -> ModerationResult:
         return ModerationResult(Label.ABUSE, 0.99, reason="pure_abuse")
     if contains_phrase(text, ABUSE) or text.flags:
         return ModerationResult(Label.REVIEW, 0.3)
+
     plain = visible_text(text.original)
     plain = MARKDOWN_LINK.sub(r"\1", plain)
     clean = normalize(USERNAME.sub("", URL.sub("", plain)))
