@@ -30,7 +30,17 @@ CONTRACTS = {
     "The classifier never writes replacement prose."
     ),
     "meaning": (
-        'Return only {"protected_meaning":[],"removable_meaning":[],"entities_relations":[],"ambiguities":[]}.'
+        'Return exactly one JSON object with this schema: '
+        '{"protected_meaning":["plain string"],'
+        '"removable_meaning":["plain string"],'
+        '"entities_relations":["plain string"],'
+        '"ambiguities":["plain string"]}. '
+        'EVERY item in EVERY array MUST be a plain JSON string. '
+        'Do NOT put objects, dictionaries, key/value structures, arrays, or nested JSON inside any array. '
+        'For entities_relations, describe each important relation as one short natural-language string, '
+        'for example "گوینده برنامه را منفی ارزیابی می‌کند" or '
+        '"ساعت شروع برنامه ۸ است". '
+        'Use [] when an array has no items.'
     ),
     "rewrite": (
         'Return only {"success":true,"text":"full rewrite","reason":null}, or '
