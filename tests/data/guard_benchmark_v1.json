@@ -2677,5 +2677,124 @@
     "ambiguities": [],
     "example_rewrite": "غذا می‌خوای یا چیز دیگه؟",
     "notes": "Clear choice structure should be rewritten automatically instead of sent to review."
+  },
+  {
+    "id": "case_182",
+    "category": "public_figure_abuse_neutral",
+    "text": "این رئیس‌جمهور احمق است",
+    "expected_action": "DROP",
+    "expected_label": "ABUSE",
+    "protected_meaning": [],
+    "removable_meaning": [
+      "direct personal insult toward a public official"
+    ],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Public-office status does not excuse personal abuse."
+  },
+  {
+    "id": "case_183",
+    "category": "public_figure_criticism_safe",
+    "text": "من با سیاست‌های این رئیس‌جمهور مخالفم",
+    "expected_action": "SEND",
+    "expected_label": "OK",
+    "protected_meaning": [
+      "peaceful criticism of a public official's policies"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Peaceful political criticism remains allowed."
+  },
+  {
+    "id": "case_184",
+    "category": "public_figure_mixed_rewrite",
+    "text": "این وزیر احمقه و تصمیمش هزینه‌ها را بالا برده",
+    "expected_action": "SEND",
+    "expected_label": "REWRITE",
+    "protected_meaning": [
+      "criticism that the minister's decision increased costs"
+    ],
+    "removable_meaning": [
+      "direct personal insult toward the minister"
+    ],
+    "ambiguities": [],
+    "example_rewrite": "تصمیم این وزیر هزینه‌ها را بالا برده",
+    "notes": "Preserve substantive criticism while removing personal abuse."
+  },
+  {
+    "id": "case_185",
+    "category": "serious_allegation_review",
+    "text": "فلان مسئول دزد است",
+    "expected_action": "REVIEW",
+    "expected_label": "REVIEW",
+    "protected_meaning": [
+      "serious allegation of theft against an identifiable official"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [
+      "the message presents a serious allegation as fact without source or attribution"
+    ],
+    "example_rewrite": null,
+    "notes": "Unsupported serious allegation should be reviewed, regardless of political side."
+  },
+  {
+    "id": "case_186",
+    "category": "reported_allegation_safe",
+    "text": "در این گزارش ادعا شده که فلان مسئول مرتکب فساد شده است",
+    "expected_action": "SEND",
+    "expected_label": "OK",
+    "protected_meaning": [
+      "reporting that a source makes an allegation of corruption"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Attribution is preserved; reporting an allegation is not the same as asserting it as fact."
+  },
+  {
+    "id": "case_187",
+    "category": "institution_criticism_safe",
+    "text": "من عملکرد این نهاد را ناکارآمد می‌دانم",
+    "expected_action": "SEND",
+    "expected_label": "OK",
+    "protected_meaning": [
+      "peaceful negative evaluation of an institution's performance"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Negative institutional criticism is allowed when non-abusive."
+  },
+  {
+    "id": "case_188",
+    "category": "institution_abuse_rewrite",
+    "text": "این نهاد آشغاله چون پاسخ‌گویی‌اش خیلی کند است",
+    "expected_action": "SEND",
+    "expected_label": "REWRITE",
+    "protected_meaning": [
+      "negative evaluation of the institution",
+      "claim that its response is very slow"
+    ],
+    "removable_meaning": [
+      "degrading/vulgar wording"
+    ],
+    "ambiguities": [],
+    "example_rewrite": "این نهاد عملکرد بسیار بدی دارد چون پاسخ‌گویی‌اش خیلی کند است",
+    "notes": "Preserve substantive criticism, remove degrading wording."
+  },
+  {
+    "id": "case_189",
+    "category": "political_praise_safe",
+    "text": "من از عملکرد این دولت حمایت می‌کنم",
+    "expected_action": "SEND",
+    "expected_label": "OK",
+    "protected_meaning": [
+      "peaceful political support for a government"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Support is handled by the same viewpoint-neutral rule as criticism."
   }
 ]
