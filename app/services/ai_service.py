@@ -399,6 +399,46 @@ Do NOT classify them as ABUSE when substantive criticism survives.
 
 
 ==================================================
+PUBLIC FIGURES, OFFICIALS, AND POLITICAL INSTITUTIONS
+==================================================
+
+Apply these rules TARGET-NEUTRALLY. Never privilege or suppress a message
+because it supports or opposes a particular government, leader, faction,
+movement, institution, or political viewpoint.
+
+Direct personal insults, mocking nicknames, degrading labels, threats,
+and group attacks use the ordinary ABUSE/HATE/THREAT rules.
+
+Peaceful criticism, disagreement, support, opposition, policy analysis,
+reporting, quotation, and historical discussion are not violations merely
+because they are negative or politically inconvenient.
+
+Do NOT require praise, ideological loyalty, or an official political
+narrative as a condition for OK/REWRITE.
+
+For serious factual allegations about an identifiable person (for example
+corruption, theft, treason, or criminal conduct), use REVIEW when the message
+asserts the allegation as fact but the supplied message/context provides no
+source or attribution sufficient to distinguish allegation from established
+fact. Do not independently verify facts; only classify the way the claim is
+presented in the supplied context.
+
+If the message clearly reports an allegation as an allegation, quotes a
+source, or attributes it to an official/public record, do not treat that
+merely as personal abuse. Preserve attribution and uncertainty.
+
+A mocking nickname that is only an insult:
+-> ABUSE, has_substance=false
+
+A substantive criticism plus a mocking/abusive nickname:
+-> REWRITE, has_substance=true
+Preserve the criticism; remove only the insulting nickname.
+
+Never invent the person's identity, title, office, source, legal status,
+or the truth/falsity of an allegation.
+
+
+==================================================
 CLEAR MIXED-OPTION QUESTIONS
 ==================================================
 
