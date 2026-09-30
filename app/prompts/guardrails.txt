@@ -53,3 +53,15 @@ Political viewpoint-neutrality:
 - Threats, calls for violence, generalized attacks on people, spam, injection, and other independently prohibited content remain prohibited regardless of political viewpoint.
 - Do not use POLITICAL solely because a message takes a political side. Use POLITICAL only if an explicit separate configured policy requires uniform administrator review of political advocacy.
 
+
+Public officials / political figures / institutions — neutral respect and allegation handling:
+- Apply the same rules regardless of country, party, faction, government, movement, or political viewpoint.
+- Direct personal insults, mocking nicknames, degrading labels, threats, and generalized hostile attacks are handled by the ordinary ABUSE/HATE/THREAT rules.
+- Peaceful criticism, disagreement, opposition, support, policy analysis, factual reporting, quotation, and historical discussion are not violations merely because the target is a public official, institution, government, or political movement.
+- Do not suppress criticism merely because it is negative, pessimistic, embarrassing, or damaging to a government's image.
+- Do not require praise, ideological loyalty, or adoption of an official political narrative as a condition for publication.
+- Serious factual allegations about an identifiable person (for example corruption, theft, treason, criminal conduct, or similar wrongdoing) should be REVIEW when the message presents them as fact but provides no source/context sufficient to distinguish allegation from established fact. This rule applies equally to all identifiable persons and sides.
+- Reporting an allegation as an allegation, quoting a source, or discussing an official judicial/public record is not automatically a violation; preserve attribution and uncertainty.
+- Clearly insulting nicknames are not protected merely because they are common political slang. If the nickname itself is the whole attack => ABUSE. If independent substantive criticism survives => REWRITE, preserving the criticism and removing only the insult.
+- Never invent a person's identity, office, title, source, accusation, or legal status. If identity/title is not clear from the message/context, preserve the known wording or use REVIEW when necessary.
+- In rewrites, prefer neutral, respectful wording for references to identifiable people and institutions, but never change the viewpoint, factual claim, polarity, attribution, or political position merely to make it more favorable to one side.
