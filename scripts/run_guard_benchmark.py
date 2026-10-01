@@ -8,8 +8,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.services.moderation_service import moderate
-
 
 def action_name(result):
     return "SEND" if result.action == "PUBLISH" else result.action
@@ -21,6 +19,8 @@ async def run(
     limit: int | None,
     start: int = 1,
 ):
+    from app.services.moderation_service import moderate
+
     cases = json.loads(path.read_text(encoding="utf-8"))
 
     # --start is 1-based:
@@ -51,10 +51,7 @@ async def run(
         actual_action = action_name(result)
         actual_label = result.label.value
 
-        passed = (
-            actual_action == case["expected_action"]
-            and actual_label == case["expected_label"]
-        )
+        passed = actual_action == case["expected_action"] and actual_label == case["expected_label"]
 
         counts["passed" if passed else "failed"] += 1
         counts[f"expected_{case['expected_action']}"] += 1
@@ -88,11 +85,7 @@ async def run(
         "total": len(cases),
         "passed": counts["passed"],
         "failed": counts["failed"],
-        "pass_rate": (
-            round(counts["passed"] / len(cases), 4)
-            if cases
-            else 0
-        ),
+        "pass_rate": (round(counts["passed"] / len(cases), 4) if cases else 0),
         "counts": dict(counts),
         "results": results,
     }
@@ -107,10 +100,7 @@ async def run(
     )
 
     print(f"\nReport: {output}")
-    print(
-        f"Passed: {report['passed']}/{report['total']} "
-        f"({report['pass_rate']:.1%})"
-    )
+    print(f"Passed: {report['passed']}/{report['total']} ({report['pass_rate']:.1%})")
 
 
 if __name__ == "__main__":

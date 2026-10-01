@@ -2,12 +2,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from guard_mocks import mock_guard
 
 from app.guard_config import GuardSettings
-from app.services import ai_service, moderation_service, review_store
+from app.services import moderation_service, review_store
 from app.services.ai_settings import save_ai_value
 from app.services.context_manager import update_context
-from app.services.guard.contracts import Verification
+from app.services.guard.contracts import (
+    RewriteDraft,
+)
 from app.services.guard_models import Label, ModerationResult
 from app.services.output_validator import validate_output
 from app.services.rule_guard import evaluate_rules
@@ -19,11 +22,7 @@ from app.telegram import message_sender
 def ai(monkeypatch):
     save_ai_value("enabled", "true")
     save_ai_value("api_key", "test-key")
-    mock = AsyncMock()
-    monkeypatch.setattr(ai_service, "classify", mock)
-    mock.verifier = AsyncMock(return_value=Verification(True, True))
-    monkeypatch.setattr(ai_service, "verify", mock.verifier)
-    return mock
+    return mock_guard(monkeypatch)
 
 
 @pytest.mark.asyncio
@@ -82,8 +81,9 @@ async def test_model_can_drop_other_pure_insults_without_review(ai):
     ai.return_value = validate_output('{"label":"ABUSE","confidence":0.99}', GuardSettings())
     result = await moderation_service.moderate(1, 1, "ناسزای خارج از قواعد محلی")
     assert result.action == "DROP"
-    assert ai.await_count == 3
-    assert ai.call_args.kwargs["salvage_abuse"] is True
+    assert ai.await_count == 2
+    assert ai.call_args.kwargs["audit_drop"] is True
+    ai.writer.assert_not_awaited()
 
 
 def test_uncertain_ai_abuse_does_not_automatically_drop():
@@ -97,8 +97,10 @@ async def test_substantive_abusive_message_still_gets_verified_rewrite(ai):
         ModerationResult(Label.REWRITE, 0.99, "خیلی دوستت دارم.", "AI"),
         ModerationResult(Label.OK, 0.99, source="AI"),
     ]
+    ai.writer.return_value = RewriteDraft(True, "خیلی دوستت دارم.")
     result = await moderation_service.moderate(1, 1, "خیلی دوستت دارم مثل کیر")
     assert result.action == "PUBLISH"
     assert result.text == "خیلی دوستت دارم."
     assert ai.await_count == 1
-    ai.verifier.assert_awaited_once()
+    ai.policy.assert_awaited_once()
+    ai.semantic.assert_awaited_once()

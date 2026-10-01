@@ -6,18 +6,26 @@ from app.services.response_format import OutputFormatError, response_object
 from app.services.response_format import unique_fields as unique_fields
 
 
-def validate_output(raw: str, limits: GuardSettings, *, original: str | None = None) -> ModerationResult:
+def validate_output(
+    raw: str, limits: GuardSettings, *, original: str | None = None
+) -> ModerationResult:
     detail = "schema"
     try:
         data = response_object(raw, limits.max_input_chars * 2 + 3000)
         allowed = {
-            "label", "confidence", "text", "context_update",
-            "violations", "has_substance", "ambiguities",
+            "label",
+            "confidence",
+            "text",
+            "context_update",
+            "violations",
+            "has_substance",
+            "ambiguities",
         }
         if set(data) - allowed:
             detail = "unknown_fields"
             raise ValueError()
 
+        detail = "label"
         label = Label(data["label"])
         confidence = data["confidence"]
         if (
@@ -38,7 +46,7 @@ def validate_output(raw: str, limits: GuardSettings, *, original: str | None = N
             detail = "has_substance"
             raise ValueError()
 
-        ambiguities = data.get("ambiguities") or []
+        ambiguities = data.get("ambiguities") if data.get("ambiguities") is not None else []
         if (
             not isinstance(ambiguities, list)
             or len(ambiguities) > 8
@@ -47,10 +55,11 @@ def validate_output(raw: str, limits: GuardSettings, *, original: str | None = N
             detail = "ambiguities"
             raise ValueError()
 
-        violations = data.get("violations") or []
+        violations = data.get("violations") if data.get("violations") is not None else []
         if not isinstance(violations, list) or len(violations) > 8:
             detail = "violations"
             raise ValueError()
+        detail = "violations"
         evidence = []
         for item in violations:
             if not isinstance(item, dict) or set(item) != {"rule_id", "evidence"}:
@@ -62,9 +71,12 @@ def validate_output(raw: str, limits: GuardSettings, *, original: str | None = N
                 raise ValueError()
             evidence.append((rule, quote))
 
-        update = data.get("context_update") or {}
+        update = data.get("context_update") if data.get("context_update") is not None else {}
         if not isinstance(update, dict) or set(update) - {
-            "political", "topics_add", "entities_add", "aliases_add"
+            "political",
+            "topics_add",
+            "entities_add",
+            "aliases_add",
         }:
             detail = "context_update"
             raise ValueError()

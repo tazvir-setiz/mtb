@@ -8,9 +8,10 @@ import httpx
 import pytest
 
 from app.guard_config import GuardSettings
-from app.services.ai_service import classify
+from app.services.ai_service import classify, generate_rewrite
 from app.services.ai_settings import AISettings
 from app.services.ai_transport import AIRequestError, model_options, post_completion
+from app.services.guard.contracts import MeaningDecomposition
 
 CONFIG = AISettings(
     True, "private-test-key", "https://api.avalai.ir/v1/chat/completions", "deepseek-v4.1-flash"
@@ -78,7 +79,11 @@ async def test_reasoning_only_response_has_specific_failure(monkeypatch, finish,
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rewrite", [False, True])
 async def test_rewrite_request_disables_thinking_and_keeps_output(monkeypatch, rewrite):
-    result = {"label": "REWRITE", "confidence": 0.9, "text": "خیلی دوستت دارم."}
+    result = (
+        {"success": True, "text": "خیلی دوستت دارم.", "reason": None}
+        if rewrite
+        else {"label": "REWRITE", "confidence": 0.9, "text": None}
+    )
     response = httpx.Response(
         200,
         request=httpx.Request("POST", CONFIG.base_url),
@@ -87,12 +92,19 @@ async def test_rewrite_request_disables_thinking_and_keeps_output(monkeypatch, r
     manager = AsyncMock()
     manager.__aenter__.return_value.post.return_value = response
     monkeypatch.setattr("app.services.ai_service.httpx.AsyncClient", lambda **_: manager)
-    output = await classify(
-        "خیلی دوستت دارم مثل کیر", {}, (), CONFIG, GuardSettings(), rewrite=rewrite
-    )
+    if rewrite:
+        output = await generate_rewrite(
+            "خیلی دوستت دارم مثل کیر",
+            MeaningDecomposition(("affection",), ("insult",), ()),
+            {},
+            CONFIG,
+            GuardSettings(),
+        )
+    else:
+        output = await classify("خیلی دوستت دارم مثل کیر", {}, (), CONFIG, GuardSettings())
     assert output.text == result["text"]
     payload = manager.__aenter__.return_value.post.call_args.kwargs["json"]
-    assert ("Task: write a revised draft" in payload["messages"][0]["content"]) is rewrite
+    assert ("CLASSIFIER ONLY" in payload["messages"][0]["content"]) is (not rewrite)
     assert manager.__aenter__.return_value.post.call_args.kwargs["json"]["thinking"] == {
         "type": "disabled"
     }

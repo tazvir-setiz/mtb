@@ -3,12 +3,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from guard_mocks import mock_guard
 
 from app.handlers import guard_settings as handlers
 from app.handlers.states import State, reset
 from app.services import ai_service, moderation_service
 from app.services.ai_settings import save_ai_value
-from app.services.guard.contracts import Verification
+from app.services.guard.contracts import (
+    RewriteDraft,
+)
 from app.services.guard_models import Label, ModerationResult
 from app.services.guard_profile import (
     BOUNDS,
@@ -169,11 +172,8 @@ async def test_cancel_discards_pending_profile():
 def model(monkeypatch):
     save_ai_value("enabled", "true")
     save_ai_value("api_key", "test")
-    classify = AsyncMock(return_value=ModerationResult(Label.OK, 0.99, source="AI"))
-    verify = AsyncMock(return_value=Verification(True, True))
-    monkeypatch.setattr(ai_service, "classify", classify)
-    monkeypatch.setattr(ai_service, "verify", verify)
-    return classify, verify
+    model = mock_guard(monkeypatch)
+    return model
 
 
 @pytest.mark.asyncio
@@ -182,12 +182,14 @@ async def test_abuse_off_bypasses_local_drop_and_uses_same_policy_for_verificati
     profile["sensitivity"]["abuse"] = "off"
     profile["limits"]["max_output_tokens"] = 2048
     persist(profile)
+    model.return_value = ModerationResult(Label.REWRITE, 0.99, source="AI")
+    model.writer.return_value = RewriteDraft(True, "متن بازنویسی‌شده")
     result = await moderation_service.moderate(1, 1, "خیلی کسکشی")
     assert result.action == "PUBLISH"
-    call = model[0].call_args
+    call = model.call_args
     assert '"abuse": "off"' in call.kwargs["policy"]
     assert call.args[4].max_output_tokens == 2048
-    assert model[1].call_args.kwargs["policy"] == call.kwargs["policy"]
+    assert model.semantic.call_args.kwargs["policy"] == call.kwargs["policy"]
 
 
 @pytest.mark.asyncio
@@ -195,7 +197,7 @@ async def test_model_cannot_drop_using_disabled_category(model):
     profile = load_profile()
     profile["sensitivity"]["abuse"] = "off"
     persist(profile)
-    model[0].return_value = ModerationResult(Label.ABUSE, 0.99, source="AI")
+    model.return_value = ModerationResult(Label.ABUSE, 0.99, source="AI")
     result = await moderation_service.moderate(1, 1, "خیلی کسکشی")
     assert result.action == "REVIEW"
     assert result.reason == "policy_mismatch"
@@ -207,11 +209,11 @@ async def test_custom_rules_apply_to_local_greetings_and_drafts(model):
     profile["instructions"] = "Avoid greetings."
     persist(profile)
     await moderation_service.moderate(1, 1, "سلام")
-    assert "Avoid greetings." in model[0].call_args.kwargs["policy"]
-    model[0].return_value = ModerationResult(Label.REWRITE, 0.99, "سلام دوستان", "AI")
+    assert "Avoid greetings." in model.call_args.kwargs["policy"]
+    model.return_value = ModerationResult(Label.REWRITE, 0.99, "سلام دوستان", "AI")
     await moderation_service.moderate(1, 2, "سلام", draft=True)
-    assert model[0].call_args.kwargs["rewrite"]
-    assert "Avoid greetings." in model[1].call_args.kwargs["policy"]
+    assert model.writer.call_args.args[0] == "سلام"
+    assert "Avoid greetings." in model.semantic.call_args.kwargs["policy"]
 
 
 @pytest.mark.asyncio
@@ -224,14 +226,14 @@ async def test_policy_change_during_request_keeps_snapshot(model):
         newer = load_profile()
         newer["instructions"] = "NEW POLICY"
         persist(newer)
-        return ModerationResult(Label.OK, 0.99, source="AI")
+        return ModerationResult(Label.REWRITE, 0.99, source="AI")
 
-    model[0].side_effect = change_policy
+    model.side_effect = change_policy
     await moderation_service.moderate(1, 1, "متن آزمایش")
-    assert "OLD POLICY" in model[1].call_args.kwargs["policy"]
-    assert "NEW POLICY" not in model[1].call_args.kwargs["policy"]
+    assert "OLD POLICY" in model.semantic.call_args.kwargs["policy"]
+    assert "NEW POLICY" not in model.semantic.call_args.kwargs["policy"]
     await moderation_service.moderate(1, 2, "متن آزمایش")
-    assert "NEW POLICY" in model[0].call_args.kwargs["policy"]
+    assert "NEW POLICY" in model.call_args.kwargs["policy"]
 
 
 @pytest.mark.asyncio
@@ -296,7 +298,7 @@ async def test_changed_threshold_reaches_output_validator(model):
     async def classify(text, context, candidates, config, limits, **kwargs):
         return validate_output('{"label":"OK","confidence":0.90}', limits, original=text)
 
-    model[0].side_effect = classify
+    model.side_effect = classify
     result = await moderation_service.moderate(1, 1, "متن نیازمند تحلیل")
     assert result.action == "REVIEW"
 

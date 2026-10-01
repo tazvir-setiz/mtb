@@ -47,9 +47,7 @@ class GuardPipeline:
             ).encode()
         ).hexdigest()
 
-        self.version = hashlib.sha256(
-            (PIPELINE_VERSION + policy).encode()
-        ).hexdigest()[:12]
+        self.version = hashlib.sha256((PIPELINE_VERSION + policy).encode()).hexdigest()[:12]
 
         self.replacement = username_replacement()
 
@@ -87,11 +85,7 @@ class GuardPipeline:
                     self.limits.max_candidates,
                 )
 
-                variants = (
-                    normalized.candidates[1:3]
-                    if normalized.flags
-                    else ()
-                )
+                variants = normalized.candidates[1:3] if normalized.flags else ()
 
                 if stage in {"analyze", "reassess", "drop_audit"}:
                     result = await ai_service.classify(
@@ -168,6 +162,9 @@ class GuardPipeline:
 
             return result
 
+        except (AIProcessingError, TimeoutError):
+            runtime.failed(self.provider, self.limits.failure_limit, self.limits.cooldown_seconds)
+            raise
         finally:
             logger.info(
                 "Guard stage=%s elapsed=%.2fs requests=%d",
@@ -273,9 +270,8 @@ class GuardPipeline:
             decomposition=decomposition,
         )
 
-        if (
-            not isinstance(policy_verdict, PolicyVerdict)
-            or not isinstance(meaning_verdict, MeaningVerdict)
+        if not isinstance(policy_verdict, PolicyVerdict) or not isinstance(
+            meaning_verdict, MeaningVerdict
         ):
             raise AIRequestError("invalid_judge")
 
@@ -305,12 +301,9 @@ class GuardPipeline:
             replacement=self.replacement,
         )
 
-        if (
-            not candidate.strip()
-            or not publication_is_clean(
-                candidate,
-                replacement=self.replacement,
-            )
+        if not candidate.strip() or not publication_is_clean(
+            candidate,
+            replacement=self.replacement,
         ):
             return ModerationResult(
                 Label.REVIEW,
@@ -335,10 +328,7 @@ class GuardPipeline:
                 "AI",
             )
 
-        issues = (
-            tuple(policy_v.issues)
-            + tuple(meaning_v.issues)
-        )
+        issues = tuple(policy_v.issues) + tuple(meaning_v.issues)
 
         runtime.metrics["repair_attempts"] += 1
 
@@ -363,12 +353,9 @@ class GuardPipeline:
             replacement=self.replacement,
         )
 
-        if (
-            not candidate2.strip()
-            or not publication_is_clean(
-                candidate2,
-                replacement=self.replacement,
-            )
+        if not candidate2.strip() or not publication_is_clean(
+            candidate2,
+            replacement=self.replacement,
         ):
             return ModerationResult(
                 Label.REVIEW,
@@ -393,11 +380,7 @@ class GuardPipeline:
                 "AI",
             )
 
-        reason = (
-            "meaning_changed"
-            if not final_meaning.passed
-            else "rewrite_failed"
-        )
+        reason = "meaning_changed" if not final_meaning.passed else "rewrite_failed"
 
         return ModerationResult(
             Label.REVIEW,
@@ -500,14 +483,9 @@ class GuardPipeline:
         if result.label == Label.REWRITE:
             await self._ground_with_latest_news(original)
 
-            decomposition = await self._decompose(
-                original
-            )
+            decomposition = await self._decompose(original)
 
-            if (
-                decomposition.ambiguities
-                and not decomposition.has_protected_meaning
-            ):
+            if decomposition.ambiguities and not decomposition.has_protected_meaning:
                 return ModerationResult(
                     Label.REVIEW,
                     0,
@@ -537,12 +515,9 @@ class GuardPipeline:
             replacement=self.replacement,
         )
 
-        if (
-            not candidate.strip()
-            or not publication_is_clean(
-                candidate,
-                replacement=self.replacement,
-            )
+        if not candidate.strip() or not publication_is_clean(
+            candidate,
+            replacement=self.replacement,
         ):
             return ModerationResult(
                 Label.REVIEW,

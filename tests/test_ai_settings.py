@@ -146,4 +146,4 @@ async def test_next_ai_request_uses_saved_provider_model_and_key(monkeypatch):
     assert call.kwargs["headers"]["Authorization"] == "Bearer test-key"
     save_ai_value("enabled", "false")
     assert await ai_service.apply_ai_guardrails("original") == "original"
-    assert client.post.await_count == 2
+    assert client.post.await_count == 1  # OK classification has no rewrite stages.
