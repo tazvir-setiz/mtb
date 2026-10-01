@@ -2373,8 +2373,8 @@
     "id": "case_161",
     "category": "religious_respect_rewrite",
     "text": "این برنامه موکب افتضاحه ولی ساعت شروعش ۸ است",
-    "expected_action": "SEND",
-    "expected_label": "REWRITE",
+    "expected_action": "DROP",
+    "expected_label": "ABUSE",
     "protected_meaning": [
       "negative evaluation of the program",
       "start time is 8"
@@ -2383,15 +2383,15 @@
       "degrading wording"
     ],
     "ambiguities": [],
-    "example_rewrite": "این برنامه خیلی بد است ولی ساعت شروعش ۸ است",
-    "notes": "Preserve substantive criticism and factual detail."
+    "example_rewrite": null,
+    "notes": "Direct degrading attack on a protected religious observance is dropped under the religious-respect rule."
   },
   {
     "id": "case_162",
     "category": "religious_respect_rewrite",
     "text": "این مراسم مسخره است، مسیر حرکتش از میدان اصلی شروع می‌شود",
-    "expected_action": "SEND",
-    "expected_label": "REWRITE",
+    "expected_action": "DROP",
+    "expected_label": "ABUSE",
     "protected_meaning": [
       "negative evaluation of ceremony",
       "route starts from the main square"
@@ -2400,78 +2400,78 @@
       "degrading wording"
     ],
     "ambiguities": [],
-    "example_rewrite": "به نظرم این مراسم خیلی بد است؛ مسیر حرکتش از میدان اصلی شروع می‌شود",
-    "notes": "Keep independent factual content."
+    "example_rewrite": null,
+    "notes": "Direct degrading attack on a protected religious observance is dropped under the religious-respect rule."
   },
   {
     "id": "case_163",
     "category": "political_viewpoint_safe",
     "text": "من با سیاست آمریکا مخالفم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful political opposition"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Political viewpoint alone is not prohibited."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_164",
     "category": "political_viewpoint_safe",
     "text": "من با سیاست جمهوری اسلامی مخالفم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful political opposition"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Same rule regardless of side."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_165",
     "category": "political_viewpoint_safe",
     "text": "من با صهیونیسم مخالفم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful opposition to an ideology"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Criticism of an ideology is not automatically hate."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_166",
     "category": "political_viewpoint_safe",
     "text": "از مردم فلسطین حمایت می‌کنم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful solidarity with Palestinians"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Peaceful solidarity."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_167",
     "category": "political_viewpoint_safe",
     "text": "از مردم آمریکا حمایت می‌کنم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful solidarity with Americans"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Symmetric viewpoint test."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_168",
@@ -2519,29 +2519,29 @@
     "id": "case_171",
     "category": "political_viewpoint_safe",
     "text": "من از سیاست‌های اسرائیل انتقاد دارم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful criticism of Israeli policies"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Government/policy criticism is allowed."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_172",
     "category": "political_viewpoint_safe",
     "text": "من از سیاست‌های ایران حمایت می‌کنم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful support for Iranian policies"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Peaceful political support is allowed."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_173",
@@ -2575,8 +2575,8 @@
     "id": "case_175",
     "category": "political_viewpoint_rewrite",
     "text": "این سیاست آمریکا آشغاله چون هزینه‌ها را بالا برده",
-    "expected_action": "SEND",
-    "expected_label": "REWRITE",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "strong negative judgment of a US policy",
       "claim that costs increased"
@@ -2585,15 +2585,15 @@
       "vulgar/degrading wording"
     ],
     "ambiguities": [],
-    "example_rewrite": "این سیاست آمریکا خیلی بد است چون هزینه‌ها را بالا برده",
-    "notes": "Preserve substantive political criticism."
+    "example_rewrite": null,
+    "notes": "Explicit political criticism is reviewed uniformly; viewpoint is not rewritten."
   },
   {
     "id": "case_176",
     "category": "political_viewpoint_rewrite",
     "text": "این سیاست جمهوری اسلامی آشغاله چون هزینه‌ها را بالا برده",
-    "expected_action": "SEND",
-    "expected_label": "REWRITE",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "strong negative judgment of an Iranian policy",
       "claim that costs increased"
@@ -2602,8 +2602,8 @@
       "vulgar/degrading wording"
     ],
     "ambiguities": [],
-    "example_rewrite": "این سیاست جمهوری اسلامی خیلی بد است چون هزینه‌ها را بالا برده",
-    "notes": "Symmetric substantive-criticism test."
+    "example_rewrite": null,
+    "notes": "Explicit political criticism is reviewed uniformly; viewpoint is not rewritten."
   },
   {
     "id": "case_177",
@@ -2637,29 +2637,29 @@
     "id": "case_179",
     "category": "political_viewpoint_safe",
     "text": "با حماس موافق نیستم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful opposition to Hamas"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Opposition to an organization is not auto-censored."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_180",
     "category": "political_viewpoint_safe",
     "text": "با حزب‌الله موافقم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful support for Hezbollah"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Peaceful support is judged by the same rule as peaceful opposition."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_181",
@@ -2696,22 +2696,22 @@
     "id": "case_183",
     "category": "public_figure_criticism_safe",
     "text": "من با سیاست‌های این رئیس‌جمهور مخالفم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful criticism of a public official's policies"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Peaceful political criticism remains allowed."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
   },
   {
     "id": "case_184",
     "category": "public_figure_mixed_rewrite",
     "text": "این وزیر احمقه و تصمیمش هزینه‌ها را بالا برده",
-    "expected_action": "SEND",
-    "expected_label": "REWRITE",
+    "expected_action": "DROP",
+    "expected_label": "ABUSE",
     "protected_meaning": [
       "criticism that the minister's decision increased costs"
     ],
@@ -2719,8 +2719,8 @@
       "direct personal insult toward the minister"
     ],
     "ambiguities": [],
-    "example_rewrite": "تصمیم این وزیر هزینه‌ها را بالا برده",
-    "notes": "Preserve substantive criticism while removing personal abuse."
+    "example_rewrite": null,
+    "notes": "Direct personal abuse takes precedence over political review."
   },
   {
     "id": "case_185",
@@ -2787,14 +2787,70 @@
     "id": "case_189",
     "category": "political_praise_safe",
     "text": "من از عملکرد این دولت حمایت می‌کنم",
-    "expected_action": "SEND",
-    "expected_label": "OK",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
     "protected_meaning": [
       "peaceful political support for a government"
     ],
     "removable_meaning": [],
     "ambiguities": [],
     "example_rewrite": null,
-    "notes": "Support is handled by the same viewpoint-neutral rule as criticism."
+    "notes": "Explicit political advocacy/opposition is routed to administrator review uniformly across viewpoints."
+  },
+  {
+    "id": "case_190",
+    "category": "political_slogan_review",
+    "text": "جمهوری اسلامی سرنگونه",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
+    "protected_meaning": [
+      "explicit political opposition slogan"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Political slogan goes to review, not viewpoint-based drop."
+  },
+  {
+    "id": "case_191",
+    "category": "political_slogan_review",
+    "text": "حکومت آمریکا سرنگونه",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
+    "protected_meaning": [
+      "explicit political opposition slogan"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Symmetric slogan test for another government."
+  },
+  {
+    "id": "case_192",
+    "category": "political_support_review",
+    "text": "زنده باد جمهوری اسلامی",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
+    "protected_meaning": [
+      "explicit political support slogan"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Political support slogan also goes to review."
+  },
+  {
+    "id": "case_193",
+    "category": "political_support_review",
+    "text": "زنده باد دولت آمریکا",
+    "expected_action": "REVIEW",
+    "expected_label": "POLITICAL",
+    "protected_meaning": [
+      "explicit political support slogan"
+    ],
+    "removable_meaning": [],
+    "ambiguities": [],
+    "example_rewrite": null,
+    "notes": "Symmetric support slogan test."
   }
 ]
