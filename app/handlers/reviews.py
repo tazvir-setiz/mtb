@@ -15,6 +15,16 @@ from app.services.review_service import decide
 from app.telegram.client import ensure_started
 
 logger = logging.getLogger(__name__)
+GUARD_BLOCK_PREFIX = "guard_block:"
+GUARD_BLOCK_REASONS = {
+    "abuse": "گارد پیام را توهین مستقیم تشخیص داده است",
+    "hate": "گارد پیام را حمله یا نفرت‌پراکنی تشخیص داده است",
+    "threat": "گارد پیام را تهدید تشخیص داده است",
+    "porn": "گارد پیام را محتوای جنسی صریح تشخیص داده است",
+    "spam": "گارد پیام را اسپم یا تبلیغ ممنوع تشخیص داده است",
+    "injection": "گارد پیام را تلاش برای دورزدن یا نفوذ به دستورها تشخیص داده است",
+}
+
 REASONS = {
     "send_uncertain": "نتیجهٔ ارسال مشخص نیست؛ پیش از تلاش مجدد مقصدها را بررسی کنید",
     "missing_evidence": "مدل برای حذف پیام شاهد معتبر یا دلیل کافی ارائه نکرد",
@@ -62,32 +72,58 @@ def escaped_preview(value):
     return "".join(parts)
 
 
+def is_guard_block(row):
+    return (row.reason or "").startswith(GUARD_BLOCK_PREFIX)
+
+
+def guard_block_reason(row):
+    code = (row.reason or "")[len(GUARD_BLOCK_PREFIX):]
+    return GUARD_BLOCK_REASONS.get(code, f"گارد این پیام را برای انتشار نامناسب تشخیص داده است ({code})")
+
+
 def card(row):
-    reason = REASONS.get(row.reason, "محتوا نیاز به تصمیم مدیر دارد")
+    blocked = is_guard_block(row)
+    reason = guard_block_reason(row) if blocked else REASONS.get(
+        row.reason, "محتوا نیاز به تصمیم مدیر دارد"
+    )
     route_count = len(review_store.routes(row))
     destination_line = (
         f"مقصد: {row.destination_id}" if route_count == 1 else f"مقصدها: {route_count} کانال"
     )
-    text = (
-        f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"
-        f"{destination_line}\nدلیل: {reason}\n\n"
-        f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
-        "«بازنویسی با AI» متن تازهٔ مطابق گارد یا پیشنهاد حذف می‌سازد و خودکار ارسال نمی‌کند. تأیید، نسخهٔ فعلی را می‌فرستد؛ لینک‌ها و آیدی‌ها پاک‌سازی "
-        "و امضای فعلی اضافه می‌شود. نظرسنجی با تأیید شما مستقیم فوروارد می‌شود."
-    )
+    if blocked:
+        text = (
+            f"🚫 <b>پیام توسط گارد مسدود شد</b> — #{row.id}\n"
+            f"مبدأ: {row.source_id} — پیام: {row.message_id}\n"
+            f"{destination_line}\n"
+            f"تشخیص گارد: {reason}\n"
+            "تصمیم گارد: <b>DROP</b>\n\n"
+            "⚠️ این پیام به مقصد ارسال نشده است. ارسال نسخهٔ فعلی فقط با تأیید صریح مدیر انجام می‌شود.\n\n"
+            f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
+            "می‌توانید نسخهٔ فعلی را با اختیار مدیر ارسال کنید، متن را دستی ویرایش کنید، "
+            "از AI نسخهٔ قابل انتشار بسازید یا پیام را برای همیشه رد کنید."
+        )
+    else:
+        text = (
+            f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"
+            f"{destination_line}\nدلیل: {reason}\n\n"
+            f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
+            "«بازنویسی با AI» متن تازهٔ مطابق گارد یا پیشنهاد حذف می‌سازد و خودکار ارسال نمی‌کند. تأیید، نسخهٔ فعلی را می‌فرستد؛ لینک‌ها و آیدی‌ها پاک‌سازی "
+            "و امضای فعلی اضافه می‌شود. نظرسنجی با تأیید شما مستقیم فوروارد می‌شود."
+        )
     buttons = []
     if row.status == "pending":
         suffix = f"{row.id}:{review_drafts.version(row)}"
+        rewrite_label = "🤖 ساخت نسخهٔ قابل انتشار" if blocked else "🤖 بازنویسی با AI"
+        approve_label = "⚠️ ارسال با تأیید مدیر" if blocked else "✅ تأیید نسخهٔ فعلی"
+        reject_label = "🗑 رد نهایی" if blocked else "⛔ رد پیام"
         buttons.append(
-            [InlineKeyboardButton("🤖 بازنویسی با AI", callback_data=f"review:retry:{suffix}")]
+            [InlineKeyboardButton(rewrite_label, callback_data=f"review:retry:{suffix}")]
         )
         buttons.append(
             [
-                InlineKeyboardButton(
-                    "✅ تأیید نسخهٔ فعلی", callback_data=f"review:approve:{suffix}"
-                ),
-                InlineKeyboardButton("✏️ ویرایش", callback_data=f"review:edit:{suffix}"),
-                InlineKeyboardButton("⛔ رد پیام", callback_data=f"review:reject:{suffix}"),
+                InlineKeyboardButton(approve_label, callback_data=f"review:approve:{suffix}"),
+                InlineKeyboardButton("✏️ ویرایش دستی" if blocked else "✏️ ویرایش", callback_data=f"review:edit:{suffix}"),
+                InlineKeyboardButton(reject_label, callback_data=f"review:reject:{suffix}"),
             ]
         )
     else:
