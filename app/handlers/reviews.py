@@ -11,11 +11,11 @@ from app.config import settings
 from app.handlers import review_edit
 from app.handlers.auth import is_authorized, reject
 from app.services import review_drafts, review_store
+from app.services.review_kind import ReviewKind, parse_review_reason
 from app.services.review_service import decide
 from app.telegram.client import ensure_started
 
 logger = logging.getLogger(__name__)
-GUARD_BLOCK_PREFIX = "guard_block:"
 GUARD_BLOCK_REASONS = {
     "abuse": "گارد پیام را توهین مستقیم تشخیص داده است",
     "hate": "گارد پیام را حمله یا نفرت‌پراکنی تشخیص داده است",
@@ -72,18 +72,20 @@ def escaped_preview(value):
     return "".join(parts)
 
 
-def is_guard_block(row):
-    return (row.reason or "").startswith(GUARD_BLOCK_PREFIX)
-
-
-def guard_block_reason(row):
-    code = (row.reason or "")[len(GUARD_BLOCK_PREFIX):]
-    return GUARD_BLOCK_REASONS.get(code, f"گارد این پیام را برای انتشار نامناسب تشخیص داده است ({code})")
+def guard_block_reason(parsed):
+    code = (parsed.guard_label or parsed.reason or "unknown").lower()
+    detail = GUARD_BLOCK_REASONS.get(
+        code, "گارد این پیام را برای انتشار نامناسب تشخیص داده است"
+    )
+    if parsed.reason and parsed.reason.lower() not in {code, parsed.guard_label.lower() if parsed.guard_label else ""}:
+        return f"{detail} — دلیل: {parsed.reason}"
+    return detail
 
 
 def card(row):
-    blocked = is_guard_block(row)
-    reason = guard_block_reason(row) if blocked else REASONS.get(
+    parsed = parse_review_reason(row.reason)
+    blocked = parsed.kind is ReviewKind.GUARD_BLOCK
+    reason = guard_block_reason(parsed) if blocked else REASONS.get(
         row.reason, "محتوا نیاز به تصمیم مدیر دارد"
     )
     route_count = len(review_store.routes(row))
