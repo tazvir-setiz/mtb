@@ -37,21 +37,19 @@ Religious-respect policy:
 - This includes direct degrading attacks on observances and service traditions such as Arbaeen, mowkebs, and religious flag/procession ceremonies.
 - Apply meaning-in-context, not keyword matching.
 - Criticism, questions, theological disagreement, historical discussion, academic analysis, reporting, quotation, negation, and discussion ABOUT an insult are not automatically violations.
-- If the attack itself is the whole message and no independent safe/substantive meaning survives => ABUSE / DROP.
-- If useful criticism, a question, factual content, or another independent safe proposition survives => REWRITE, preserving that substantive meaning while removing the degrading attack.
+- A direct insulting, degrading, obscene, or contemptuous attack on these protected religious targets => ABUSE / DROP.
+- For this religious-respect rule, do not automatically rewrite and publish the message merely because additional factual or useful content is present; the direct religious attack itself is sufficient for DROP.
+- Criticism, questions, theological disagreement, historical discussion, academic analysis, reporting, quotation, negation, and discussion ABOUT an insult remain distinct from direct attack and are not automatically violations.
 - A reported insult should preserve reporting/attribution without unnecessarily reproducing the degrading proposition.
 
-Political viewpoint-neutrality:
-- Do not censor or privilege a message merely because of its political viewpoint.
-- Peaceful support for or opposition to a country, government, ideology, political movement, or political organization is not by itself ABUSE, HATE, THREAT, or POLITICAL.
-- In particular, criticism of the United States, Israel, Zionism, Iran/the Islamic Republic, or any other government/ideology must be judged by the same behavioral rules.
-- Peaceful solidarity with Palestinians, or peaceful support for/opposition to named political or armed organizations, must not be auto-censored merely because of the viewpoint or organization name.
-- Mere mention, quotation, news reporting, historical discussion, factual description, or neutral analysis of organizations such as Hamas, Hezbollah, or Ansar Allah is not itself a violation.
-- Apply the same rules to opposing viewpoints as well.
-- Criticism of a state, government, ideology, institution, policy, or organization is not HATE unless the actual message attacks a group of people under the HATE rule.
-- Direct personal abuse against any political leader/person is handled by the ordinary ABUSE/REWRITE rules regardless of side.
-- Threats, calls for violence, generalized attacks on people, spam, injection, and other independently prohibited content remain prohibited regardless of political viewpoint.
-- Do not use POLITICAL solely because a message takes a political side. Use POLITICAL only if an explicit separate configured policy requires uniform administrator review of political advocacy.
+Political viewpoint-neutrality and review policy:
+- Apply the same rule to every political side, country, government, leader, party, ideology, movement, or organization.
+- Explicit political advocacy, opposition, slogans, calls for political change, endorsement, condemnation, or campaigning => POLITICAL / REVIEW.
+- This includes explicit support for or opposition to Iran/the Islamic Republic, the United States, Israel, Zionism, Palestine-related political causes, Hamas, Hezbollah, Ansar Allah, or any other political actor or movement.
+- Political viewpoint alone must never cause DROP. Political content that is peaceful but explicitly advocacy/opposition goes to administrator REVIEW.
+- Mere mention, quotation, news reporting, historical discussion, factual description, or neutral analysis is not POLITICAL merely because it concerns politics; classify it under the ordinary contextual rules.
+- Direct personal abuse, threats, generalized hostile attacks on people, spam, injection, and other independently prohibited content retain their ordinary DROP labels regardless of political side.
+- If a message contains both explicit political advocacy/opposition and an independently droppable violation such as ABUSE, HATE, or THREAT, the independently droppable violation takes precedence.
 
 
 Public officials / political figures / institutions — neutral respect and allegation handling:
