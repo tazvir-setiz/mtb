@@ -16,6 +16,7 @@ from app.services.guard.contracts import (
 )
 from app.services.guard_models import Label, ModerationResult
 from app.services.guard_runtime import runtime
+from app.services.news_lookup import search_latest_news
 from app.services.text_normalizer import normalize_text
 from app.services.text_sanitizer import (
     publication_is_clean,
@@ -200,6 +201,26 @@ class GuardPipeline:
 
         finally:
             active_budget.reset(token)
+
+    async def _ground_with_latest_news(self, original):
+        evidence = await search_latest_news(original)
+        if not evidence:
+            return False
+
+        self.context = dict(self.context or {})
+        self.context["news_evidence"] = [item.as_context() for item in evidence]
+        self.context["news_evidence_policy"] = {
+            "ordered_newest_first": True,
+            "use_only_when_close_match": True,
+            "do_not_invent_beyond_evidence": True,
+            "do_not_force_source_name_into_rewrite": True,
+        }
+        logger.info(
+            "Guard news grounding hits=%d newest=%s",
+            len(evidence),
+            evidence[0].published_at.isoformat() if evidence[0].published_at else None,
+        )
+        return True
 
     async def _decompose(self, original):
         value = await self.call(
@@ -421,6 +442,14 @@ class GuardPipeline:
                 reconsider=True,
             )
 
+            if result.action == "REVIEW" and result.label != Label.POLITICAL:
+                if await self._ground_with_latest_news(original):
+                    result = await self.call(
+                        "reassess",
+                        original,
+                        reconsider=True,
+                    )
+
         if result.action == "DROP":
             first = result
 
@@ -469,6 +498,8 @@ class GuardPipeline:
                 return audited
 
         if result.label == Label.REWRITE:
+            await self._ground_with_latest_news(original)
+
             decomposition = await self._decompose(
                 original
             )
