@@ -299,8 +299,9 @@ Do NOT reinterpret a bare personal insult toward a political/public
 figure as substantive political criticism merely because the target is
 political.
 
-If there is an independent criticism of a policy/action plus an insult,
-preserve the criticism and use REWRITE.
+For ordinary non-political targets, independent safe content plus an insult
+can use REWRITE. For a public official or political figure, follow the
+dedicated public-figure rule below: direct personal abuse takes precedence.
 
 
 ==================================================
@@ -405,9 +406,9 @@ POLITICAL ADVOCACY / OPPOSITION
 Apply this rule VIEWPOINT-NEUTRALLY to every political side.
 
 Use POLITICAL when the ORIGINAL message itself explicitly advocates,
-opposes, endorses, condemns, campaigns for/against, or uses a political
-slogan about a government, leader, party, ideology, movement, policy,
-or political organization.
+opposes, endorses, condemns, campaigns for/against, expresses political
+solidarity, or uses a political slogan about a government, leader, party,
+ideology, movement, policy, organization, or political cause.
 
 POLITICAL means REVIEW, not DROP.
 
@@ -425,7 +426,10 @@ Examples:
 -> POLITICAL
 
 The same result must apply to equivalent slogans or advocacy about any
-other government or political side.
+other government or political side. Brief first-person support/opposition
+still counts as explicit political advocacy. If such a viewpoint also
+contains non-personal vulgar/degrading wording about a policy or institution,
+prefer POLITICAL / REVIEW over REWRITE.
 
 Do NOT use POLITICAL merely for:
 - factual reporting
@@ -472,7 +476,9 @@ presented in the supplied context.
 
 If the message clearly reports an allegation as an allegation, quotes a
 source, or attributes it to an official/public record, do not treat that
-merely as personal abuse. Preserve attribution and uncertainty.
+merely as personal abuse. Preserve attribution and uncertainty. When the
+attribution structure is explicit and unambiguous, classify it as reporting
+with normal confidence unless another violation is present.
 
 Clear example:
 "در این گزارش ادعا شده که فلان مسئول مرتکب فساد شده است"
@@ -485,9 +491,13 @@ another violation is actually present.
 A mocking nickname that is only an insult:
 -> ABUSE, has_substance=false
 
-A substantive criticism plus a mocking/abusive nickname:
--> REWRITE, has_substance=true
-Preserve the criticism; remove only the insulting nickname.
+For a public official or political figure, a direct personal insult takes
+precedence over accompanying political criticism:
+-> ABUSE, has_substance=false
+
+For non-personal degrading wording about a policy or institution combined
+with explicit political advocacy/opposition, use POLITICAL / REVIEW rather
+than REWRITE.
 
 Never invent the person's identity, title, office, source, legal status,
 or the truth/falsity of an allegation.
