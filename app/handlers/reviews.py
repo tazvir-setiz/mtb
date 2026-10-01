@@ -63,9 +63,15 @@ def escaped_preview(value):
 
 def card(row):
     reason = REASONS.get(row.reason, "محتوا نیاز به تصمیم مدیر دارد")
+    route_count = len(review_store.routes(row))
+    destination_line = (
+        f"مقصد: {row.destination_id}"
+        if route_count == 1
+        else f"مقصدها: {route_count} کانال"
+    )
     text = (
         f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"
-        f"مقصد ثابت این درخواست: {row.destination_id}\nدلیل: {reason}\n\n"
+        f"{destination_line}\nدلیل: {reason}\n\n"
         f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
         "«بازنویسی با AI» متن تازهٔ مطابق گارد یا پیشنهاد حذف می‌سازد و خودکار ارسال نمی‌کند. تأیید، نسخهٔ فعلی را می‌فرستد؛ لینک‌ها و آیدی‌ها پاک‌سازی "
         "و امضای فعلی اضافه می‌شود. نظرسنجی با تأیید شما مستقیم فوروارد می‌شود."

@@ -17,9 +17,11 @@ from app.database.repository import (
     SettingsRepository,
 )
 from app.log_context import traced
+from app.services import review_store
+from app.services.ai_policy import AIProcessingError, AIReviewRequired
 from app.services.message_locks import message_lock
 from app.telegram.forward_errors import FRIENDLY_ERRORS, ForwardErrorType, classify_error
-from app.telegram.message_sender import send_message
+from app.telegram.message_sender import prepare_message, send_prepared_message
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,6 @@ _AUTO_JOB_MARKER = -1
 
 _handler = None  # type: ignore[var-annotated]
 _registered_client: TelegramClient | None = None
-
 _processing_lock = asyncio.Lock()
 _waiting = 0
 _counts = Counter()
@@ -49,15 +50,11 @@ async def processing_slot():
     started = time.monotonic()
     _waiting += 1
     _counts["received"] += 1
-    logger.info("Message received waiting=%d processing=%s", _waiting, _processing_lock.locked())
     try:
         await _processing_lock.acquire()
     finally:
         _waiting -= 1
     try:
-        logger.info(
-            "Processing started queue_wait=%.2fs waiting=%d", time.monotonic() - started, _waiting
-        )
         yield
     finally:
         _processing_lock.release()
@@ -82,118 +79,174 @@ def _get_auto_job_id(source_id: int, destination_id: int) -> int:
     with get_session() as session:
         job = ForwardJobRepository.create(
             session,
-            source_channel_id=source_id,
-            destination_channel_id=destination_id,
-            start_message_id=_AUTO_JOB_MARKER,
-            end_message_id=_AUTO_JOB_MARKER,
-            total_messages=0,
+            source_id,
+            destination_id,
+            _AUTO_JOB_MARKER,
+            _AUTO_JOB_MARKER,
+            0,
         )
         ForwardJobRepository.update_status(session, job, JobStatus.RUNNING)
         return job.id
 
 
-@traced
-async def _on_new_message(
-    event, source_id: int, destination_id: int, job_id: int, *, listener=None
-) -> None:
-    async with processing_slot(), message_lock(source_id, event.message.id, destination_id):
-        # Removed handlers may still have callbacks queued behind an active send.
-        if listener is not None and listener is not _handler:
-            _counts["stale"] += 1
-            logger.info("Message skipped reason=listener_replaced_or_disabled")
-            return
-        msg_id = event.message.id
-        logger.info(
-            "Auto-forward: New message detected (ID: %d, source=%s, destination=%s)",
-            msg_id,
+def _record(
+    job_id,
+    source_id,
+    msg_id,
+    destination_id,
+    status,
+    *,
+    destination_message_id=None,
+    error=None,
+):
+    with get_session() as session:
+        ForwardedMessageRepository.record(
+            session,
+            job_id,
             source_id,
+            msg_id,
             destination_id,
+            status,
+            destination_message_id=destination_message_id,
+            error=error,
         )
 
-        with get_session() as session:
-            already = ForwardedMessageRepository.exists(session, source_id, msg_id, destination_id)
-            signature = SettingsRepository.get(session, "signature_text")
 
-        if already:
-            _counts["duplicates"] += 1
-            logger.info(
-                "Auto-forward: Message %d already exists for destination %s. Skipping.",
-                msg_id,
-                destination_id,
-            )
+@traced
+async def _on_new_message(
+    event,
+    source_id: int,
+    routes: list[tuple[int, int]],
+    *,
+    listener=None,
+) -> None:
+    async with processing_slot():
+        if listener is not None and listener is not _handler:
+            _counts["stale"] += 1
             return
 
-        try:
-            dest_msg = await send_message(
-                event.client, event.message, source_id, destination_id, signature
-            )
-            if dest_msg is None:
-                _counts["skipped"] += 1
-                logger.info(
-                    "Auto-forward: Message %d skipped for destination %s.",
+        msg_id = event.message.id
+        with get_session() as session:
+            signature = SettingsRepository.get(session, "signature_text")
+            pending_routes = [
+                (destination_id, job_id)
+                for destination_id, job_id in routes
+                if not ForwardedMessageRepository.exists(
+                    session,
+                    source_id,
                     msg_id,
                     destination_id,
                 )
+            ]
+
+        if not pending_routes:
+            _counts["duplicates"] += len(routes)
+            return
+
+        existing_review = review_store.find_for_message(source_id, msg_id)
+        if existing_review and existing_review.status in {
+            "pending",
+            "sending",
+            "uncertain",
+        }:
+            _counts["review_pending"] += 1
+            return
+        if existing_review and existing_review.status == "rejected":
+            for destination_id, job_id in pending_routes:
+                _record(
+                    job_id,
+                    source_id,
+                    msg_id,
+                    destination_id,
+                    MessageStatus.SKIPPED,
+                    error="رد شده توسط مدیر",
+                )
+            return
+
+        try:
+            prepared = await prepare_message(event.message, source_id, signature)
+        except (AIReviewRequired, AIProcessingError) as exc:
+            reason = (
+                str(exc)
+                if isinstance(exc, AIReviewRequired)
+                else "service_unavailable"
+            )
+            review_store.enqueue_routes(
+                event.message,
+                source_id,
+                pending_routes,
+                reason,
+            )
+            _counts["review"] += 1
+            return
+
+        if prepared is None:
+            for destination_id, job_id in pending_routes:
+                _record(
+                    job_id,
+                    source_id,
+                    msg_id,
+                    destination_id,
+                    MessageStatus.SKIPPED,
+                    error="حذف شده توسط هوش مصنوعی",
+                )
+            _counts["skipped"] += len(pending_routes)
+            return
+
+        for destination_id, job_id in pending_routes:
+            async with message_lock(source_id, msg_id, destination_id):
                 with get_session() as session:
-                    ForwardedMessageRepository.record(
+                    if ForwardedMessageRepository.exists(
                         session,
+                        source_id,
+                        msg_id,
+                        destination_id,
+                    ):
+                        _counts["duplicates"] += 1
+                        continue
+
+                try:
+                    sent = await send_prepared_message(
+                        event.client,
+                        event.message,
+                        source_id,
+                        destination_id,
+                        prepared,
+                    )
+                    destination_message_id = getattr(sent, "id", None)
+                    _record(
                         job_id,
                         source_id,
                         msg_id,
                         destination_id,
-                        MessageStatus.SKIPPED,
-                        error="حذف شده توسط هوش مصنوعی",
+                        MessageStatus.SUCCESS,
+                        destination_message_id=destination_message_id,
                     )
-                return
-
-            dest_id = getattr(dest_msg, "id", None)
-            _counts["sent"] += 1
-
-            with get_session() as session:
-                ForwardedMessageRepository.record(
-                    session,
-                    job_id,
-                    source_id,
-                    msg_id,
-                    destination_id,
-                    MessageStatus.SUCCESS,
-                    destination_message_id=dest_id,
-                )
-            logger.info(
-                "Auto-forward: Message %d -> destination %s successfully sent as %s.",
-                msg_id,
-                destination_id,
-                dest_id,
-            )
-
-        except Exception as exc:
-            _counts["failed"] += 1
-            err_type = classify_error(exc)
-            if err_type == ForwardErrorType.UNKNOWN:
-                logger.exception(
-                    "Auto-forward: Unknown error processing message %d for destination %s",
-                    msg_id,
-                    destination_id,
-                )
-            else:
-                logger.error(
-                    "Auto-forward failed for message %d destination=%s type=%s reason=%s",
-                    msg_id,
-                    destination_id,
-                    type(exc).__name__,
-                    err_type.value,
-                )
-
-            with get_session() as session:
-                ForwardedMessageRepository.record(
-                    session,
-                    job_id,
-                    source_id,
-                    msg_id,
-                    destination_id,
-                    MessageStatus.FAILED,
-                    error=FRIENDLY_ERRORS[err_type],
-                )
+                    _counts["sent"] += 1
+                except Exception as exc:
+                    err_type = classify_error(exc)
+                    if err_type == ForwardErrorType.UNKNOWN:
+                        logger.exception(
+                            "Auto-forward failed message=%d destination=%s",
+                            msg_id,
+                            destination_id,
+                        )
+                    else:
+                        logger.error(
+                            "Auto-forward failed message=%d destination=%s reason=%s",
+                            msg_id,
+                            destination_id,
+                            err_type.value,
+                        )
+                    _record(
+                        job_id,
+                        source_id,
+                        msg_id,
+                        destination_id,
+                        MessageStatus.FAILED,
+                        error=FRIENDLY_ERRORS[err_type],
+                    )
+                    _counts["failed"] += 1
 
 
 async def start_listener(client: TelegramClient) -> bool:
@@ -202,39 +255,43 @@ async def start_listener(client: TelegramClient) -> bool:
     await stop_listener(client)
     with get_session() as session:
         sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
-        destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
+        destinations = ChannelRepository.get_all_by_type(
+            session,
+            ChannelType.DESTINATION,
+        )
 
     if not sources or not destinations:
-        logger.warning("Auto-forward listener cannot start: Source or Destination not configured.")
         return False
 
     source_ids = [channel.telegram_id for channel in sources]
     destination_ids = [channel.telegram_id for channel in destinations]
-    job_ids = {
-        (source_id, destination_id): _get_auto_job_id(source_id, destination_id)
+    route_map = {
+        source_id: [
+            (
+                destination_id,
+                _get_auto_job_id(source_id, destination_id),
+            )
+            for destination_id in destination_ids
+        ]
         for source_id in source_ids
-        for destination_id in destination_ids
     }
 
     async def handler(event):
         source_id = getattr(event, "chat_id", None)
-        if source_id not in source_ids:
-            logger.warning("Ignoring auto-forward event from unconfigured source: %s", source_id)
+        if source_id not in route_map:
             return
-        for destination_id in destination_ids:
-            await _on_new_message(
-                event,
-                source_id,
-                destination_id,
-                job_ids[(source_id, destination_id)],
-                listener=handler,
-            )
+        await _on_new_message(
+            event,
+            source_id,
+            route_map[source_id],
+            listener=handler,
+        )
 
     client.add_event_handler(handler, events.NewMessage(chats=source_ids))
     _handler = handler
     _registered_client = client
     logger.info(
-        "Auto-forward listener started successfully (Sources: %s -> Destinations: %s)",
+        "Auto-forward listener started sources=%s destinations=%s",
         source_ids,
         destination_ids,
     )
@@ -245,7 +302,6 @@ async def stop_listener(client: TelegramClient | None = None) -> None:
     global _handler, _registered_client
     if _handler is not None and _registered_client is not None:
         _registered_client.remove_event_handler(_handler)
-        logger.info("Auto-forward listener stopped.")
     _handler = None
     _registered_client = None
 
