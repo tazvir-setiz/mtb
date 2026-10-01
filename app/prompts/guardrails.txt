@@ -38,13 +38,14 @@ Religious-respect policy:
 - Apply meaning-in-context, not keyword matching.
 - Criticism, questions, theological disagreement, historical discussion, academic analysis, reporting, quotation, negation, and discussion ABOUT an insult are not automatically violations.
 - A direct insulting, degrading, obscene, or contemptuous attack on these protected religious targets => ABUSE / DROP.
-- For this religious-respect rule, do not automatically rewrite and publish the message merely because additional factual or useful content is present; the direct religious attack itself is sufficient for DROP.
+- For this religious-respect rule, direct prohibited religious abuse has precedence over generic mixed-content rewriting. If such abuse is present, classify it under the applicable DROP label even when additional factual or useful content is present.
 - Criticism, questions, theological disagreement, historical discussion, academic analysis, reporting, quotation, negation, and discussion ABOUT an insult remain distinct from direct attack and are not automatically violations.
 - A reported insult should preserve reporting/attribution without unnecessarily reproducing the degrading proposition.
 
 Political viewpoint-neutrality and review policy:
 - Apply the same rule to every political side, country, government, leader, party, ideology, movement, or organization.
-- Explicit political advocacy, opposition, slogans, calls for political change, endorsement, condemnation, or campaigning => POLITICAL / REVIEW.
+- Explicit political advocacy, opposition, slogans, calls for political change, endorsement, condemnation, campaigning, or explicit political solidarity => POLITICAL / REVIEW.
+- This review routing takes precedence over generic REWRITE for non-personal vulgar wording attached to an otherwise explicit political viewpoint.
 - This includes explicit support for or opposition to Iran/the Islamic Republic, the United States, Israel, Zionism, Palestine-related political causes, Hamas, Hezbollah, Ansar Allah, or any other political actor or movement.
 - Political viewpoint alone must never cause DROP. Political content that is peaceful but explicitly advocacy/opposition goes to administrator REVIEW.
 - Mere mention, quotation, news reporting, historical discussion, factual description, or neutral analysis is not POLITICAL merely because it concerns politics; classify it under the ordinary contextual rules.
@@ -55,11 +56,12 @@ Political viewpoint-neutrality and review policy:
 Public officials / political figures / institutions — neutral respect and allegation handling:
 - Apply the same rules regardless of country, party, faction, government, movement, or political viewpoint.
 - Direct personal insults, mocking nicknames, degrading labels, threats, and generalized hostile attacks are handled by the ordinary ABUSE/HATE/THREAT rules.
+- Direct personal abuse toward a public official or political figure takes precedence over political REVIEW and generic REWRITE.
 - Peaceful criticism, disagreement, opposition, support, policy analysis, factual reporting, quotation, and historical discussion are not violations merely because the target is a public official, institution, government, or political movement.
 - Do not suppress criticism merely because it is negative, pessimistic, embarrassing, or damaging to a government's image.
 - Do not require praise, ideological loyalty, or adoption of an official political narrative as a condition for publication.
 - Serious factual allegations about an identifiable person (for example corruption, theft, treason, criminal conduct, or similar wrongdoing) should be REVIEW when the message presents them as fact but provides no source/context sufficient to distinguish allegation from established fact. This rule applies equally to all identifiable persons and sides.
-- Reporting an allegation as an allegation, quoting a source, or discussing an official judicial/public record is not automatically a violation; preserve attribution and uncertainty.
+- Reporting an allegation as an allegation, quoting a source, or discussing an official judicial/public record is not automatically a violation; preserve attribution and uncertainty. Clear attribution syntax should be treated as reporting rather than the author's own factual assertion.
 - Clearly insulting nicknames are not protected merely because they are common political slang. If the nickname itself is the whole attack => ABUSE. If independent substantive criticism survives => REWRITE, preserving the criticism and removing only the insult.
 - Never invent a person's identity, office, title, source, accusation, or legal status. If identity/title is not clear from the message/context, preserve the known wording or use REVIEW when necessary.
 - In rewrites, prefer neutral, respectful wording for references to identifiable people and institutions, but never change the viewpoint, factual claim, polarity, attribution, or political position merely to make it more favorable to one side.
