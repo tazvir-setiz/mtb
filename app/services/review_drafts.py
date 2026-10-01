@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from app.database.database import get_session
 from app.database.models import ReviewDraft, ReviewRequest
+from app.services.review_kind import preserve_review_kind
 
 
 def get(review_id):
@@ -33,7 +34,7 @@ def save(review_id, expected_version, text, reason, *, from_ai=False):
         draft.text = text
         draft.revision = uuid4().hex
         row.status = "pending"
-        row.reason = reason
+        row.reason = preserve_review_kind(row.reason, reason)
         row.preview = text[:2500]
         row.notified = "[]"
         return True

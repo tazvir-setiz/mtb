@@ -43,3 +43,10 @@ def parse_review_reason(value: str | None) -> ReviewReason:
 
 def is_guard_block(value: str | None) -> bool:
     return parse_review_reason(value).kind is ReviewKind.GUARD_BLOCK
+
+
+def preserve_review_kind(existing: str | None, reason: str) -> str:
+    parsed = parse_review_reason(existing)
+    if parsed.kind is ReviewKind.GUARD_BLOCK:
+        return encode_guard_block(parsed.guard_label or "UNKNOWN", reason)
+    return reason

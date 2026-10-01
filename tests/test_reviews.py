@@ -329,3 +329,39 @@ def test_normal_review_card_keeps_existing_review_style():
     labels = [button.text for line in markup.inline_keyboard for button in line]
     assert "✅ تأیید نسخهٔ فعلی" in labels
     assert "🤖 بازنویسی با AI" in labels
+
+
+@pytest.mark.asyncio
+async def test_guard_block_stays_distinct_after_ai_rewrite(monkeypatch):
+    save_ai_value("enabled", "true")
+    original = message("blocked text")
+    row = review_store.enqueue(
+        original, -100123, -100456, None, "guard_block:ABUSE:policy_violation"
+    )
+    monkeypatch.setattr(
+        review_service, "rewrite_draft", AsyncMock(return_value="متن بازنویسی شده")
+    )
+    client = SimpleNamespace(
+        get_messages=AsyncMock(return_value=[original]),
+        send_message=AsyncMock(),
+    )
+
+    await decide(row.id, row.fingerprint[:12], "retry", 111, client)
+
+    refreshed = review_store.get(row.id)
+    assert refreshed.reason == "guard_block:ABUSE:ai_draft"
+    content, _ = reviews.card(refreshed)
+    assert "🚫" in content
+    assert "DROP" in content
+    client.send_message.assert_not_awaited()
+
+
+def test_guard_block_stays_distinct_after_requeue():
+    row = review_store.enqueue(
+        message("blocked text"), -100123, -100456, None, "guard_block:SPAM:spam"
+    )
+    review_store.requeue(row.id, "timeout")
+    refreshed = review_store.get(row.id)
+    assert refreshed.reason == "guard_block:SPAM:timeout"
+    content, _ = reviews.card(refreshed)
+    assert content.startswith("🚫")

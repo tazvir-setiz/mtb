@@ -25,3 +25,13 @@ def test_normal_review_reason_remains_unchanged():
     assert parsed.guard_label is None
     assert parsed.reason == "low_confidence"
     assert not is_guard_block("low_confidence")
+
+
+def test_preserve_review_kind_keeps_guard_block_identity():
+    from app.services.review_kind import preserve_review_kind
+
+    assert (
+        preserve_review_kind("guard_block:ABUSE:original_reason", "ai_draft")
+        == "guard_block:ABUSE:ai_draft"
+    )
+    assert preserve_review_kind("low_confidence", "timeout") == "timeout"

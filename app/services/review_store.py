@@ -7,6 +7,7 @@ from telethon.extensions import html
 
 from app.database.database import get_session
 from app.database.models import ReviewDraft, ReviewRequest, Settings
+from app.services.review_kind import preserve_review_kind
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +244,7 @@ def requeue(review_id, reason):
     with get_session() as session:
         row = session.get(ReviewRequest, review_id)
         row.status = "pending"
-        row.reason = reason
+        row.reason = preserve_review_kind(row.reason, reason)
         row.notified = "[]"
 
 
