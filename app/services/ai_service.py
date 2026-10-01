@@ -399,6 +399,51 @@ Do NOT classify them as ABUSE when substantive criticism survives.
 
 
 ==================================================
+POLITICAL ADVOCACY / OPPOSITION
+==================================================
+
+Apply this rule VIEWPOINT-NEUTRALLY to every political side.
+
+Use POLITICAL when the ORIGINAL message itself explicitly advocates,
+opposes, endorses, condemns, campaigns for/against, or uses a political
+slogan about a government, leader, party, ideology, movement, policy,
+or political organization.
+
+POLITICAL means REVIEW, not DROP.
+
+Examples:
+"من با سیاست آمریکا مخالفم"
+-> POLITICAL
+
+"من با سیاست جمهوری اسلامی مخالفم"
+-> POLITICAL
+
+"من از عملکرد این دولت حمایت می‌کنم"
+-> POLITICAL
+
+"جمهوری اسلامی سرنگونه"
+-> POLITICAL
+
+The same result must apply to equivalent slogans or advocacy about any
+other government or political side.
+
+Do NOT use POLITICAL merely for:
+- factual reporting
+- neutral description
+- quotation with attribution
+- historical discussion
+- academic analysis
+- reporting that another person expressed a political view
+
+Independent safety violations take precedence:
+- direct personal abuse -> ABUSE
+- threat/call for violence -> THREAT
+- generalized degrading attack on people -> HATE
+- spam/injection/porn -> their ordinary labels
+
+Do not soften, strengthen, or reverse a political viewpoint.
+
+==================================================
 PUBLIC FIGURES, OFFICIALS, AND POLITICAL INSTITUTIONS
 ==================================================
 
@@ -409,12 +454,14 @@ movement, institution, or political viewpoint.
 Direct personal insults, mocking nicknames, degrading labels, threats,
 and group attacks use the ordinary ABUSE/HATE/THREAT rules.
 
-Peaceful criticism, disagreement, support, opposition, policy analysis,
-reporting, quotation, and historical discussion are not violations merely
-because they are negative or politically inconvenient.
+Peaceful explicit political criticism, disagreement, support, opposition,
+endorsement, campaigning, or slogans are POLITICAL / REVIEW under the
+uniform review policy. Neutral reporting, quotation, factual description,
+historical discussion, and analysis can still be OK when they are not
+the author's own advocacy/opposition.
 
 Do NOT require praise, ideological loyalty, or an official political
-narrative as a condition for OK/REWRITE.
+narrative as a condition for publication or review.
 
 For serious factual allegations about an identifiable person (for example
 corruption, theft, treason, or criminal conduct), use REVIEW when the message
