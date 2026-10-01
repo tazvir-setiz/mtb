@@ -305,3 +305,27 @@ async def test_ai_retry_cannot_send_raw_text_when_ai_disabled():
     client.get_messages.assert_not_awaited()
     client.send_message.assert_not_awaited()
     assert review_store.get(row.id).status == "pending"
+
+
+def test_guard_block_card_is_visually_distinct():
+    row = review_store.enqueue(
+        message("blocked text"), -100123, -100456, None, "guard_block:abuse"
+    )
+    content, markup = reviews.card(row)
+    assert "🚫" in content
+    assert "DROP" in content
+    assert "توهین مستقیم" in content
+    labels = [button.text for line in markup.inline_keyboard for button in line]
+    assert "⚠️ ارسال با تأیید مدیر" in labels
+    assert "🤖 ساخت نسخهٔ قابل انتشار" in labels
+    assert "🗑 رد نهایی" in labels
+
+
+def test_normal_review_card_keeps_existing_review_style():
+    row = queued()
+    content, markup = reviews.card(row)
+    assert content.startswith("🔎")
+    assert "DROP" not in content
+    labels = [button.text for line in markup.inline_keyboard for button in line]
+    assert "✅ تأیید نسخهٔ فعلی" in labels
+    assert "🤖 بازنویسی با AI" in labels
