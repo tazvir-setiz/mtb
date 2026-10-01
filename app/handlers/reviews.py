@@ -16,6 +16,7 @@ from app.telegram.client import ensure_started
 
 logger = logging.getLogger(__name__)
 REASONS = {
+    "send_uncertain": "نتیجهٔ ارسال مشخص نیست؛ پیش از تلاش مجدد مقصدها را بررسی کنید",
     "missing_evidence": "مدل برای حذف پیام شاهد معتبر یا دلیل کافی ارائه نکرد",
     "meaning_changed": "بازنویسی معنی یا اطلاعات اصلی را تغییر داده است",
     "invalid_verification": "پاسخ مرحلهٔ بررسی نهایی معتبر نبود",
@@ -65,9 +66,7 @@ def card(row):
     reason = REASONS.get(row.reason, "محتوا نیاز به تصمیم مدیر دارد")
     route_count = len(review_store.routes(row))
     destination_line = (
-        f"مقصد: {row.destination_id}"
-        if route_count == 1
-        else f"مقصدها: {route_count} کانال"
+        f"مقصد: {row.destination_id}" if route_count == 1 else f"مقصدها: {route_count} کانال"
     )
     text = (
         f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"

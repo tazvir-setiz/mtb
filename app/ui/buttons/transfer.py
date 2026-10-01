@@ -77,3 +77,43 @@ def failed_messages_menu() -> InlineKeyboardMarkup:
             [_cb("‹ بازگشت", "nav:back")],
         ]
     )
+
+
+def _page_buttons(prefix, page, count):
+    row = []
+    if page:
+        row.append(_cb("‹ صفحه قبل", f"{prefix}:{page - 1}"))
+    if (page + 1) * 10 < count:
+        row.append(_cb("صفحه بعد ›", f"{prefix}:{page + 1}"))
+    return [row] if row else []
+
+
+def source_selection(channels, page=0):
+    return InlineKeyboardMarkup(
+        [
+            [_cb(c.title[:60], f"transfer:source:{c.telegram_id}")]
+            for c in channels[page * 10 : (page + 1) * 10]
+        ]
+        + _page_buttons("transfer:sources", page, len(channels))
+        + [[_cb("‹ بازگشت", "nav:back")]]
+    )
+
+
+def destination_selection(channels, chosen, page=0):
+    rows = [
+        [
+            _cb(
+                ("✅ " if c.telegram_id in chosen else "▫️ ") + c.title[:55],
+                f"transfer:destination:{c.telegram_id}",
+            )
+        ]
+        for c in channels[page * 10 : (page + 1) * 10]
+    ]
+    rows.extend(_page_buttons("transfer:destinations", page, len(channels)))
+    rows.extend(
+        [
+            [_cb("ادامه با مقصدهای انتخاب‌شده", "transfer:routes")],
+            [_cb("‹ انتخاب مبدأ", "menu:transfer")],
+        ]
+    )
+    return InlineKeyboardMarkup(rows)

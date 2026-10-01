@@ -9,7 +9,9 @@ from app.database.repository import ForwardedMessageRepository, SettingsReposito
 from app.services import review_drafts, review_store
 from app.services.ai_policy import AIProcessingError, AIReviewRequired
 from app.services.ai_settings import load_ai_settings
+from app.services.fanout import clear_delivery_marker, deliver
 from app.services.forward_results import record_result
+from app.services.message_locks import message_lock
 from app.services.review_rewriter import rewrite_draft
 from app.telegram.forward_errors import ForwardErrorType, classify_error
 
@@ -27,6 +29,10 @@ def _record_route(
         return
     with get_session() as session:
         if not session.get(ForwardJob, job_id):
+            return
+        if status != MessageStatus.SUCCESS and ForwardedMessageRepository.exists(
+            session, row.source_id, row.message_id, destination_id
+        ):
             return
     record_result(
         job_id,
@@ -51,6 +57,16 @@ def record_resolution(row, status, destination_message_id=None):
 
 
 async def decide(review_id, version, action, admin_id, client):
+    row = review_store.get(review_id)
+    if not row:
+        return "این درخواست وجود ندارد. /reviews"
+    if row.status == "sending":
+        return "این درخواست در حال ارسال است. /reviews"
+    async with message_lock(row.source_id, row.message_id, None):
+        return await _decide(review_id, version, action, admin_id, client)
+
+
+async def _decide(review_id, version, action, admin_id, client):
     from app.telegram.message_sender import prepare_message, send_prepared_message
 
     if not settings.is_admin(admin_id):
@@ -64,15 +80,14 @@ async def decide(review_id, version, action, admin_id, client):
 
     if action == "reset":
         if review_store.reopen_uncertain(row.id, admin_id):
+            for destination_id, _ in routes:
+                clear_delivery_marker(row.source_id, row.message_id, destination_id)
             logger.warning(
                 "Admin reopened uncertain send review_id=%d admin=%d",
                 row.id,
                 admin_id,
             )
-            return (
-                "درخواست دوباره آماده بررسی شد. فقط اگر پیام در مقصد نیست، "
-                "تأییدش کنید. /reviews"
-            )
+            return "درخواست دوباره آماده بررسی شد. فقط اگر پیام در مقصد نیست، تأییدش کنید. /reviews"
         return "این درخواست قابل بازگردانی نیست. /reviews"
 
     if action not in {"approve", "reject", "retry"}:
@@ -108,10 +123,7 @@ async def decide(review_id, version, action, admin_id, client):
         )
         if not messages or not messages[0]:
             review_store.set_status(row.id, "pending")
-            return (
-                "پیام مبدأ حذف شده یا در دسترس نیست. "
-                "می‌توانید آن را رد کنید. /reviews"
-            )
+            return "پیام مبدأ حذف شده یا در دسترس نیست. می‌توانید آن را رد کنید. /reviews"
 
         original = messages[0]
         if review_store.content_fingerprint(original) != row.fingerprint:
@@ -122,10 +134,7 @@ async def decide(review_id, version, action, admin_id, client):
                 routes,
                 "content_changed",
             )
-            return (
-                "متن یا رسانه تغییر کرده؛ ارسال نشد. "
-                "اعلان تازه را بررسی کنید. /reviews"
-            )
+            return "متن یا رسانه تغییر کرده؛ ارسال نشد. اعلان تازه را بررسی کنید. /reviews"
 
         draft = review_drafts.get(row.id)
         if getattr(original, "poll", None) and (draft or action == "retry"):
@@ -152,8 +161,7 @@ async def decide(review_id, version, action, admin_id, client):
             if candidate == "__DROP__":
                 review_store.requeue(row.id, "ai_rejected")
                 return (
-                    "گارد پیشنهاد رد داد؛ هنوز ارسال نشده است. "
-                    "می‌توانید رد، تأیید یا ویرایش کنید."
+                    "گارد پیشنهاد رد داد؛ هنوز ارسال نشده است. می‌توانید رد، تأیید یا ویرایش کنید."
                 )
             review_drafts.save(
                 row.id,
@@ -162,10 +170,7 @@ async def decide(review_id, version, action, admin_id, client):
                 "ai_draft",
                 from_ai=True,
             )
-            return (
-                "بازنگری آماده است؛ پس از مشاهده، تأیید، رد یا ویرایش کنید. "
-                "هنوز ارسال نشده است."
-            )
+            return "بازنگری آماده است؛ پس از مشاهده، تأیید، رد یا ویرایش کنید. هنوز ارسال نشده است."
 
         with get_session() as session:
             signature = SettingsRepository.get(
@@ -212,35 +217,28 @@ async def decide(review_id, version, action, admin_id, client):
 
         for destination_id, job_id in pending_routes:
             try:
-                sent = await send_prepared_message(
+                status, destination_message_id = await deliver(
                     client,
                     original,
                     row.source_id,
                     destination_id,
+                    job_id,
                     prepared,
+                    send_prepared_message,
                 )
-                destination_message_id = getattr(sent, "id", None)
                 if first_destination_message_id is None:
                     first_destination_message_id = destination_message_id
-                _record_route(
-                    job_id,
-                    row,
-                    destination_id,
-                    MessageStatus.SUCCESS,
-                    destination_message_id,
-                )
-                sent_count += 1
+                sent_count += int(status == MessageStatus.SUCCESS)
             except Exception as exc:
                 error_type = classify_error(exc)
                 logger.error(
-                    "Review route send failed review_id=%d "
-                    "destination=%s type=%s reason=%s",
+                    "Review route send failed review_id=%d destination=%s type=%s reason=%s",
                     row.id,
                     destination_id,
                     type(exc).__name__,
                     error_type.value,
                 )
-                if error_type == ForwardErrorType.UNKNOWN:
+                if error_type in {ForwardErrorType.UNKNOWN, ForwardErrorType.NETWORK_ERROR}:
                     review_store.set_status(
                         row.id,
                         "uncertain",
@@ -312,6 +310,5 @@ async def decide(review_id, version, action, admin_id, client):
             "⚠️ نتیجه ارسال مشخص نیست؛ برای جلوگیری از ارسال تکراری، "
             "اول مقصدها را بررسی کنید. /reviews"
             if uncertain
-            else "⚠️ ارسال انجام نشد؛ دسترسی یا اتصال را بررسی "
-            "و از /reviews دوباره تلاش کنید."
+            else "⚠️ ارسال انجام نشد؛ دسترسی یا اتصال را بررسی و از /reviews دوباره تلاش کنید."
         )

@@ -17,12 +17,12 @@ def main_menu(
     rows: list[list[InlineKeyboardButton]] = [
         [
             _cb(
-                "📥 مبدأ" if not source_ready else "✅ مبدأ",
+                "📥 مبداها" if not source_ready else "✅ مبداها",
                 "menu:source",
                 style=STYLE_SUCCESS if source_ready else STYLE_PRIMARY,
             ),
             _cb(
-                "📤 مقصد" if not destination_ready else "✅ مقصد",
+                "📤 مقصدها" if not destination_ready else "✅ مقصدها",
                 "menu:destination",
                 style=STYLE_SUCCESS if destination_ready else STYLE_PRIMARY,
             ),

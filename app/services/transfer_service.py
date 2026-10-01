@@ -9,7 +9,6 @@ from app.database.database import get_session
 from app.database.models import ChannelType
 from app.database.repository import (
     ChannelRepository,
-    ForwardedMessageRepository,
     ForwardJobRepository,
     SettingsRepository,
 )
@@ -21,33 +20,62 @@ from app.ui import keyboards, messages
 logger = logging.getLogger(__name__)
 
 
-def get_channels() -> tuple[int | None, int | None, str, str]:
+def configured_channels():
     with get_session() as session:
-        source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
-        destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
-    source_id = source.telegram_id if source else None
-    dest_id = destination.telegram_id if destination else None
-    source_title = source.title if source else "❌ تنظیم نشده"
-    dest_title = destination.title if destination else "❌ تنظیم نشده"
-    return source_id, dest_id, source_title, dest_title
-
-
-def create_job(source_id: int, dest_id: int, start_id: int, end_id: int) -> int:
-    with get_session() as session:
-        job = ForwardJobRepository.create(
-            session, source_id, dest_id, start_id, end_id, total_messages=end_id - start_id + 1
+        return (
+            ChannelRepository.get_all_by_type(session, ChannelType.SOURCE),
+            ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION),
         )
-        return job.id
 
 
-def create_job_for_ids(source_id: int, dest_id: int, ids: list[int]) -> int:
+def get_channels(selection=None):
+    sources, destinations = configured_channels()
+    selection = selection or {}
+    selected_source = selection.get("transfer_source")
+    selected_destinations = selection.get("transfer_destinations")
+    source = next((c for c in sources if c.telegram_id == selected_source), None)
+    if selected_source is None and len(sources) == 1:
+        source = sources[0]
+    if selected_destinations is None and len(destinations) == 1:
+        selected_destinations = [destinations[0].telegram_id]
+    chosen = [c for c in destinations if c.telegram_id in (selected_destinations or [])]
+    if set(selected_destinations or []) != {c.telegram_id for c in chosen}:
+        chosen = []  # Configuration changed after selection: require selection again.
+    return (
+        source.telegram_id if source else None,
+        [c.telegram_id for c in chosen],
+        source.title if source else "مبدأ را انتخاب کنید",
+        (
+            "، ".join(c.title for c in chosen)
+            if len(chosen) <= 3
+            else f"{len(chosen)} مقصد انتخاب‌شده"
+        )
+        or "مقصدها را انتخاب کنید",
+    )
+
+
+def create_job(source_id: int, dest_id: int | list[int], start_id: int, end_id: int) -> int:
+    return create_job_for_ids(source_id, dest_id, list(range(start_id, end_id + 1)))
+
+
+def create_job_for_ids(source_id: int, dest_id: int | list[int], ids: list[int]) -> int:
+    destinations = list(dict.fromkeys(dest_id if isinstance(dest_id, list) else [dest_id]))
     ids = sorted(set(ids))
+    if not destinations or not ids:
+        raise ValueError("Select at least one message and destination")
     with get_session() as session:
-        job = ForwardJobRepository.create(
-            session, source_id, dest_id, min(ids), max(ids), total_messages=len(ids)
+        jobs = [
+            ForwardJobRepository.create(
+                session, source_id, destination, min(ids), max(ids), total_messages=len(ids)
+            )
+            for destination in destinations
+        ]
+        for job in jobs:
+            SettingsRepository.set(session, f"job_selection:{job.id}", json.dumps(ids))
+        SettingsRepository.set(
+            session, f"job_routes:{jobs[0].id}", json.dumps([j.id for j in jobs])
         )
-        SettingsRepository.set(session, f"job_selection:{job.id}", json.dumps(ids))
-        return job.id
+        return jobs[0].id
 
 
 def remaining_ids(session, job):
@@ -58,7 +86,13 @@ def remaining_ids(session, job):
         ids = range(job.start_message_id, job.end_message_id + 1)
     else:
         raise ValueError("فهرست انتخاب این انتقال قدیمی ذخیره نشده؛ شناسه‌ها را دوباره انتخاب کنید.")
-    return [value for value in ids if value > (job.last_processed_message_id or 0)]
+    from app.services.transfer_routes import job_routes
+
+    cursors = [
+        ForwardJobRepository.get(session, route_job).last_processed_message_id or 0
+        for _, route_job in job_routes(session, job)
+    ]
+    return [value for value in ids if value > min(cursors)]
 
 
 async def run_transfer(
@@ -67,7 +101,7 @@ async def run_transfer(
     progress_message_id: int,
     job_id: int,
     source_id: int,
-    dest_id: int,
+    dest_id: int | list[int],
     message_ids: list[int],
 ) -> None:
     client = await ensure_started()
@@ -76,6 +110,10 @@ async def run_transfer(
         client, job_id, source_id, dest_id, message_ids, on_progress=reporter.update
     )
 
+    await show_result(context, chat_id, progress_message_id, job_id)
+
+
+async def show_result(context, chat_id, progress_message_id, job_id):
     with get_session() as session:
         from app.database.models import JobStatus
 
@@ -83,10 +121,16 @@ async def run_transfer(
         if job is None:
             return
         finished = job.status == JobStatus.COMPLETED
-        total = job.total_messages
-        success = job.successful_messages
-        skipped = job.skipped_messages
-        failed = job.failed_messages
+        from app.services.transfer_routes import job_routes
+
+        jobs = [
+            ForwardJobRepository.get(session, route_job)
+            for _, route_job in job_routes(session, job)
+        ]
+        total = sum(j.total_messages for j in jobs)
+        success = sum(j.successful_messages for j in jobs)
+        skipped = sum(j.skipped_messages for j in jobs)
+        failed = sum(j.failed_messages for j in jobs)
         started = job.started_at
         finished_at = job.finished_at
 
@@ -111,9 +155,31 @@ async def run_retry(
     client = await ensure_started()
     reporter = ProgressReporter(context.bot, chat_id, progress_message_id)
     await retry_failed(client, job_id, on_progress=reporter.update)
+    await show_result(context, chat_id, progress_message_id, job_id)
 
 
 def get_failed_items(job_id: int) -> list[tuple[int, str]]:
     with get_session() as session:
-        records = ForwardedMessageRepository.failed_for_job(session, job_id)
-    return [(r.source_message_id, r.error or "خطای نامشخص") for r in records]
+        from app.services.transfer_routes import job_routes
+
+        job = ForwardJobRepository.get(session, job_id)
+        if job is None:
+            return []
+        from sqlalchemy import select
+
+        from app.database.models import ForwardedMessage
+        from app.services.transfer_routes import failed_ids
+
+        items = []
+        for destination, route_job in job_routes(session, job):
+            for message_id in sorted(failed_ids(session, route_job)):
+                record = session.scalar(
+                    select(ForwardedMessage).where(
+                        ForwardedMessage.source_channel_id == job.source_channel_id,
+                        ForwardedMessage.source_message_id == message_id,
+                        ForwardedMessage.destination_channel_id == destination,
+                    )
+                )
+                error = record.error if record and record.error else "نیازمند تلاش مجدد"
+                items.append((message_id, f"{destination}: {error}"))
+        return items

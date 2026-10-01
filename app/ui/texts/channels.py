@@ -5,6 +5,16 @@ from html import escape as _e
 from app.ui.texts.common import DIVIDER
 
 
+def channel_list(kind, channels, offset=0):
+    title = "📥 کانال‌های مبدأ" if kind == "source" else "📤 کانال‌های مقصد"
+    lines = [f"<b>{title}</b>", ""]
+    lines.extend(
+        f"{i}. {_e(c.title[:80])} · <code>{c.telegram_id}</code>"
+        for i, c in enumerate(channels, offset + 1)
+    )
+    return "\n".join(lines) if channels else "\n".join(lines) + "هنوز کانالی تنظیم نشده است."
+
+
 def ask_channel(kind: str, current_title: str | None) -> str:
     label = "📥 <b>کانال مبدأ</b>" if kind == "source" else "📤 <b>کانال مقصد</b>"
     current = f"✅ <b>{_e(current_title)}</b>" if current_title else "⚠️ <i>تنظیم نشده</i>"
@@ -17,7 +27,8 @@ def ask_channel(kind: str, current_title: str | None) -> str:
     return (
         f"{label}\n"
         f"{DIVIDER}\n\n"
-        f"کانال فعلی: {current}\n\n"
+        f"کانال‌های تنظیم‌شده: {current}\n\n"
+        "افزودن کانال جدید، کانال‌های قبلی را حفظ می‌کند.\n\n"
         "شناسه، Username یا لینک کانال را ارسال کنید.\n\n"
         "<blockquote>"
         "<code>@channel_username</code>\n"

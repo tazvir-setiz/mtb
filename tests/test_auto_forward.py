@@ -31,7 +31,9 @@ async def test_live_listener_records_shared_sender_outcome(monkeypatch, outcome)
         job_id = ForwardJobRepository.create(session, -1001, -1002, -1, -1, 0).id
         SettingsRepository.set(session, "signature_text", "<b>sig</b>")
 
-    event = SimpleNamespace(client=object(), message=SimpleNamespace(id=7))
+    event = SimpleNamespace(
+        client=object(), message=SimpleNamespace(id=7, message="text", entities=[], media=None)
+    )
     await auto_forward._on_new_message(event, -1001, [(-1002, job_id)])
 
     prepare.assert_awaited_once_with(event.message, -1001, "<b>sig</b>")
@@ -74,7 +76,9 @@ async def test_listener_prepares_once_and_fans_out_to_all_destinations(monkeypat
         second_job = ForwardJobRepository.create(session, -1001, -2002, -1, -1, 0).id
         SettingsRepository.set(session, "signature_text", "<b>sig</b>")
 
-    event = SimpleNamespace(client=object(), message=SimpleNamespace(id=7))
+    event = SimpleNamespace(
+        client=object(), message=SimpleNamespace(id=7, message="text", entities=[], media=None)
+    )
     await auto_forward._on_new_message(
         event,
         -1001,
@@ -140,7 +144,7 @@ async def test_listener_forwards_each_source_to_all_destinations(monkeypatch):
     event = SimpleNamespace(
         chat_id=-1002,
         client=client,
-        message=SimpleNamespace(id=7),
+        message=SimpleNamespace(id=7, message="text", entities=[], media=None),
     )
     await auto_forward._handler(event)
 

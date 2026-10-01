@@ -43,9 +43,10 @@ class MessageStatus(str, enum.Enum):
 
 class Channel(Base):
     __tablename__ = "channels"
+    __table_args__ = (UniqueConstraint("type", "telegram_id", name="uq_channel_role"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str] = mapped_column(String(255))
     type: Mapped[ChannelType] = mapped_column(Enum(ChannelType))

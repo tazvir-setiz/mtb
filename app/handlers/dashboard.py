@@ -108,8 +108,12 @@ async def show_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await show_dashboard(update, context, edit=True)
         return
     enabled = auto_forward.is_enabled()
-    source_text = "\n".join(f"• {escape(channel.title)}" for channel in sources)
-    destination_text = "\n".join(f"• {escape(channel.title)}" for channel in destinations)
+    source_text = "\n".join(f"• {escape(channel.title[:80])}" for channel in sources[:10])
+    destination_text = "\n".join(f"• {escape(channel.title[:80])}" for channel in destinations[:10])
+    if len(sources) > 10:
+        source_text += f"\n… و {len(sources) - 10} مبدأ دیگر"
+    if len(destinations) > 10:
+        destination_text += f"\n… و {len(destinations) - 10} مقصد دیگر"
     await update.callback_query.edit_message_text(
         "⚡ <b>انتقال خودکار پیام‌های جدید</b>\n\n"
         f"<b>📥 مبداها ({len(sources)})</b>\n{source_text}\n\n"

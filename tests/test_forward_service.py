@@ -95,7 +95,19 @@ async def test_flood_wait_retries_once_and_records_result(monkeypatch, result_ki
         "failure": ChatAdminRequiredError(request=None),
     }[result_kind]
     sender = AsyncMock(side_effect=[FloodWaitError(request=None, capture=2), result])
-    monkeypatch.setattr(forward_service, "fetch_and_send_message", sender)
+    if result_kind == "skip":
+        # FloodWait while fetching must still retry; a dropped message never sends.
+        fetch = AsyncMock(
+            side_effect=[
+                FloodWaitError(request=None, capture=2),
+                [SimpleNamespace(id=7, message="7", entities=[], media=None)],
+            ]
+        )
+        monkeypatch.setattr(FakeClient, "get_messages", fetch)
+        monkeypatch.setattr(forward_service, "prepare_message", AsyncMock(return_value=None))
+        sender = fetch
+    else:
+        monkeypatch.setattr(forward_service, "send_prepared_message", sender)
     sleep = AsyncMock()
     monkeypatch.setattr(forward_service.asyncio, "sleep", sleep)
     with get_session() as session:

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -29,6 +29,22 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        # Legacy SQLAlchemy schema used a unique index on telegram_id alone.
+        # Replace only that index; preserve all channel rows and their IDs.
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_channel_role "
+                    "ON channels (type, telegram_id)"
+                )
+            )
+            indexes = connection.execute(text("PRAGMA index_list(channels)")).all()
+            if any(row[1] == "ix_channels_telegram_id" and row[2] for row in indexes):
+                connection.execute(text("DROP INDEX ix_channels_telegram_id"))
+                connection.execute(
+                    text("CREATE INDEX ix_channels_telegram_id ON channels (telegram_id)")
+                )
 
 
 @contextmanager

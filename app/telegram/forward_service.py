@@ -3,27 +3,28 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from telethon import TelegramClient
-from telethon.errors import FloodWaitError
-from telethon.tl.types import Message
+from sqlalchemy import select
+from telethon.errors import FloodWaitError, MessageIdInvalidError
 
 from app.config import settings
 from app.database.database import get_session
-from app.database.models import JobStatus, MessageStatus
+from app.database.models import ForwardedMessage, JobStatus, MessageStatus
 from app.database.repository import (
     ForwardedMessageRepository,
     ForwardJobRepository,
     SettingsRepository,
 )
 from app.log_context import traced
+from app.services.fanout import fan_out
 from app.services.forward_results import record_result, set_job_status
 from app.services.message_locks import message_lock
-from app.telegram.forward_errors import FRIENDLY_ERRORS, ForwardErrorType, classify_error
+from app.services.transfer_routes import failed_ids, job_routes
+from app.telegram.forward_errors import FRIENDLY_ERRORS, classify_error
+from app.telegram.forward_errors import ForwardErrorType as ForwardErrorType
 from app.telegram.forward_progress import ProgressCallback, ProgressSnapshot
-from app.telegram.message_sender import fetch_and_send_message
+from app.telegram.message_sender import prepare_message, send_prepared_message
 
 logger = logging.getLogger(__name__)
-
 _stop_flags: dict[int, bool] = {}
 
 
@@ -42,169 +43,164 @@ async def report_progress(callback, snapshot):
         )
 
 
-async def _send_with_retry(
-    client: TelegramClient,
-    msg_id: int,
-    source_id: int,
-    destination_id: int,
-    signature: str | None,
-    snapshot: ProgressSnapshot,
-    on_progress: ProgressCallback | None,
-) -> Message | None:
-    try:
-        return await fetch_and_send_message(client, msg_id, source_id, destination_id, signature)
-    except FloodWaitError as exc:
-        logger.warning("FloodWait for message %d: waiting %d seconds.", msg_id, exc.seconds)
-        if on_progress:
-            await report_progress(on_progress, snapshot)
-        await asyncio.sleep(exc.seconds + 1)
-        return await fetch_and_send_message(client, msg_id, source_id, destination_id, signature)
-
-
 @traced
 async def forward_range(
-    client: TelegramClient,
+    client,
     job_id: int,
     source_channel_id: int,
     destination_channel_id: int,
     message_ids: list[int],
     on_progress: ProgressCallback | None = None,
+    *,
+    retry_only=False,
 ) -> None:
     _stop_flags.pop(job_id, None)
-    total = len(message_ids)
-    logger.info(
-        "Transfer started source=%s destination=%s total=%d",
-        source_channel_id,
-        destination_channel_id,
-        total,
-    )
-    processed = success = skipped = failed = 0
-    set_job_status(job_id, JobStatus.RUNNING)
-
     with get_session() as session:
+        job = ForwardJobRepository.get(session, job_id)
+        if job is None:
+            return
+        if source_channel_id != job.source_channel_id:
+            raise ValueError("Transfer source does not match persisted job")
+        routes = job_routes(session, job)
         signature = SettingsRepository.get(session, "signature_text")
-
+    for _, route_job in routes:
+        set_job_status(route_job, JobStatus.RUNNING)
+    message_ids = sorted(set(message_ids))
+    selected_routes = {msg_id: routes for msg_id in message_ids}
+    if retry_only:
+        with get_session() as session:
+            for msg_id in message_ids:
+                skipped_destinations = set(
+                    session.scalars(
+                        select(ForwardedMessage.destination_channel_id).where(
+                            ForwardedMessage.source_channel_id == source_channel_id,
+                            ForwardedMessage.source_message_id == msg_id,
+                            ForwardedMessage.status == MessageStatus.SKIPPED,
+                        )
+                    )
+                )
+                selected_routes[msg_id] = [
+                    (destination, route_job)
+                    for destination, route_job in routes
+                    if destination not in skipped_destinations
+                ]
+    total = sum(len(value) for value in selected_routes.values())
+    processed = success = skipped = failed = 0
     last_update = 0.0
     loop = asyncio.get_running_loop()
 
-    for msg_id in message_ids:
-        if _stop_flags.pop(job_id, False):
-            logger.info("Job %d manually stopped.", job_id)
-            set_job_status(job_id, JobStatus.PAUSED)
+    async def send_with_retry(*args):
+        try:
+            return await send_prepared_message(*args)
+        except FloodWaitError as exc:
             if on_progress:
-                await report_progress(
-                    on_progress,
-                    ProgressSnapshot(
-                        job_id, total, processed, success, skipped, failed, stopped=True
-                    ),
-                )
+                await report_progress(on_progress, snapshot())
+            await asyncio.sleep(exc.seconds + 1)
+            return await send_prepared_message(*args)
+
+    def snapshot(stopped=False):
+        return ProgressSnapshot(job_id, total, processed, success, skipped, failed, stopped)
+
+    for msg_id in sorted(set(message_ids)):
+        if _stop_flags.pop(job_id, False):
+            for _, route_job in routes:
+                set_job_status(route_job, JobStatus.PAUSED)
+            if on_progress:
+                await report_progress(on_progress, snapshot(True))
             return
-
-        async with message_lock(source_channel_id, msg_id, destination_channel_id):
+        message_routes = selected_routes[msg_id]
+        async with message_lock(source_channel_id, msg_id, None):
             with get_session() as session:
-                already = ForwardedMessageRepository.exists(
-                    session, source_channel_id, msg_id, destination_channel_id
+                all_sent = all(
+                    ForwardedMessageRepository.exists(
+                        session, source_channel_id, msg_id, destination
+                    )
+                    for destination, _ in message_routes
                 )
-
-            destination_message_id = None
-            error = None
-            if already:
-                status = MessageStatus.DUPLICATE
-                logger.info("Message %d skipped (already forwarded).", msg_id)
+            if all_sent:
+                outcomes = {
+                    destination: MessageStatus.DUPLICATE for destination, _ in message_routes
+                }
+                for destination, route_job in message_routes:
+                    record_result(
+                        route_job, source_channel_id, msg_id, destination, MessageStatus.DUPLICATE
+                    )
             else:
                 try:
-                    dest_msg = await _send_with_retry(
+                    try:
+                        originals = await client.get_messages(source_channel_id, ids=[msg_id])
+                    except FloodWaitError as exc:
+                        if on_progress:
+                            await report_progress(on_progress, snapshot())
+                        await asyncio.sleep(exc.seconds + 1)
+                        originals = await client.get_messages(source_channel_id, ids=[msg_id])
+                    if not originals or not originals[0]:
+                        raise MessageIdInvalidError(request=None)
+                    outcomes = await fan_out(
                         client,
-                        msg_id,
+                        originals[0],
                         source_channel_id,
-                        destination_channel_id,
+                        message_routes,
                         signature,
-                        ProgressSnapshot(job_id, total, processed, success, skipped, failed),
-                        on_progress,
+                        prepare_message,
+                        send_with_retry,
                     )
-                    if dest_msg is None:
-                        status = MessageStatus.SKIPPED
-                        error = "حذف شده توسط هوش مصنوعی"
-                        logger.info("Message %d skipped by AI guardrails.", msg_id)
-                    else:
-                        status = MessageStatus.SUCCESS
-                        destination_message_id = getattr(dest_msg, "id", None)
-                        logger.info(
-                            "Message %d -> %s sent successfully.", msg_id, destination_message_id
-                        )
                 except Exception as exc:
-                    status = MessageStatus.FAILED
-                    error_type = classify_error(exc)
-                    error = FRIENDLY_ERRORS[error_type]
-                    if error_type == ForwardErrorType.UNKNOWN:
-                        logger.exception("Unknown error while forwarding message %d", msg_id)
-                    else:
-                        logger.error(
-                            "Failed to forward message %d: type=%s reason=%s",
+                    logger.exception(
+                        "Transfer preparation failed source_id=%s message_id=%s job_id=%s",
+                        source_channel_id,
+                        msg_id,
+                        job_id,
+                    )
+                    outcomes = {}
+                    for destination, route_job in message_routes:
+                        with get_session() as session:
+                            sent = ForwardedMessageRepository.exists(
+                                session, source_channel_id, msg_id, destination
+                            )
+                        status = MessageStatus.DUPLICATE if sent else MessageStatus.FAILED
+                        record_result(
+                            route_job,
+                            source_channel_id,
                             msg_id,
-                            type(exc).__name__,
-                            error_type.value,
+                            destination,
+                            status,
+                            error=FRIENDLY_ERRORS[classify_error(exc)],
                         )
-
-            record_result(
-                job_id,
-                source_channel_id,
-                msg_id,
-                destination_channel_id,
-                status,
-                destination_message_id=destination_message_id,
-                error=error,
-            )
-        success += int(status == MessageStatus.SUCCESS)
-        failed += int(status == MessageStatus.FAILED)
-        skipped += int(status in (MessageStatus.SKIPPED, MessageStatus.DUPLICATE))
-        processed += 1
-        logger.info(
-            "Transfer progress processed=%d/%d sent=%d skipped=%d failed=%d",
-            processed,
-            total,
-            success,
-            skipped,
-            failed,
-        )
-
+                        outcomes[destination] = status
+        for status in outcomes.values():
+            success += int(status == MessageStatus.SUCCESS)
+            failed += int(status == MessageStatus.FAILED)
+            skipped += int(status in (MessageStatus.SKIPPED, MessageStatus.DUPLICATE))
+            processed += 1
         now = loop.time()
         if on_progress and (
             now - last_update >= settings.progress_update_interval or processed == total
         ):
             last_update = now
-            await report_progress(
-                on_progress, ProgressSnapshot(job_id, total, processed, success, skipped, failed)
-            )
+            await report_progress(on_progress, snapshot())
         await asyncio.sleep(settings.forward_delay)
-
     _stop_flags.pop(job_id, None)
-    set_job_status(job_id, JobStatus.COMPLETED)
-    logger.info(
-        "Job %d completed. Success: %d, Skipped: %d, Failed: %d",
-        job_id,
-        success,
-        skipped,
-        failed,
-    )
+    for _, route_job in routes:
+        set_job_status(route_job, JobStatus.COMPLETED)
 
 
-async def retry_failed(
-    client: TelegramClient,
-    job_id: int,
-    on_progress: ProgressCallback | None = None,
-) -> None:
-    logger.info("Initiating retry for failed messages of Job %d", job_id)
+async def retry_failed(client, job_id: int, on_progress: ProgressCallback | None = None) -> None:
     with get_session() as session:
         job = ForwardJobRepository.get(session, job_id)
-        if not job:
+        if job is None:
             return
-        failed_records = ForwardedMessageRepository.failed_for_job(session, job_id)
-        message_ids = [record.source_message_id for record in failed_records]
-        source_id = job.source_channel_id
-        destination_id = job.destination_channel_id
-
-    if not message_ids:
-        logger.info("No failed messages found to retry for Job %d", job_id)
-        return
-    await forward_range(client, job_id, source_id, destination_id, message_ids, on_progress)
+        routes = job_routes(session, job)
+        message_ids = sorted(
+            {mid for _, route_job in routes for mid in failed_ids(session, route_job)}
+        )
+    if message_ids:
+        await forward_range(
+            client,
+            job_id,
+            job.source_channel_id,
+            job.destination_channel_id,
+            message_ids,
+            on_progress,
+            retry_only=True,
+        )

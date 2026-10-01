@@ -24,16 +24,110 @@ from app.handlers.transfer_input import start_ids_flow as start_ids_flow
 from app.handlers.transfer_input import start_range_flow as start_range_flow
 from app.services import transfer_service
 from app.ui import keyboards, messages
+from app.ui.buttons.transfer import destination_selection, source_selection
 
 
 async def show_transfer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    source_id, dest_id, source_title, dest_title = transfer_service.get_channels()
-    if source_id is None or dest_id is None:
+    from app.handlers.transfer_input import clear_transfer_input
+
+    clear_transfer_input(context.user_data)
+    context.user_data.pop("transfer_source", None)
+    context.user_data.pop("transfer_destination_page", None)
+    context.user_data.pop("transfer_destinations", None)
+    sources, destinations = transfer_service.configured_channels()
+    if not sources or not destinations:
         await update.callback_query.answer(
             "ابتدا کانال مبدأ و مقصد را تنظیم کنید.", show_alert=True
         )
         return
     set_state(context.user_data, State.TRANSFER_MENU)
+    if len(sources) == 1:
+        context.user_data["transfer_source"] = sources[0].telegram_id
+        await show_destinations(update, context)
+        return
+    await show_sources(update, context)
+
+
+async def show_sources(update, context):
+    from app.ui.callbacks import parse
+
+    if get_state(context.user_data) != State.TRANSFER_MENU:
+        return
+    sources, _ = transfer_service.configured_channels()
+    _, action, arg = parse(getattr(update.callback_query, "data", "") or "")
+    page = int(arg) if action == "sources" and arg and arg.isdigit() else 0
+    page = min(page, max(0, (len(sources) - 1) // 10))
+    await update.callback_query.edit_message_text(
+        "📥 مبدأ پیام‌های تاریخی را انتخاب کنید؛ شناسه پیام فقط مربوط به همین مبدأ است.",
+        reply_markup=source_selection(sources, page),
+    )
+
+
+async def select_source(update, context):
+    from app.ui.callbacks import parse
+
+    if get_state(context.user_data) != State.TRANSFER_MENU:
+        return
+    _, _, arg = parse(update.callback_query.data)
+    sources, _ = transfer_service.configured_channels()
+    source = next((c for c in sources if str(c.telegram_id) == arg), None)
+    if source is None:
+        await show_transfer_menu(update, context)
+        return
+    context.user_data["transfer_source"] = source.telegram_id
+    context.user_data["transfer_destinations"] = []
+    await show_destinations(update, context)
+
+
+async def show_destinations(update, context):
+    from app.ui.callbacks import parse
+
+    if get_state(context.user_data) != State.TRANSFER_MENU:
+        return
+    _, destinations = transfer_service.configured_channels()
+    _, action, arg = parse(getattr(update.callback_query, "data", "") or "")
+    page = context.user_data.get("transfer_destination_page", 0)
+    if action == "destinations" and arg and arg.isdigit():
+        page = int(arg)
+    page = min(page, max(0, (len(destinations) - 1) // 10))
+    context.user_data["transfer_destination_page"] = page
+    chosen = context.user_data.setdefault("transfer_destinations", [])
+    if len(destinations) == 1:
+        chosen[:] = [destinations[0].telegram_id]
+    await update.callback_query.edit_message_text(
+        "📤 یک یا چند مقصد را انتخاب کنید.",
+        reply_markup=destination_selection(destinations, chosen, page),
+    )
+
+
+async def toggle_destination(update, context):
+    from app.ui.callbacks import parse
+
+    if get_state(context.user_data) != State.TRANSFER_MENU:
+        return
+    _, _, arg = parse(update.callback_query.data)
+    _, destinations = transfer_service.configured_channels()
+    channel = next((c for c in destinations if str(c.telegram_id) == arg), None)
+    if channel is None:
+        await show_transfer_menu(update, context)
+        return
+    chosen = context.user_data.setdefault("transfer_destinations", [])
+    if channel.telegram_id in chosen:
+        chosen.remove(channel.telegram_id)
+    else:
+        chosen.append(channel.telegram_id)
+    await show_destinations(update, context)
+
+
+async def confirm_routes(update, context):
+    if get_state(context.user_data) != State.TRANSFER_MENU:
+        return
+    source_id, destinations, source_title, dest_title = transfer_service.get_channels(
+        context.user_data
+    )
+    if source_id is None or not destinations:
+        await update.callback_query.answer("یک مبدأ و حداقل یک مقصد انتخاب کنید.", show_alert=True)
+        return
     await update.callback_query.edit_message_text(
         messages.transfer_menu_text(source_title, dest_title),
         reply_markup=keyboards.transfer_menu(),
@@ -52,13 +146,13 @@ async def confirm_and_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "این درخواست قبلاً اجرا شده یا منقضی شده است. /menu"
         )
         return
-    source_id, dest_id, source_title, dest_title = transfer_service.get_channels()
+    source_id, dest_id, source_title, dest_title = transfer_service.get_channels(context.user_data)
     start_id = context.user_data.get(KEY_RANGE_START)
     end_id = context.user_data.get("range_end")
     explicit_ids = context.user_data.get("explicit_ids")
     if (
         source_id is None
-        or dest_id is None
+        or not dest_id
         or (not explicit_ids and (start_id is None or end_id is None))
     ):
         await update.callback_query.message.reply_text(
@@ -77,7 +171,7 @@ async def confirm_and_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     set_state(context.user_data, State.TRANSFERRING)
 
     await update.callback_query.edit_message_text(
-        messages.progress_text(0, len(message_ids), 0, 0, 0, 0),
+        messages.progress_text(0, len(message_ids) * len(dest_id), 0, 0, 0, 0),
         reply_markup=keyboards.in_progress(),
     )
     progress_message_id = update.callback_query.message.message_id

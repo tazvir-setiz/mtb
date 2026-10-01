@@ -38,7 +38,7 @@ def record_result(
                     )
                 )
             )
-            if previous == MessageStatus.SUCCESS and status == MessageStatus.DUPLICATE:
+            if previous == MessageStatus.SUCCESS:
                 status = previous
             for field, statuses in (
                 ("successful_messages", {MessageStatus.SUCCESS}),

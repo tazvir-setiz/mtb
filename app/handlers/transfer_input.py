@@ -59,7 +59,7 @@ async def read_range_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if error:
         await update.message.reply_text(f"⚠️ {error}", reply_markup=keyboards.cancel_only())
         return
-    _, _, source_title, dest_title = transfer_service.get_channels()
+    _, _, source_title, dest_title = transfer_service.get_channels(context.user_data)
     context.user_data["range_end"] = value
     set_state(context.user_data, State.CONFIRM_TRANSFER)
     await update.message.reply_text(
@@ -75,7 +75,7 @@ async def read_message_ids(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(f"⚠️ {error}", reply_markup=keyboards.cancel_only())
         return
     context.user_data["explicit_ids"] = ids
-    _, _, source_title, dest_title = transfer_service.get_channels()
+    _, _, source_title, dest_title = transfer_service.get_channels(context.user_data)
     set_state(context.user_data, State.CONFIRM_TRANSFER)
     await update.message.reply_text(
         messages.confirm_transfer_text(len(ids), source_title, dest_title),
@@ -91,7 +91,7 @@ async def show_confirm_from_range(update: Update, context: ContextTypes.DEFAULT_
             "این انتخاب منقضی شده؛ از /menu دوباره شروع کنید."
         )
         return
-    _, _, source_title, dest_title = transfer_service.get_channels()
+    _, _, source_title, dest_title = transfer_service.get_channels(context.user_data)
     count = end_id - start_id + 1
     set_state(context.user_data, State.CONFIRM_TRANSFER)
     await update.callback_query.edit_message_text(

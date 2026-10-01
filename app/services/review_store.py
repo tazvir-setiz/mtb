@@ -53,25 +53,47 @@ def _save_routes(session, review_id, routes):
         row.value = value
 
 
+def _load_routes(session, row):
+    fallback = [(row.destination_id, row.job_id)]
+    if getattr(row, "id", None) is None:
+        return fallback
+    setting = session.scalar(select(Settings).where(Settings.key == _route_key(row.id)))
+    if not setting:
+        return fallback
+    try:
+        data = json.loads(setting.value)
+        if not isinstance(data, list) or not data:
+            raise ValueError("empty or invalid route list")
+        result = {}
+        for item in data:
+            destination = item["destination_id"]
+            job = item.get("job_id")
+            if type(destination) is not int or (job is not None and type(job) is not int):
+                raise ValueError("invalid route identity")
+            result.setdefault(destination, job)
+        return list(result.items())
+    except (ValueError, TypeError, KeyError):
+        logger.warning("Invalid review route metadata review_id=%s; using legacy route", row.id)
+        return fallback
+
+
 def routes(row):
     with get_session() as session:
-        setting = session.scalar(select(Settings).where(Settings.key == _route_key(row.id)))
-    if setting:
-        return [
-            (item["destination_id"], item.get("job_id"))
-            for item in json.loads(setting.value)
-        ]
-    return [(row.destination_id, row.job_id)]
+        return _load_routes(session, row)
 
 
 def find(source_id, message_id, destination_id):
     with get_session() as session:
-        return session.scalar(
-            select(ReviewRequest).where(
+        rows = session.scalars(
+            select(ReviewRequest)
+            .where(
                 ReviewRequest.source_id == source_id,
                 ReviewRequest.message_id == message_id,
-                ReviewRequest.destination_id == destination_id,
             )
+            .order_by(ReviewRequest.id.desc())
+        ).all()
+        return next(
+            (row for row in rows if destination_id in dict(_load_routes(session, row))), None
         )
 
 
@@ -96,7 +118,6 @@ def enqueue_routes(original, source_id, routes_list, reason):
             select(ReviewRequest).where(
                 ReviewRequest.source_id == source_id,
                 ReviewRequest.message_id == original.id,
-                ReviewRequest.destination_id == primary_destination,
             )
         )
         fingerprint = content_fingerprint(original)
@@ -105,21 +126,33 @@ def enqueue_routes(original, source_id, routes_list, reason):
                 source_id=source_id,
                 message_id=original.id,
                 destination_id=primary_destination,
+                fingerprint=fingerprint,
+                preview=(original.message or "[پیام بدون متن]")[:2500],
+                reason=reason[:100],
             )
             session.add(row)
             session.flush()
-        elif row.fingerprint == fingerprint or row.status in {"sending", "sent"}:
-            _save_routes(session, row.id, routes_list)
-            return row
+        else:
+            merged = dict(_load_routes(session, row))
+            new_destinations = set(dict(routes_list)) - set(merged)
+            for destination, job in routes_list:
+                if destination not in merged or merged[destination] is None:
+                    merged[destination] = job
+            routes_list = list(merged.items())
+            if row.fingerprint == fingerprint or row.status in {"sending", "sent", "uncertain"}:
+                _save_routes(session, row.id, routes_list)
+                if new_destinations:
+                    row.notified = "[]"
+                    if row.status == "sent":
+                        row.status = "pending"
+                return row
 
         row.job_id = primary_job
         draft = session.get(ReviewDraft, row.id)
         if draft:
             session.delete(draft)
         row.fingerprint = fingerprint
-        row.preview = (
-            original.message or "[پیام رسانه‌ای یا نظرسنجی بدون متن]"
-        )[:2500]
+        row.preview = (original.message or "[پیام رسانه‌ای یا نظرسنجی بدون متن]")[:2500]
         row.reason = reason[:100]
         row.status = "pending"
         row.notified = "[]"
@@ -194,9 +227,7 @@ def mark_notified(review_id, admin_id, fingerprint=None, status=None, version=No
             or (version and review_drafts.version(row) != version)
         ):
             return
-        row.notified = json.dumps(
-            sorted(set(json.loads(row.notified)) | {admin_id})
-        )
+        row.notified = json.dumps(sorted(set(json.loads(row.notified)) | {admin_id}))
 
 
 def recover_interrupted():

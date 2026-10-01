@@ -28,8 +28,8 @@ def dashboard(
     return (
         "🏠 <b>مرکز مدیریت انتقال</b>\n\n"
         f"<blockquote>"
-        f"📥 مبدأ  ·  {source_line}\n"
-        f"📤 مقصد  ·  {dest_line}\n"
+        f"📥 مبداها  ·  {source_line}\n"
+        f"📤 مقصدها  ·  {dest_line}\n"
         f"⚡ انتقال خودکار  ·  <b>{auto_line}</b>\n"
         f"🤖 پردازش هوشمند  ·  <b>{'روشن' if ai_enabled else 'خاموش'}</b>\n"
         f"✍️ امضا  ·  <b>{'فعال' if signature_enabled else 'بدون امضا'}</b>\n"

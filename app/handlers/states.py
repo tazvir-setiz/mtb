@@ -50,6 +50,10 @@ def reset(user_data: dict) -> None:
         KEY_RANGE_START,
         "range_end",
         "explicit_ids",
+        "transfer_source",
+        "transfer_destinations",
+        "transfer_destination_page",
+        "channel_input",
     ):
         user_data.pop(key, None)
     set_state(user_data, State.MAIN_MENU)

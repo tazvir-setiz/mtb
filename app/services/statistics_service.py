@@ -13,8 +13,8 @@ def get_statistics_text() -> str:
 
     with get_session() as session:
         stats = ForwardedMessageRepository.stats(session)
-        source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
-        destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
+        sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
+        destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
         last_job = (
             session.execute(select(ForwardJob).order_by(ForwardJob.id.desc())).scalars().first()
         )
@@ -24,8 +24,8 @@ def get_statistics_text() -> str:
         success=stats["success"],
         failed=stats["failed"],
         duplicate=stats["duplicate"],
-        source_title=source.title if source else "❌ تنظیم نشده",
-        destination_title=destination.title if destination else "❌ تنظیم نشده",
+        source_title=f"مبداها: {len(sources)}",
+        destination_title=f"مقصدها: {len(destinations)}",
         last_operation=format_datetime(last_job.finished_at or last_job.started_at)
         if last_job
         else "—",
@@ -44,4 +44,10 @@ def get_recent_messages(limit: int = 10) -> list[tuple[int, str]]:
 
     with get_session() as session:
         records = ForwardedMessageRepository.recent(session, limit=limit)
-    return [(r.source_message_id, status_icon(r.status)) for r in records]
+    return [
+        (
+            f"{r.source_channel_id}/{r.source_message_id} → {r.destination_channel_id}",
+            status_icon(r.status),
+        )
+        for r in records
+    ]

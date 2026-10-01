@@ -10,6 +10,18 @@ from app.database.models import Channel, ChannelType
 
 class ChannelRepository:
     @staticmethod
+    def remove(session: Session, channel_type: ChannelType, telegram_id: int) -> bool:
+        from sqlalchemy import delete
+
+        return bool(
+            session.execute(
+                delete(Channel).where(
+                    Channel.type == channel_type, Channel.telegram_id == telegram_id
+                )
+            ).rowcount
+        )
+
+    @staticmethod
     def upsert(
         session: Session,
         telegram_id: int,

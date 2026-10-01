@@ -99,15 +99,18 @@ async def test_auto_and_manual_send_same_message_only_once(monkeypatch, auto_fir
         await release.wait()
         return SimpleNamespace(id=100)
 
-    monkeypatch.setattr(auto_forward, "send_message", send)
-    monkeypatch.setattr(forward_service, "fetch_and_send_message", send)
+    monkeypatch.setattr(auto_forward, "send_prepared_message", send)
+    monkeypatch.setattr(forward_service, "send_prepared_message", send)
     with get_session() as session:
         a = ForwardJobRepository.create(session, -1001, -1002, 1, 1, 1).id
         b = ForwardJobRepository.create(session, -1001, -1002, 1, 1, 1).id
-    event = SimpleNamespace(client=None, message=SimpleNamespace(id=1))
+    client = FakeClient()
+    event = SimpleNamespace(
+        client=client, message=SimpleNamespace(id=1, message="1", entities=[], media=None)
+    )
     operations = [
-        auto_forward._on_new_message(event, -1001, -1002, a),
-        forward_service.forward_range(None, b, -1001, -1002, [1]),
+        auto_forward._on_new_message(event, -1001, [(-1002, a)]),
+        forward_service.forward_range(client, b, -1001, -1002, [1]),
     ]
     if not auto_first:
         operations.reverse()

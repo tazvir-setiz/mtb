@@ -24,6 +24,41 @@ _TYPE_MAP = {"source": ChannelType.SOURCE, "destination": ChannelType.DESTINATIO
 _STATE_MAP = {"source": State.SOURCE_CHANNEL, "destination": State.DESTINATION_CHANNEL}
 
 
+async def show_channels(update, context, kind, removing=False):
+    from app.handlers.states import reset
+    from app.ui.buttons.channels import channel_management
+    from app.ui.texts.channels import channel_list
+
+    reset(context.user_data)
+    with get_session() as session:
+        channels = ChannelRepository.get_all_by_type(session, _TYPE_MAP[kind])
+    from app.ui.callbacks import parse
+
+    namespace, action, arg = parse(getattr(update.callback_query, "data", "") or "")
+    page = (
+        int(arg) if arg and arg.isdigit() and (namespace == "menu" or action == "removals") else 0
+    )
+    pages = max(1, (len(channels) + 9) // 10)
+    page = min(page, pages - 1)
+    visible = channels[page * 10 : (page + 1) * 10]
+    await update.callback_query.edit_message_text(
+        channel_list(kind, visible, offset=page * 10),
+        reply_markup=channel_management(kind, visible, removing=removing, page=page, pages=pages),
+    )
+
+
+async def remove_channel(update, context, kind):
+    from app.ui.callbacks import parse
+
+    _, _, arg = parse(update.callback_query.data)
+    if arg is None or not arg.lstrip("-").isdigit():
+        return
+    with get_session() as session:
+        ChannelRepository.remove(session, _TYPE_MAP[kind], int(arg))
+    await refresh_auto_forward(update)
+    await show_channels(update, context, kind)
+
+
 def remember_channel(user_data: dict, kind: str, info, message_id: int) -> None:
     user_data[KEY_PENDING_CHANNEL] = {
         "kind": kind,
@@ -39,8 +74,8 @@ async def show_channel_prompt(
 ) -> None:
     channel_type = _TYPE_MAP[kind]
     with get_session() as session:
-        channel = ChannelRepository.get_by_type(session, channel_type)
-    text = messages.ask_channel(kind, channel.title if channel else None)
+        channels = ChannelRepository.get_all_by_type(session, channel_type)
+    text = messages.ask_channel(kind, f"{len(channels)} کانال" if channels else None)
     context.user_data[KEY_PENDING_CHANNEL_KIND] = kind
     context.user_data.pop(KEY_PENDING_CHANNEL, None)
     set_state(context.user_data, _STATE_MAP[kind])
@@ -55,6 +90,7 @@ async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     context.user_data.pop(KEY_PENDING_CHANNEL, None)
     raw = update.message.text.strip()
+    context.user_data["channel_input"] = raw
 
     try:
         client = await ensure_started()
@@ -131,14 +167,13 @@ async def handle_change(update: Update, context: ContextTypes.DEFAULT_TYPE, kind
 
 
 async def handle_destination_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    with get_session() as session:
-        channel = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
-    if not channel:
+    raw = context.user_data.get("channel_input")
+    if not raw:
         await show_channel_prompt(update, context, "destination")
         return
     try:
         client = await ensure_started()
-        info = await verify_destination_permissions(client, str(channel.telegram_id))
+        info = await verify_destination_permissions(client, raw)
     except ChannelAccessError:
         await update.callback_query.edit_message_text(
             messages.PERMISSION_ERROR, reply_markup=keyboards.destination_retry()

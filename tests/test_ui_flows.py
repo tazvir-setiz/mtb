@@ -136,7 +136,9 @@ async def test_new_messages_opens_auto_forward_controls(monkeypatch):
 @pytest.mark.asyncio
 async def test_range_input_rejects_invalid_end_and_preserves_start(monkeypatch):
     monkeypatch.setattr(
-        transfer.transfer_service, "get_channels", lambda: (1, 2, "Source", "Destination")
+        transfer.transfer_service,
+        "get_channels",
+        lambda selection=None: (1, [2], "Source", "Destination"),
     )
     context = SimpleNamespace(user_data={"state": State.RANGE_INPUT_START})
     message = SimpleNamespace(text="10", reply_text=AsyncMock())
@@ -157,7 +159,9 @@ async def test_range_input_rejects_invalid_end_and_preserves_start(monkeypatch):
 @pytest.mark.asyncio
 async def test_id_input_keeps_only_selected_messages(monkeypatch):
     monkeypatch.setattr(
-        transfer.transfer_service, "get_channels", lambda: (1, 2, "Source", "Destination")
+        transfer.transfer_service,
+        "get_channels",
+        lambda selection=None: (1, [2], "Source", "Destination"),
     )
     context = SimpleNamespace(user_data={"state": State.IDS_INPUT})
     update = SimpleNamespace(message=SimpleNamespace(text="10,12", reply_text=AsyncMock()))
