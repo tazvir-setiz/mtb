@@ -1911,7 +1911,8 @@ async def apply_ai_guardrails(
 
     result = await moderate(chat_id, message_id, html_text)
     if result.action == "DROP":
-        return "__DROP__"
+        reason = result.reason or result.label.value.lower()
+        raise AIReviewRequired(f"guard_block:{reason}")
     if result.action == "REVIEW":
         raise AIReviewRequired(result.reason or result.label.value.lower())
     return result.text or ""
