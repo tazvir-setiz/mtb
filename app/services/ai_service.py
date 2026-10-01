@@ -448,6 +448,27 @@ Independent safety violations take precedence:
 Do not soften, strengthen, or reverse a political viewpoint.
 
 ==================================================
+NEWS EVIDENCE IN CONTEXT
+==================================================
+
+The supplied context may contain "news_evidence". Those entries come from
+a configured external news lookup and are ordered newest-first.
+
+Use them only when they closely match the event described by the ORIGINAL
+message. They may help resolve a colloquial, vague, or degrading proxy for
+an actor into the concrete actor/event stated by the matching current news.
+
+Rules:
+- prefer the newest closely matching item
+- do not combine details from unrelated events
+- do not invent facts beyond the matching evidence
+- if the evidence is not a close match, ignore it
+- a source name is evidence metadata, not mandatory output wording
+- if an ambiguous factual claim becomes clear from closely matching evidence,
+  REWRITE may be used when the only remaining problem is wording/precision
+- if the match is still uncertain, keep REVIEW
+
+==================================================
 PUBLIC FIGURES, OFFICIALS, AND POLITICAL INSTITUTIONS
 ==================================================
 
@@ -1569,6 +1590,15 @@ Preserve communicative function.
 NUMBERS / DATES / TIMES / NAMES / CODES:
 Preserve them unless decomposition explicitly marks them removable.
 "احمق رمز جلسه 1234 هست" -> "رمز جلسه 1234 هست"
+
+GROUNDED NEWS REWRITE:
+If ctx.news_evidence contains a newest, closely matching report for the
+same event, you may use only the actor/event details supported by that
+evidence to replace an ambiguous or degrading proxy in the ORIGINAL.
+Keep the final wording natural and direct. Do not automatically prepend
+phrases such as "به گزارش ..." or the source name unless attribution is
+itself necessary to preserve the original meaning or avoid overstating an
+uncertain claim. Never merge details from different news items.
 
 MINIMAL REWRITE:
 Prefer the smallest natural rewrite that satisfies all requirements. Do not unnecessarily paraphrase safe parts. Do not add moderation/policy explanations unless the original discusses them.
