@@ -3,10 +3,10 @@ from pathlib import Path
 DATA = Path(__file__).parent / "data" / "guard_benchmark_v1.json"
 def load_cases(): return json.loads(DATA.read_text(encoding="utf-8"))
 def test_count_and_ids():
-    c=load_cases(); assert len(c)==189; assert len({x["id"] for x in c})==189
+    c=load_cases(); assert len(c)==193; assert len({x["id"] for x in c})==193
 def test_schema():
     actions={"SEND","DROP","REVIEW"}
-    labels={"OK","REWRITE","ABUSE","HATE","THREAT","PORN","SPAM","INJECTION","REVIEW"}
+    labels={"OK","REWRITE","ABUSE","HATE","THREAT","PORN","SPAM","INJECTION","POLITICAL","REVIEW"}
     for x in load_cases():
         assert x["text"].strip()
         assert x["expected_action"] in actions
