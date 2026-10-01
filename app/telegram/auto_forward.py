@@ -103,7 +103,12 @@ async def _on_new_message(
             logger.info("Message skipped reason=listener_replaced_or_disabled")
             return
         msg_id = event.message.id
-        logger.info("Auto-forward: New message detected (ID: %d)", msg_id)
+        logger.info(
+            "Auto-forward: New message detected (ID: %d, source=%s, destination=%s)",
+            msg_id,
+            source_id,
+            destination_id,
+        )
 
         with get_session() as session:
             already = ForwardedMessageRepository.exists(session, source_id, msg_id, destination_id)
@@ -111,7 +116,11 @@ async def _on_new_message(
 
         if already:
             _counts["duplicates"] += 1
-            logger.info("Auto-forward: Message %d already exists. Skipping.", msg_id)
+            logger.info(
+                "Auto-forward: Message %d already exists for destination %s. Skipping.",
+                msg_id,
+                destination_id,
+            )
             return
 
         try:
@@ -121,7 +130,9 @@ async def _on_new_message(
             if dest_msg is None:
                 _counts["skipped"] += 1
                 logger.info(
-                    "Auto-forward: Message %d skipped (guard drop or empty content).", msg_id
+                    "Auto-forward: Message %d skipped for destination %s.",
+                    msg_id,
+                    destination_id,
                 )
                 with get_session() as session:
                     ForwardedMessageRepository.record(
@@ -149,18 +160,26 @@ async def _on_new_message(
                     destination_message_id=dest_id,
                 )
             logger.info(
-                "Auto-forward: Message %d -> %d successfully processed and sent.", msg_id, dest_id
+                "Auto-forward: Message %d -> destination %s successfully sent as %s.",
+                msg_id,
+                destination_id,
+                dest_id,
             )
 
         except Exception as exc:
             _counts["failed"] += 1
             err_type = classify_error(exc)
             if err_type == ForwardErrorType.UNKNOWN:
-                logger.exception("Auto-forward: Unknown error processing message %d", msg_id)
+                logger.exception(
+                    "Auto-forward: Unknown error processing message %d for destination %s",
+                    msg_id,
+                    destination_id,
+                )
             else:
                 logger.error(
-                    "Auto-forward failed for message %d: type=%s reason=%s",
+                    "Auto-forward failed for message %d destination=%s type=%s reason=%s",
                     msg_id,
+                    destination_id,
                     type(exc).__name__,
                     err_type.value,
                 )
@@ -182,27 +201,42 @@ async def start_listener(client: TelegramClient) -> bool:
 
     await stop_listener(client)
     with get_session() as session:
-        source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
-        destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
+        sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
+        destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
 
-    if source is None or destination is None:
+    if not sources or not destinations:
         logger.warning("Auto-forward listener cannot start: Source or Destination not configured.")
         return False
 
-    source_id = source.telegram_id
-    destination_id = destination.telegram_id
-    job_id = _get_auto_job_id(source_id, destination_id)
+    source_ids = [channel.telegram_id for channel in sources]
+    destination_ids = [channel.telegram_id for channel in destinations]
+    job_ids = {
+        (source_id, destination_id): _get_auto_job_id(source_id, destination_id)
+        for source_id in source_ids
+        for destination_id in destination_ids
+    }
 
     async def handler(event):
-        await _on_new_message(event, source_id, destination_id, job_id, listener=handler)
+        source_id = getattr(event, "chat_id", None)
+        if source_id not in source_ids:
+            logger.warning("Ignoring auto-forward event from unconfigured source: %s", source_id)
+            return
+        for destination_id in destination_ids:
+            await _on_new_message(
+                event,
+                source_id,
+                destination_id,
+                job_ids[(source_id, destination_id)],
+                listener=handler,
+            )
 
-    client.add_event_handler(handler, events.NewMessage(chats=source_id))
+    client.add_event_handler(handler, events.NewMessage(chats=source_ids))
     _handler = handler
     _registered_client = client
     logger.info(
-        "Auto-forward listener started successfully (Source: %s -> Dest: %s)",
-        source_id,
-        destination_id,
+        "Auto-forward listener started successfully (Sources: %s -> Destinations: %s)",
+        source_ids,
+        destination_ids,
     )
     return True
 

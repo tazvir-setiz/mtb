@@ -44,53 +44,28 @@ async def test_live_listener_records_shared_sender_outcome(monkeypatch, outcome)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["source", "destination"])
-async def test_confirm_channel_rebinds_live_forwarding(monkeypatch, kind):
-    from app.handlers import dashboard, source
-    from app.handlers.states import KEY_PENDING_CHANNEL
-
+async def test_listener_forwards_each_source_to_all_destinations(monkeypatch):
     monkeypatch.setattr(auto_forward, "_handler", None)
     monkeypatch.setattr(auto_forward, "_registered_client", None)
     client = SimpleNamespace(add_event_handler=Mock(), remove_event_handler=Mock())
     sender = AsyncMock(return_value=SimpleNamespace(id=99))
     monkeypatch.setattr(auto_forward, "send_message", sender)
-    monkeypatch.setattr(source, "ensure_started", AsyncMock(return_value=client))
-    monkeypatch.setattr(dashboard, "show_dashboard", AsyncMock())
+
     with get_session() as session:
-        ChannelRepository.upsert(session, -1001, "Source", ChannelType.SOURCE)
-        ChannelRepository.upsert(session, -1002, "Destination", ChannelType.DESTINATION)
+        ChannelRepository.upsert(session, -1001, "Source A", ChannelType.SOURCE)
+        ChannelRepository.upsert(session, -1002, "Source B", ChannelType.SOURCE)
+        ChannelRepository.upsert(session, -2001, "Destination A", ChannelType.DESTINATION)
+        ChannelRepository.upsert(session, -2002, "Destination B", ChannelType.DESTINATION)
+
     assert await auto_forward.enable(client)
-    old_handler = auto_forward._handler
-    context = SimpleNamespace(
-        user_data={
-            KEY_PENDING_CHANNEL: {
-                "kind": kind,
-                "telegram_id": -1003,
-                "title": "New channel",
-                "username": None,
-                "message_id": 42,
-            }
-        }
-    )
-    update = SimpleNamespace(
-        callback_query=SimpleNamespace(
-            message=SimpleNamespace(message_id=42, reply_text=AsyncMock())
-        )
-    )
-    await source.handle_confirm(update, context, kind)
-    assert auto_forward.is_enabled()
-    client.remove_event_handler.assert_called_once_with(old_handler)
-    assert client.add_event_handler.call_count == 2
-    event = SimpleNamespace(client=client, message=SimpleNamespace(id=7))
-    # A callback already scheduled for the old listener must not use its old route.
-    await old_handler(event)
-    sender.assert_not_awaited()
+    event = SimpleNamespace(chat_id=-1002, client=client, message=SimpleNamespace(id=7))
     await auto_forward._handler(event)
-    expected_source = -1003 if kind == "source" else -1001
-    expected_destination = -1003 if kind == "destination" else -1002
-    sender.assert_awaited_once_with(
-        client, event.message, expected_source, expected_destination, None
-    )
+
+    assert sender.await_count == 2
+    assert {
+        call.args[3] for call in sender.await_args_list
+    } == {-2001, -2002}
+    assert all(call.args[2] == -1002 for call in sender.await_args_list)
 
 
 @pytest.mark.asyncio

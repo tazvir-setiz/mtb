@@ -17,14 +17,14 @@ def test_channel_upsert_and_get():
         assert channel.username == "source_ch"
 
 
-def test_channel_upsert_replaces_previous_of_same_type():
+def test_channel_upsert_keeps_multiple_channels_of_same_type():
     with get_session() as session:
         ChannelRepository.upsert(session, -1001, "First", ChannelType.SOURCE)
         ChannelRepository.upsert(session, -1002, "Second", ChannelType.SOURCE)
     with get_session() as session:
-        channel = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
-        assert channel.telegram_id == -1002
-        assert channel.title == "Second"
+        channels = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
+        assert [channel.telegram_id for channel in channels] == [-1001, -1002]
+        assert ChannelRepository.get_by_type(session, ChannelType.SOURCE).telegram_id == -1002
 
 
 def test_job_creation_and_status_update():

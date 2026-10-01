@@ -27,11 +27,6 @@ class ChannelRepository:
             session.flush()
             return existing
 
-        old = session.execute(select(Channel).where(Channel.type == channel_type)).scalars().all()
-        for row in old:
-            session.delete(row)
-        session.flush()
-
         channel = Channel(
             telegram_id=telegram_id, title=title, username=username, type=channel_type
         )
@@ -41,6 +36,24 @@ class ChannelRepository:
 
     @staticmethod
     def get_by_type(session: Session, channel_type: ChannelType) -> Channel | None:
-        return session.execute(
-            select(Channel).where(Channel.type == channel_type)
-        ).scalar_one_or_none()
+        return (
+            session.execute(
+                select(Channel)
+                .where(Channel.type == channel_type)
+                .order_by(Channel.updated_at.desc(), Channel.id.desc())
+            )
+            .scalars()
+            .first()
+        )
+
+    @staticmethod
+    def get_all_by_type(session: Session, channel_type: ChannelType) -> list[Channel]:
+        return (
+            session.execute(
+                select(Channel)
+                .where(Channel.type == channel_type)
+                .order_by(Channel.created_at.asc(), Channel.id.asc())
+            )
+            .scalars()
+            .all()
+        )

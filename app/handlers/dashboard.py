@@ -20,29 +20,37 @@ from app.telegram.client import ensure_started
 from app.ui import keyboards, messages
 
 
+def _channel_summary(channels) -> str | None:
+    if not channels:
+        return None
+    if len(channels) == 1:
+        return channels[0].title
+    return f"{channels[0].title} + {len(channels) - 1} کانال دیگر"
+
+
 def _dashboard_content() -> tuple[str, object]:
     with get_session() as session:
-        source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
-        destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
+        sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
+        destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
         stats = ForwardedMessageRepository.stats(session)
         signature = SettingsRepository.get(session, "signature_text")
 
     auto_enabled = auto_forward.is_enabled()
 
     text = messages.dashboard(
-        source.title if source else None,
-        destination.title if destination else None,
+        _channel_summary(sources),
+        _channel_summary(destinations),
         stats["success"],
         auto_enabled,
         ai_enabled=load_ai_settings(settings).enabled,
         signature_enabled=bool(signature),
     )
     markup = keyboards.main_menu(
-        source_ready=source is not None,
-        destination_ready=destination is not None,
+        source_ready=bool(sources),
+        destination_ready=bool(destinations),
         auto_forward_enabled=auto_enabled,
-        source_id=source.telegram_id if source else None,
-        destination_id=destination.telegram_id if destination else None,
+        source_id=sources[0].telegram_id if len(sources) == 1 else None,
+        destination_id=destinations[0].telegram_id if len(destinations) == 1 else None,
     )
     return text, markup
 
@@ -67,12 +75,12 @@ async def show_dashboard(
 
 async def toggle_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     with get_session() as session:
-        source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
-        destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
+        sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
+        destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
 
-    if source is None or destination is None:
+    if not sources or not destinations:
         await update.callback_query.answer(
-            "ابتدا کانال مبدأ و مقصد را تنظیم کنید.",
+            "ابتدا حداقل یک کانال مبدأ و یک کانال مقصد تنظیم کنید.",
             show_alert=True,
         )
         return
@@ -94,17 +102,20 @@ async def toggle_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def show_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     reset(context.user_data)
     with get_session() as session:
-        source = ChannelRepository.get_by_type(session, ChannelType.SOURCE)
-        destination = ChannelRepository.get_by_type(session, ChannelType.DESTINATION)
-    if source is None or destination is None:
+        sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
+        destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
+    if not sources or not destinations:
         await show_dashboard(update, context, edit=True)
         return
     enabled = auto_forward.is_enabled()
+    source_text = "\n".join(f"• {escape(channel.title)}" for channel in sources)
+    destination_text = "\n".join(f"• {escape(channel.title)}" for channel in destinations)
     await update.callback_query.edit_message_text(
         "⚡ <b>انتقال خودکار پیام‌های جدید</b>\n\n"
-        f"<blockquote>📥 {escape(source.title)}\n📤 {escape(destination.title)}\n"
-        f"وضعیت: <b>{'🟢 روشن' if enabled else '⚪ خاموش'}</b></blockquote>\n\n"
-        "با فعال‌کردن، پیام‌های جدید مبدأ هنگام اجرای ربات به مقصد ارسال می‌شوند.\n"
+        f"<b>📥 مبداها ({len(sources)})</b>\n{source_text}\n\n"
+        f"<b>📤 مقصدها ({len(destinations)})</b>\n{destination_text}\n\n"
+        f"وضعیت: <b>{'🟢 روشن' if enabled else '⚪ خاموش'}</b>\n\n"
+        "هر پیام جدید از هر مبدأ، به همه مقصدهای تنظیم‌شده ارسال می‌شود.\n"
         "برای پیام‌های قبلی از «انتقال پیام‌ها» استفاده کنید.",
         reply_markup=keyboards.auto_forward_menu(enabled),
     )
