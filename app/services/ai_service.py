@@ -474,6 +474,14 @@ If the message clearly reports an allegation as an allegation, quotes a
 source, or attributes it to an official/public record, do not treat that
 merely as personal abuse. Preserve attribution and uncertainty.
 
+Clear example:
+"در این گزارش ادعا شده که فلان مسئول مرتکب فساد شده است"
+-> OK
+
+This is explicitly attributed reporting, not the author's own assertion.
+When this reporting structure is clear, use normal/high confidence unless
+another violation is actually present.
+
 A mocking nickname that is only an insult:
 -> ABUSE, has_substance=false
 
@@ -715,15 +723,22 @@ Examples:
 "در این مقاله درباره نقد تاریخی یک مراسم مذهبی بحث شده"
 -> OK
 
-A direct degrading attack whose whole communicative content is the
-attack:
+A direct degrading attack on a protected religious target:
 -> ABUSE
 has_substance=false
 
-If independent substantive criticism, a factual claim, question, or
-request survives alongside prohibited degrading wording:
--> REWRITE
-has_substance=true
+For this project rule, the direct religious attack takes precedence even
+when another factual/useful clause is present in the same message. Do not
+auto-rewrite and publish such a message.
+
+Examples:
+"این برنامه موکب افتضاحه ولی ساعت شروعش ۸ است"
+-> ABUSE
+has_substance=false
+
+"این مراسم مسخره است، مسیر حرکتش از میدان اصلی شروع می‌شود"
+-> ABUSE
+has_substance=false
 
 Do not turn disagreement with a religious practice into ABUSE.
 Do not treat reporting, quotation, negation, or academic/theological
