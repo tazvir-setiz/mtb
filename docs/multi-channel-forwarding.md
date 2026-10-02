@@ -23,6 +23,16 @@ A `route_sending:<source>:<message>:<destination>` marker is committed before se
 
 Review approval uses the same delivery primitive, prepares with `approved=True`, and does not rerun Guard. Only the explicit AI rewrite action invokes the rewriting pipeline. Known destination failures leave the shared review pending for the missing routes.
 
+## Guard Block review lifecycle
+
+Guard `PUBLISH` continues through normal fan-out. Guard `REVIEW` queues an ordinary review. Guard `DROP` never publishes automatically: `ai_service` encodes the result as `guard_block:<label>:<reason>` in the existing review `reason` field. `review_kind` is the only parser/encoder for this compatibility representation; legacy `guard_block:<reason>` rows remain recognizable. The original DROP label and detailed reason stay attached to the review while an AI or manual candidate is stored separately in `ReviewDraft`.
+
+Guard Block cards have a distinct warning and show the DROP decision, source/message identity, and associated destination routes. Their actions are explicit administrator override, AI candidate generation, manual edit, and final rejection. Rewrite and edit only save a candidate. Approval uses the routes persisted for that review, bypasses a second Guard pass to avoid a DROP→REVIEW loop, applies the normal approved-content sanitizer, and uses the shared delivery marker and immutable success ledger. A conditional `pending`→`sending` claim lets one administrator act; delivery locks and destination ledgers prevent duplicate sends across routes.
+
+If an administrator acts on a stale fingerprint, the old approval is invalidated, the changed source content is rechecked by Guard, and the changed version is queued for a new decision. A newly returned DROP creates a new Guard Block reason and label. Final rejection remains terminal across duplicate events, source edits, retries, and startup recovery; new routes for that same source message are marked skipped as part of the rejection. Interrupted sends recover as `uncertain`, requiring an administrator to check destinations and explicitly reopen before retrying.
+
+This lifecycle adds no database columns: it uses the existing `ReviewRequest.reason`, `status`, `fingerprint`, route metadata, and `ReviewDraft`. Existing SQLite tables therefore need no Guard Block schema migration.
+
 ## Single-channel search classification
 
 | Occurrences | Classification |

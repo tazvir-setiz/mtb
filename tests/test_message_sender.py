@@ -5,6 +5,7 @@ import pytest
 from telethon.errors import MessageIdInvalidError
 from telethon.tl.types import MessageMediaWebPage
 
+from app.services.ai_policy import AI_DROP_RESULT
 from app.telegram import message_sender
 
 
@@ -38,7 +39,7 @@ async def test_processed_html_and_signature(monkeypatch, processed, expected):
 
 @pytest.mark.asyncio
 async def test_ai_rejection_does_not_send(monkeypatch):
-    monkeypatch.setattr(message_sender, "apply_ai_guardrails", AsyncMock(return_value="__DROP__"))
+    monkeypatch.setattr(message_sender, "apply_ai_guardrails", AsyncMock(return_value=AI_DROP_RESULT))
     client = SimpleNamespace(send_message=AsyncMock())
     result = await message_sender.send_message(client, make_message(), -1001, -1002, "sig")
     assert result is None

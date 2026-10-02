@@ -11,6 +11,7 @@ from app.services.ai_policy import AIProcessingError, AIReviewRequired
 from app.services.ai_response import CONTRACTS, validated_completion
 from app.services.ai_settings import AISettings
 from app.services.ai_transport import AIRequestError, model_options
+from app.services.review_kind import encode_guard_block
 
 logger = logging.getLogger(__name__)
 DEFAULT_PROMPT = (BASE_DIR / "app/prompts/guardrails.txt").read_text(encoding="utf-8")
@@ -1911,7 +1912,7 @@ async def apply_ai_guardrails(
 
     result = await moderate(chat_id, message_id, html_text)
     if result.action == "DROP":
-        return "__DROP__"
+        raise AIReviewRequired(encode_guard_block(result.label.value, result.reason))
     if result.action == "REVIEW":
         raise AIReviewRequired(result.reason or result.label.value.lower())
     return result.text or ""

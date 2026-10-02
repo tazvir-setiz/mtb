@@ -7,7 +7,7 @@ from app.database.database import get_session
 from app.database.models import ForwardJob, MessageStatus
 from app.database.repository import ForwardedMessageRepository, SettingsRepository
 from app.services import review_drafts, review_store
-from app.services.ai_policy import AIProcessingError, AIReviewRequired
+from app.services.ai_policy import AI_DROP_RESULT, AIProcessingError, AIReviewRequired
 from app.services.ai_settings import load_ai_settings
 from app.services.fanout import clear_delivery_marker, deliver
 from app.services.forward_results import record_result
@@ -128,13 +128,17 @@ async def _decide(review_id, version, action, admin_id, client):
         original = messages[0]
         if review_store.content_fingerprint(original) != row.fingerprint:
             review_store.set_status(row.id, "changed")
-            review_store.enqueue_routes(
-                original,
-                row.source_id,
-                routes,
-                "content_changed",
-            )
-            return "متن یا رسانه تغییر کرده؛ ارسال نشد. اعلان تازه را بررسی کنید. /reviews"
+            with get_session() as session:
+                signature = SettingsRepository.get(session, "signature_text")
+            try:
+                await prepare_message(original, row.source_id, signature)
+                reason = "content_changed"
+            except AIReviewRequired as exc:
+                reason = str(exc)
+            except AIProcessingError:
+                reason = "service_unavailable"
+            review_store.enqueue_routes(original, row.source_id, routes, reason)
+            return "متن یا رسانه تغییر کرده؛ ارسال نشد و Guard دوباره اجرا شد. اعلان تازه را بررسی کنید. /reviews"
 
         draft = review_drafts.get(row.id)
         if getattr(original, "poll", None) and (draft or action == "retry"):
@@ -158,7 +162,7 @@ async def _decide(review_id, version, action, admin_id, client):
                 chat_id=row.source_id,
                 message_id=row.message_id,
             )
-            if candidate == "__DROP__":
+            if candidate == AI_DROP_RESULT:
                 review_store.requeue(row.id, "ai_rejected")
                 return (
                     "گارد پیشنهاد رد داد؛ هنوز ارسال نشده است. می‌توانید رد، تأیید یا ویرایش کنید."

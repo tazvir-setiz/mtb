@@ -4,6 +4,9 @@ import re
 logger = logging.getLogger(__name__)
 
 
+AI_DROP_RESULT = "__DROP__"
+
+
 class AIReviewRequired(Exception):
     """The source message must be reviewed before retrying publication."""
 
@@ -40,7 +43,7 @@ def parse_decision(result: str) -> str:
 
     if category in DROP_CATEGORIES:
         logger.info("AI Policy: دسته «%s» → حذف کامل، پیام منتشر نمی‌شود.", category)
-        return "__DROP__"
+        return AI_DROP_RESULT
 
     if category in REVIEW_CATEGORIES:
         logger.info("AI Policy: دسته «%s» → نیازمند بررسی، پیام منتشر نمی‌شود.", category)

@@ -6,6 +6,7 @@ import pytest
 from app.handlers import review_edit, reviews
 from app.handlers.states import State, reset
 from app.services import review_drafts, review_service, review_store
+from app.services.ai_policy import AI_DROP_RESULT
 from app.services.ai_settings import save_ai_value
 
 
@@ -97,7 +98,7 @@ def test_cancel_discards_editor_state_but_not_saved_draft():
 async def test_ai_drop_after_referral_keeps_human_actions(monkeypatch):
     row = queued()
     save_ai_value("enabled", "true")
-    monkeypatch.setattr(review_service, "rewrite_draft", AsyncMock(return_value="__DROP__"))
+    monkeypatch.setattr(review_service, "rewrite_draft", AsyncMock(return_value=AI_DROP_RESULT))
     client = SimpleNamespace(
         get_messages=AsyncMock(return_value=[original()]), send_message=AsyncMock()
     )
@@ -120,3 +121,19 @@ def test_late_notification_does_not_hide_new_edit():
     review_drafts.save(row.id, old_version, "new", "manual_draft")
     review_store.mark_notified(row.id, 111, row.fingerprint, "pending", old_version)
     assert review_store.get(row.id).notified == "[]"
+
+
+@pytest.mark.asyncio
+async def test_manual_guard_block_edit_preserves_drop_identity_without_sending():
+    row = review_store.enqueue(
+        original(), -100123, -100456, None, "guard_block:THREAT:explicit threat"
+    )
+    version = review_drafts.version(row)
+    assert review_drafts.save(row.id, version, "edited safe candidate", "manual_draft")
+
+    fresh = review_store.get(row.id)
+    assert fresh.reason == "guard_block:THREAT:explicit threat"
+    assert review_drafts.get(row.id).text == "edited safe candidate"
+    content, _ = reviews.card(fresh)
+    assert content.startswith("🚫")
+    assert "DROP" in content
