@@ -110,7 +110,10 @@ def _validate(mode, raw, limits, original):
 
 
 async def validated_completion(client, config, payload, limits, original, *, mode):
-    for attempt in (1, 2):
+    from app.services.model_routing import fallback_attempt
+
+    attempts = 1 if fallback_attempt.get() else 2
+    for attempt in range(1, attempts + 1):
         response = await post_completion(client, config, payload)
 
         raw = read_choice(response, payload)
@@ -134,7 +137,7 @@ async def validated_completion(client, config, payload, limits, original, *, mod
                 getattr(exc, "detail", None),
             )
 
-            if attempt == 2:
+            if attempt == attempts:
                 raise
 
             runtime.metrics["format_retries"] += 1

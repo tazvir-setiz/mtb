@@ -61,7 +61,8 @@ async def moderate(chat_id, message_id, text, *, draft=False):
     provider = fingerprint((config.base_url, config.model, config.api_key))
     key = fingerprint((
         PIPELINE_VERSION, chat_id, text, normalized.normalized,
-        context, provider, vars(limits), policy, username_replacement(),
+        context, provider, config.fallback_model, config.news_grounding_enabled,
+        config.news_allowed_domains, vars(limits), policy, username_replacement(),
     ))
 
     cached = runtime.cached(key) if not draft else None

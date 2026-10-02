@@ -27,8 +27,10 @@ class AIRequestError(AIProcessingError):
 
 async def post_completion(client, config, payload):
     from app.services.guard.budget import active_budget
+    from app.services.model_routing import fallback_attempt
 
-    for attempt in (1, 2):
+    attempts = 1 if fallback_attempt.get() else 2
+    for attempt in range(1, attempts + 1):
         budget = active_budget.get()
         if budget:
             budget.request()
@@ -40,7 +42,7 @@ async def post_completion(client, config, payload):
             return response
         except (httpx.TransportError, httpx.HTTPStatusError) as exc:
             status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-            if attempt == 2 or (
+            if attempt == attempts or (
                 status is not None and status not in {408, 429, 500, 502, 503, 504}
             ):
                 raise

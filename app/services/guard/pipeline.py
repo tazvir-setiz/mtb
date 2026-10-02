@@ -16,6 +16,7 @@ from app.services.guard.contracts import (
 )
 from app.services.guard_models import Label, ModerationResult
 from app.services.guard_runtime import runtime
+from app.services.model_routing import RECOVERABLE, ModelRouter, fallback_attempt
 from app.services.news_lookup import search_latest_news
 from app.services.text_normalizer import normalize_text
 from app.services.text_sanitizer import (
@@ -26,7 +27,7 @@ from app.services.text_sanitizer import (
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "4.1"
+PIPELINE_VERSION = "4.2"
 
 
 class GuardPipeline:
@@ -36,6 +37,7 @@ class GuardPipeline:
         self.limits = limits
         self.context = context
         self.policy = policy
+        self.router = ModelRouter(config.model, config.fallback_model)
 
         self.provider = hashlib.sha256(
             repr(
@@ -57,10 +59,34 @@ class GuardPipeline:
             limits.max_requests,
         )
 
-    async def call(self, stage, text, **kwargs):
+    async def call(self, stage, text, *, escalation=None, **kwargs):
+        model = self.router.escalate(escalation) if escalation else None
+        if model:
+            return await self._fallback(stage, text, model, **kwargs)
+        try:
+            return await self._call_once(stage, text, self.config, **kwargs)
+        except (AIProcessingError, TimeoutError) as exc:
+            reason = getattr(exc, "reason", "timeout" if isinstance(exc, TimeoutError) else "unknown")
+            model = self.router.escalate(reason) if reason in RECOVERABLE else None
+            if not model:
+                raise
+            return await self._fallback(stage, text, model, **kwargs)
+
+    async def _fallback(self, stage, text, model, **kwargs):
+        token = fallback_attempt.set(True)
+        runtime.metrics["model_escalations"] += 1
+        logger.info("Guard fallback model=%s reason=%s escalation_count=%d",
+                    model, self.router.reason, self.router.escalations)
+        try:
+            return await self._call_once(stage, text, replace(self.config, model=model), **kwargs)
+        finally:
+            fallback_attempt.reset(token)
+
+    async def _call_once(self, stage, text, config, **kwargs):
         self.budget.stage()
 
-        if runtime.unavailable(self.provider):
+        provider = hashlib.sha256(repr((config.base_url, config.model, config.api_key)).encode()).hexdigest()
+        if runtime.unavailable(provider):
             runtime.metrics["circuit_skips"] += 1
             raise AIRequestError("circuit_open")
 
@@ -92,7 +118,7 @@ class GuardPipeline:
                         text,
                         self.context,
                         variants,
-                        self.config,
+                        config,
                         limits,
                         policy=self.policy,
                         **kwargs,
@@ -103,7 +129,7 @@ class GuardPipeline:
                         text,
                         self.context,
                         variants,
-                        self.config,
+                        config,
                         limits,
                         policy=self.policy,
                     )
@@ -115,7 +141,7 @@ class GuardPipeline:
                         text,
                         decomposition,
                         self.context,
-                        self.config,
+                        config,
                         limits,
                         policy=self.policy,
                         **kwargs,
@@ -128,7 +154,7 @@ class GuardPipeline:
                         original,
                         text,
                         self.context,
-                        self.config,
+                        config,
                         limits,
                         policy=self.policy,
                     )
@@ -142,7 +168,7 @@ class GuardPipeline:
                         text,
                         decomposition,
                         self.context,
-                        self.config,
+                        config,
                         limits,
                         policy=self.policy,
                     )
@@ -150,7 +176,7 @@ class GuardPipeline:
                 else:
                     raise AIRequestError("unknown_stage")
 
-            runtime.failures.pop(self.provider, None)
+            runtime.failures.pop(provider, None)
 
             if getattr(result, "label", None) in self.disabled_labels:
                 return ModerationResult(
@@ -163,7 +189,7 @@ class GuardPipeline:
             return result
 
         except (AIProcessingError, TimeoutError):
-            runtime.failed(self.provider, self.limits.failure_limit, self.limits.cooldown_seconds)
+            runtime.failed(provider, self.limits.failure_limit, self.limits.cooldown_seconds)
             raise
         finally:
             logger.info(
@@ -177,10 +203,8 @@ class GuardPipeline:
         token = active_budget.set(self.budget)
 
         try:
-            return await self.decide(
-                original,
-                draft=draft,
-            )
+            async with asyncio.timeout(self.budget.remaining()):
+                return await self.decide(original, draft=draft)
 
         except (AIProcessingError, TimeoutError) as exc:
             reason = getattr(
@@ -244,6 +268,7 @@ class GuardPipeline:
             decomposition=decomposition,
             feedback=tuple(feedback),
             previous_candidate=previous_candidate,
+            escalation="failed_rewrite_verification" if feedback else None,
         )
 
         if not isinstance(value, RewriteDraft):
@@ -423,6 +448,7 @@ class GuardPipeline:
                 "reassess",
                 original,
                 reconsider=True,
+                escalation="unresolved_review" if result.label != Label.POLITICAL else None,
             )
 
             if result.action == "REVIEW" and result.label != Label.POLITICAL:
@@ -446,12 +472,14 @@ class GuardPipeline:
                 result = audited
 
             elif audited.label != first.label:
-                return ModerationResult(
-                    Label.REVIEW,
-                    0,
-                    source="AI",
-                    reason="conflicting_drop_decisions",
-                )
+                resolved = await self.call(
+                    "drop_audit", original, audit_drop=True,
+                    escalation="conflicting_drop_decisions",
+                ) if self.router.escalations == 0 and self.router.fallback else None
+                if resolved is None or resolved.label not in {first.label, audited.label}:
+                    return ModerationResult(Label.REVIEW, 0, source="AI",
+                                            reason="conflicting_drop_decisions")
+                return resolved
 
             elif audited.label == Label.ABUSE:
                 # هر دو classifier تأیید کرده‌اند که پیام فقط توهین است
