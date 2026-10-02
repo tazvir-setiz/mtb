@@ -67,13 +67,18 @@ def test_meaningful_quoted_negated_or_substring_matches_are_not_locally_dropped(
 
 
 @pytest.mark.asyncio
-async def test_pure_abuse_is_not_sent_or_added_to_admin_queue(ai):
+async def test_pure_abuse_is_not_sent_and_becomes_guard_block_review(ai):
+    from app.services.ai_policy import AIReviewRequired
+
     original = SimpleNamespace(id=142, message="خیلی کسکشی", entities=[], media=None, poll=None)
     client = SimpleNamespace(send_message=AsyncMock())
-    assert await message_sender.send_message(client, original, 1, 2, None) is None
+    with pytest.raises(AIReviewRequired, match="guard_block:ABUSE"):
+        await message_sender.send_message(client, original, 1, 2, None)
     client.send_message.assert_not_awaited()
     ai.assert_not_awaited()
-    assert review_store.pending() == []
+    rows = review_store.pending()
+    assert len(rows) == 1
+    assert rows[0].reason == "guard_block:ABUSE:pure_abuse"
 
 
 @pytest.mark.asyncio
