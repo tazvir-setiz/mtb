@@ -12,7 +12,12 @@ from app.guard_config import GuardSettings
 from app.services import ai_service
 from app.services.ai_settings import AISettings
 from app.services.grounding import GroundingResult, GroundingService, minimal_query
-from app.services.guard.contracts import MeaningDecomposition, MeaningVerdict, PolicyVerdict, RewriteDraft
+from app.services.guard.contracts import (
+    MeaningDecomposition,
+    MeaningVerdict,
+    PolicyVerdict,
+    RewriteDraft,
+)
 from app.services.guard.pipeline import GuardPipeline
 from app.services.guard_models import Label, ModerationResult
 from app.services.news_lookup import GoogleNewsProvider, NewsCandidate, NewsEvidence, allowed_url

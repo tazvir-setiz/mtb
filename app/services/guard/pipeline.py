@@ -7,6 +7,7 @@ from dataclasses import replace
 from app.services import ai_service
 from app.services.ai_policy import AIProcessingError
 from app.services.ai_transport import AIRequestError
+from app.services.grounding import GroundingService
 from app.services.guard.budget import Budget, active_budget
 from app.services.guard.contracts import (
     MeaningDecomposition,
@@ -17,7 +18,6 @@ from app.services.guard.contracts import (
 from app.services.guard_models import Label, ModerationResult
 from app.services.guard_runtime import runtime
 from app.services.model_routing import RECOVERABLE, ModelRouter, fallback_attempt
-from app.services.grounding import GroundingService
 from app.services.text_normalizer import normalize_text
 from app.services.text_sanitizer import (
     publication_is_clean,

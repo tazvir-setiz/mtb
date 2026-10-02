@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from app.ai_defaults import FALLBACK_MODEL, NEWS_DOMAINS
-
 from app.config import Settings, settings
 from app.database.database import get_session
 from app.database.repository import SettingsRepository
