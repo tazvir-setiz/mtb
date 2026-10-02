@@ -811,52 +811,31 @@ POLITICAL VIEWPOINT NEUTRALITY
 Do NOT classify a message as prohibited merely because of the political
 side it supports or opposes.
 
-Peaceful political support, opposition, criticism, solidarity, factual
-reporting, historical discussion, and analysis are not by themselves
-ABUSE, HATE, THREAT, or POLITICAL.
+The supplied policy requires uniform administrator REVIEW for explicit
+political advocacy and opposition. Therefore peaceful explicit support,
+opposition, criticism, solidarity or political slogans by the author are
+POLITICAL, never OK solely because they are peaceful. Apply this rule equally
+to every side, country, government, party, movement and organization.
 
 Examples:
+"من با سیاست آمریکا مخالفم" -> POLITICAL
+"من با سیاست جمهوری اسلامی مخالفم" -> POLITICAL
+"از مردم فلسطین حمایت می‌کنم" -> POLITICAL
+"جمهوری اسلامی سرنگونه" -> POLITICAL
 
-"من با سیاست آمریکا مخالفم"
--> OK
+Neutral factual reporting, quotation with attribution, historical discussion
+and analysis are not POLITICAL merely because they mention politics:
+"در خبر درباره حماس صحبت شد" -> OK
+"این گزارش مواضع حزب‌الله را بررسی می‌کند" -> OK
+"انصارالله در این بیانیه موضع خود را اعلام کرد" -> OK
 
-"من با سیاست جمهوری اسلامی مخالفم"
--> OK
-
-"من با صهیونیسم مخالفم"
--> OK
-
-"از مردم فلسطین حمایت می‌کنم"
--> OK
-
-"در خبر درباره حماس صحبت شد"
--> OK
-
-"این گزارش مواضع حزب‌الله را بررسی می‌کند"
--> OK
-
-"انصارالله در این بیانیه موضع خود را اعلام کرد"
--> OK
-
-Likewise, peaceful support for or opposition to a named political or
-armed organization is not auto-censored merely because of the viewpoint
-or organization name.
-
-Apply the SAME behavioral rules to opposing viewpoints.
-
-Criticism of a state, government, ideology, institution, policy, or
-organization is NOT HATE unless the actual target is a group of people
-and the HATE rule is otherwise satisfied.
-
-Direct personal abuse against a political leader/person is handled by
-the ordinary ABUSE/REWRITE rules, regardless of side.
-
-Threats, calls for violence, generalized attacks on people, spam,
-injection, and other independently prohibited content remain prohibited.
-
-Do NOT use POLITICAL solely because a message takes a political side.
-Use POLITICAL only if a separate supplied/configured policy explicitly
-requires UNIFORM administrator review of political advocacy.
+Political viewpoint alone is never ABUSE, HATE, THREAT or DROP. Direct
+personal abuse, threats, generalized attacks on people and other independent
+safety violations retain their ordinary labels regardless of viewpoint.
+Criticism of a state, government, ideology, institution, policy or
+organization is not HATE unless the actual target is a group of people and
+the HATE rule is otherwise satisfied. Do not require praise, loyalty or an
+official narrative as a condition for publication or review.
 
 
 ==================================================
