@@ -1,5 +1,6 @@
 """Provider mocks for the split Guard v4 stages (the pipeline itself stays real)."""
 
+from app.services.grounding import GroundingResult
 from unittest.mock import AsyncMock
 
 from app.services import ai_service
@@ -27,6 +28,7 @@ def mock_guard(monkeypatch):
     ):
         monkeypatch.setattr(ai_service, name, mock)
     monkeypatch.setattr(
-        "app.services.guard.pipeline.search_latest_news", AsyncMock(return_value=[])
+        "app.services.grounding.GroundingService.resolve",
+        AsyncMock(return_value=GroundingResult("no_match"))
     )
     return classifier

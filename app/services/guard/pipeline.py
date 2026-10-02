@@ -17,7 +17,7 @@ from app.services.guard.contracts import (
 from app.services.guard_models import Label, ModerationResult
 from app.services.guard_runtime import runtime
 from app.services.model_routing import RECOVERABLE, ModelRouter, fallback_attempt
-from app.services.news_lookup import search_latest_news
+from app.services.grounding import GroundingService
 from app.services.text_normalizer import normalize_text
 from app.services.text_sanitizer import (
     publication_is_clean,
@@ -31,13 +31,15 @@ PIPELINE_VERSION = "4.2"
 
 
 class GuardPipeline:
-    def __init__(self, config, limits, context, policy, disabled_labels=()):
+    def __init__(self, config, limits, context, policy, disabled_labels=(), grounding=None):
         self.disabled_labels = disabled_labels
         self.config = config
         self.limits = limits
         self.context = context
         self.policy = policy
         self.router = ModelRouter(config.model, config.fallback_model)
+        self.grounding = grounding or GroundingService()
+        self.grounding_attempted = False
 
         self.provider = hashlib.sha256(
             repr(
@@ -99,7 +101,7 @@ class GuardPipeline:
         )
 
         runtime.metrics["ai_calls"] += 1
-        runtime.metrics["ai_fallbacks"] += 1
+        runtime.metrics["fallback_model_calls" if config.model != self.config.model else "primary_model_calls"] += 1
         runtime.metrics[f"stage_{stage}"] += 1
 
         started = time.monotonic()
@@ -223,24 +225,20 @@ class GuardPipeline:
         finally:
             active_budget.reset(token)
 
-    async def _ground_with_latest_news(self, original):
-        evidence = await search_latest_news(original)
-        if not evidence:
+    async def _ground(self, original, query):
+        self.grounding_attempted = True
+        runtime.metrics["grounding_attempts"] += 1
+        if not self.config.news_grounding_enabled:
             return False
-
-        self.context = dict(self.context or {})
-        self.context["news_evidence"] = [item.as_context() for item in evidence]
-        self.context["news_evidence_policy"] = {
-            "ordered_newest_first": True,
-            "use_only_when_close_match": True,
-            "do_not_invent_beyond_evidence": True,
-            "do_not_force_source_name_into_rewrite": True,
-        }
-        logger.info(
-            "Guard news grounding hits=%d newest=%s",
-            len(evidence),
-            evidence[0].published_at.isoformat() if evidence[0].published_at else None,
+        result = await self.grounding.resolve(
+            query, original, self.config.news_allowed_domains,
+            timeout_seconds=min(8, self.budget.remaining()),
         )
+        runtime.metrics[f"grounding_{result.status}"] += 1
+        if not result.evidence:
+            return False
+        self.context = dict(self.context or {})
+        self.context["news_evidence"] = [item.as_context() for item in result.evidence]
         return True
 
     async def _decompose(self, original):
@@ -441,23 +439,25 @@ class GuardPipeline:
             original,
         )
 
+        if result.grounding_query and result.label in {Label.REVIEW, Label.REWRITE}:
+            if not await self._ground(original, result.grounding_query):
+                return ModerationResult(Label.REVIEW, 0, source="AI", reason="grounding_unresolved")
+            result = await self.call("reassess", original, reconsider=True)
+
         if result.action == "REVIEW":
             runtime.metrics["automatic_rechecks"] += 1
-
             result = await self.call(
-                "reassess",
-                original,
-                reconsider=True,
+                "reassess", original, reconsider=True,
                 escalation="unresolved_review" if result.label != Label.POLITICAL else None,
             )
+            # A newly identified need must also be resolved before publication.
+            if result.grounding_query and not self.grounding_attempted:
+                if not await self._ground(original, result.grounding_query):
+                    return ModerationResult(Label.REVIEW, 0, source="AI", reason="grounding_unresolved")
+                result = await self.call("reassess", original, reconsider=True)
 
-            if result.action == "REVIEW" and result.label != Label.POLITICAL:
-                if await self._ground_with_latest_news(original):
-                    result = await self.call(
-                        "reassess",
-                        original,
-                        reconsider=True,
-                    )
+        if result.grounding_query:
+            return ModerationResult(Label.REVIEW, 0, source="AI", reason="grounding_unresolved")
 
         if result.action == "DROP":
             first = result
@@ -509,11 +509,9 @@ class GuardPipeline:
                 return audited
 
         if result.label == Label.REWRITE:
-            await self._ground_with_latest_news(original)
-
             decomposition = await self._decompose(original)
 
-            if decomposition.ambiguities and not decomposition.has_protected_meaning:
+            if decomposition.ambiguities:
                 return ModerationResult(
                     Label.REVIEW,
                     0,

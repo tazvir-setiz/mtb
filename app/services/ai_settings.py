@@ -46,7 +46,7 @@ def parse_domains(value: str) -> tuple[str, ...]:
     import ipaddress
     import re
 
-    domains = tuple(dict.fromkeys(x.strip().lower() for x in value.split(",") if x.strip()))
+    domains = tuple(dict.fromkeys(x.strip().lower().rstrip(".") for x in value.split(",") if x.strip()))
     for domain in domains:
         if len(domain) > 253 or not re.fullmatch(
             r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", domain

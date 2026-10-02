@@ -27,6 +27,7 @@ class ModerationResult:
     violations: tuple[tuple[str, str], ...] = ()
     has_substance: bool | None = None
     ambiguities: tuple[str, ...] = ()
+    grounding_query: str | None = None
 
     @property
     def action(self) -> str:

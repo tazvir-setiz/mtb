@@ -70,6 +70,7 @@ async def moderate(chat_id, message_id, text, *, draft=False):
         return record_decision(cached, chat_id, message_id, started, cached=True)
 
     result = evaluate_rules(normalized, context)
+    grounding_attempted = False
 
     if (
         custom_policy(profile)
@@ -89,12 +90,14 @@ async def moderate(chat_id, message_id, text, *, draft=False):
         )
         pipeline = GuardPipeline(config, limits, context, policy, disabled_labels=disabled)
         result = await pipeline.run(text, draft=draft)
+        grounding_attempted = pipeline.grounding_attempted
     else:
         result = finalize(result, text)
 
-    remember_context(result, chat_id, normalized.normalized, limits)
+    if not grounding_attempted:
+        remember_context(result, chat_id, normalized.normalized, limits)
 
-    if not draft and result.action == "PUBLISH":
+    if not draft and not grounding_attempted and result.action == "PUBLISH":
         runtime.remember(key, result, limits.cache_ttl_seconds, limits.cache_size)
 
     return record_decision(result, chat_id, message_id, started)

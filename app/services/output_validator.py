@@ -20,6 +20,7 @@ def validate_output(
             "violations",
             "has_substance",
             "ambiguities",
+            "grounding_query",
         }
         if set(data) - allowed:
             detail = "unknown_fields"
@@ -42,6 +43,10 @@ def validate_output(
             raise ValueError()
 
         substance = data.get("has_substance")
+        query = data.get("grounding_query")
+        if query is not None and (not isinstance(query, str) or not query.strip() or len(query) > 120):
+            detail = "grounding_query"
+            raise ValueError()
         if substance is not None and type(substance) is not bool:
             detail = "has_substance"
             raise ValueError()
@@ -92,7 +97,8 @@ def validate_output(
         else limits.confidence_threshold
     )
     if confidence < threshold and label != Label.REWRITE:
-        return ModerationResult(Label.REVIEW, confidence, source="AI", reason="low_confidence")
+        return ModerationResult(Label.REVIEW, confidence, source="AI", reason="low_confidence",
+                                grounding_query=query)
 
     result = ModerationResult(
         label=label,
@@ -103,6 +109,7 @@ def validate_output(
         violations=tuple(evidence),
         has_substance=substance,
         ambiguities=tuple(ambiguities),
+        grounding_query=query,
     )
 
     if (

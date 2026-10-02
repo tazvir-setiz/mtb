@@ -171,7 +171,7 @@ async def test_repaired_response_still_passes_independent_verification(monkeypat
     ]
     monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda **kwargs: manager)
     monkeypatch.setattr(
-        "app.services.guard.pipeline.search_latest_news", AsyncMock(return_value=[])
+        "app.services.grounding.GroundingService.resolve", AsyncMock()
     )
     result = await moderate(1, 149, "کیا یه غذای کیری میخوان")
     assert result.action == "PUBLISH"

@@ -21,6 +21,7 @@ CONTRACTS = {
         '"text":null,'
         '"has_substance":true,'
         '"ambiguities":[],'
+        '"grounding_query":null,'
         '"violations":[{"rule_id":"abuse","evidence":"exact quote from original message"}],'
         '"context_update":{}}. '
         'Every item in "violations" MUST be an object containing exactly "rule_id" and "evidence". '
@@ -28,6 +29,13 @@ CONTRACTS = {
         'For no violation use "violations":[]. '
         'For ABUSE set "has_substance":false only when the insult/attack is essentially the whole meaning. '
         "The classifier never writes replacement prose."
+        " Set grounding_query only when a concrete public news/factual claim needs external "
+        "resolution of actor/event identity or attribution. Use 3-10 event/location keywords "
+        "copied from original, at most 120 characters; never private names, identifiers, "
+        "contact details, full sentences or conversation context. Mere political/entity "
+        "mentions, opinions and ordinary rewrites do not need lookup. "
+        "When provided news_evidence resolves the ambiguity set grounding_query=null; "
+        "otherwise retain REVIEW. Never infer resolution from retrieval alone."
     ),
     "meaning": (
         "Return exactly one JSON object with this schema: "
