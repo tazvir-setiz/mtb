@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from app.ai_defaults import FALLBACK_MODEL, NEWS_DOMAINS, PRIMARY_MODEL
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -60,7 +62,10 @@ class Settings:
     ai_enabled: bool = False
     ai_api_key: str = field(default="", repr=False)
     ai_base_url: str = "https://api.openai.com/v1/chat/completions"
-    ai_model: str = "gpt-4o-mini"
+    ai_model: str = PRIMARY_MODEL
+    ai_fallback_model: str = FALLBACK_MODEL
+    news_grounding_enabled: bool = True
+    news_allowed_domains: str = NEWS_DOMAINS
     ai_guardrails: str = ""
 
     def is_admin(self, user_id: int) -> bool:
@@ -100,7 +105,10 @@ def load_settings() -> Settings:
         ai_enabled=env_flag("AI_ENABLED"),
         ai_api_key=optional_env("AI_API_KEY"),
         ai_base_url=optional_env("AI_BASE_URL", "https://api.openai.com/v1/chat/completions"),
-        ai_model=optional_env("AI_MODEL", "gpt-4o-mini"),
+        ai_model=optional_env("AI_MODEL", PRIMARY_MODEL),
+        ai_fallback_model=optional_env("AI_FALLBACK_MODEL", FALLBACK_MODEL),
+        news_grounding_enabled=env_flag("NEWS_GROUNDING_ENABLED", "true"),
+        news_allowed_domains=optional_env("NEWS_ALLOWED_DOMAINS", NEWS_DOMAINS),
         ai_guardrails=load_guardrails(),
     )
 
