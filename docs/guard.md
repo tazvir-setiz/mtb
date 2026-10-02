@@ -194,7 +194,10 @@ Metrics برای فهم مسیر واقعی پیام‌ها استفاده می�
 - `total_messages`
 - `rule_decisions`
 - `ai_decisions`
-- `ai_fallbacks`
+- `primary_model_calls`
+- `fallback_model_calls`
+- `model_escalations`
+- `grounding_attempts` / `grounding_candidate` / `grounding_no_match`
 - `ai_calls`
 - `cache_hits`
 - `blocked_messages`
@@ -1250,3 +1253,47 @@ Rule change
 + Regression test
 + Benchmark verification
 ```
+
+## Model routing and news grounding
+
+The default primary model is `gpt-6-luna`; the default hard-case model is
+`gpt-5.6-luna`. Environment values provide deployment defaults. A saved
+database value overrides its corresponding environment value, preserving the
+existing bot settings behavior. Old databases need no migration: absent keys
+use deployment defaults. Existing `ai_model` values remain authoritative.
+
+The primary handles ordinary stages. At most one fallback call is permitted
+per moderation request. It can resolve an uncertain REVIEW, a retryable
+provider/output failure, or a failed rewrite verification. Authentication,
+permission, rate-limit, bad-request, and open-circuit failures do not trigger
+fallback. The same stage, request, timeout and total-duration limits apply;
+fallback does not skip schema, policy, meaning, sanitization or verification.
+
+News search runs only when classification supplies a short grounding query for
+a concrete, unresolved public factual/news claim. The query uses three to ten
+words from the original after removing URLs, handles and contact details.
+Search is bounded to five results, 8 seconds and 256 KB per response. Google
+News RSS serves only as discovery; evidence requires an allowed HTTPS publisher
+URL and an extracted article title and timezone-aware publication date.
+Redirect destinations are checked at every hop and only public DNS addresses
+are accepted. Stale or undated results are ignored; one matching article is
+provided to the model. Conflicting matching reports produce REVIEW. Retrieval
+does not establish truth or resolve actor identity by itself. External page
+text is untrusted data. The model must preserve attribution and uncertainty
+and pass the ordinary judges. A source name is omitted unless needed to avoid
+overstating a claim. Grounded outcomes bypass the publish cache and conversation
+context, so time-sensitive evidence is fetched again.
+
+Configuration (database values override ENV):
+
+- `AI_MODEL` / `ai_model`: primary; default `gpt-6-luna`.
+- `AI_FALLBACK_MODEL` / `ai_fallback_model`: one-call fallback; default `gpt-5.6-luna`.
+- `NEWS_GROUNDING_ENABLED` / `news_grounding_enabled`: on-demand lookup switch; default `true`.
+- `NEWS_ALLOWED_DOMAINS` / `news_allowed_domains`: comma-separated exact HTTPS publisher hosts; default domains appear in `.env.example`. Invalid stored values fail closed.
+
+Set `NEWS_GROUNDING_ENABLED=false` to disable lookup. Run `python -m pytest -q`
+for unit and mocked transport coverage. Run
+`python scripts/run_guard_benchmark.py --start 151 --limit 43 --output benchmark-151-193.json`
+then `python scripts/run_guard_benchmark.py --start 1 --limit 193 --output benchmark-1-193.json`
+for the required regression ranges. Benchmark execution uses the configured
+provider, requires valid AI settings and can incur provider cost.
