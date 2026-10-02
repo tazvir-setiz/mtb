@@ -3,10 +3,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.services.ai_policy import AI_DROP_RESULT
 from app.handlers import review_edit, reviews
 from app.handlers.states import State, reset
 from app.services import review_drafts, review_service, review_store
+from app.services.ai_policy import AI_DROP_RESULT
 from app.services.ai_settings import save_ai_value
 
 

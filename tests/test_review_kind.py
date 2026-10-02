@@ -1,4 +1,9 @@
-from app.services.review_kind import ReviewKind, encode_guard_block, is_guard_block, parse_review_reason
+from app.services.review_kind import (
+    ReviewKind,
+    encode_guard_block,
+    is_guard_block,
+    parse_review_reason,
+)
 
 
 def test_guard_block_encoding_preserves_label_and_reason():

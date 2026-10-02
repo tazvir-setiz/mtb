@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
 
-
 GUARD_BLOCK_PREFIX = "guard_block:"
 
 
