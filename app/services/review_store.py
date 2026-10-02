@@ -140,6 +140,10 @@ def enqueue_routes(original, source_id, routes_list, reason):
                 if destination not in merged or merged[destination] is None:
                     merged[destination] = job
             routes_list = list(merged.items())
+            if row.status == "rejected":
+                # A final rejection applies to the source message identity even if it is edited later.
+                _save_routes(session, row.id, routes_list)
+                return row
             if row.fingerprint == fingerprint or row.status in {"sending", "sent", "uncertain"}:
                 _save_routes(session, row.id, routes_list)
                 if new_destinations:

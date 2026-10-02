@@ -32,6 +32,6 @@ def test_preserve_review_kind_keeps_guard_block_identity():
 
     assert (
         preserve_review_kind("guard_block:ABUSE:original_reason", "ai_draft")
-        == "guard_block:ABUSE:ai_draft"
+        == "guard_block:ABUSE:original_reason"
     )
     assert preserve_review_kind("low_confidence", "timeout") == "timeout"

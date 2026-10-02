@@ -128,13 +128,17 @@ async def _decide(review_id, version, action, admin_id, client):
         original = messages[0]
         if review_store.content_fingerprint(original) != row.fingerprint:
             review_store.set_status(row.id, "changed")
-            review_store.enqueue_routes(
-                original,
-                row.source_id,
-                routes,
-                "content_changed",
-            )
-            return "متن یا رسانه تغییر کرده؛ ارسال نشد. اعلان تازه را بررسی کنید. /reviews"
+            with get_session() as session:
+                signature = SettingsRepository.get(session, "signature_text")
+            try:
+                await prepare_message(original, row.source_id, signature)
+                reason = "content_changed"
+            except AIReviewRequired as exc:
+                reason = str(exc)
+            except AIProcessingError:
+                reason = "service_unavailable"
+            review_store.enqueue_routes(original, row.source_id, routes, reason)
+            return "متن یا رسانه تغییر کرده؛ ارسال نشد و Guard دوباره اجرا شد. اعلان تازه را بررسی کنید. /reviews"
 
         draft = review_drafts.get(row.id)
         if getattr(original, "poll", None) and (draft or action == "retry"):

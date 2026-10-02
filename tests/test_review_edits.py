@@ -120,3 +120,19 @@ def test_late_notification_does_not_hide_new_edit():
     review_drafts.save(row.id, old_version, "new", "manual_draft")
     review_store.mark_notified(row.id, 111, row.fingerprint, "pending", old_version)
     assert review_store.get(row.id).notified == "[]"
+
+
+@pytest.mark.asyncio
+async def test_manual_guard_block_edit_preserves_drop_identity_without_sending():
+    row = review_store.enqueue(
+        original(), -100123, -100456, None, "guard_block:THREAT:explicit threat"
+    )
+    version = review_drafts.version(row)
+    assert review_drafts.save(row.id, version, "edited safe candidate", "manual_draft")
+
+    fresh = review_store.get(row.id)
+    assert fresh.reason == "guard_block:THREAT:explicit threat"
+    assert review_drafts.get(row.id).text == "edited safe candidate"
+    content, _ = reviews.card(fresh)
+    assert content.startswith("🚫")
+    assert "DROP" in content

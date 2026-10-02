@@ -48,5 +48,6 @@ def is_guard_block(value: str | None) -> bool:
 def preserve_review_kind(existing: str | None, reason: str) -> str:
     parsed = parse_review_reason(existing)
     if parsed.kind is ReviewKind.GUARD_BLOCK:
-        return encode_guard_block(parsed.guard_label or "UNKNOWN", reason)
+        # Keep the original DROP label and detailed reason; draft/retry state lives elsewhere.
+        return existing or encode_guard_block("UNKNOWN")
     return reason

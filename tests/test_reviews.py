@@ -60,29 +60,59 @@ async def test_approval_sanitizes_and_does_not_recheck_ai_or_send_twice(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_rejection_prevents_later_retry(monkeypatch):
+async def test_rejection_remains_final_after_source_edit_and_retry(monkeypatch):
     row = queued()
     await decide(row.id, row.fingerprint[:12], "reject", 111, None)
     guard = AsyncMock()
     monkeypatch.setattr(message_sender, "apply_ai_guardrails", guard)
-    assert await message_sender.send_message(None, message(), -100123, -100456, None) is None
+    changed = message("edited after final rejection")
+    updated = review_store.enqueue(changed, -100123, -100456, None, "guard_block:ABUSE")
+    assert updated.status == "rejected"
+    assert updated.fingerprint == row.fingerprint
+    assert not review_store.pending()
+    assert await message_sender.send_message(None, changed, -100123, -100456, None) is None
     guard.assert_not_awaited()
-    assert review_store.get(row.id).status == "rejected"
 
 
 @pytest.mark.asyncio
-async def test_edited_source_invalidates_old_approval():
+async def test_edited_source_invalidates_old_approval(monkeypatch):
     row = queued()
+    changed = message("edited content")
+    guard_check = AsyncMock(return_value=SimpleNamespace())
+    monkeypatch.setattr(message_sender, "prepare_message", guard_check)
     client = SimpleNamespace(
-        get_messages=AsyncMock(return_value=[message("edited content")]), send_message=AsyncMock()
+        get_messages=AsyncMock(return_value=[changed]), send_message=AsyncMock()
     )
     await decide(row.id, row.fingerprint[:12], "approve", 111, client)
     refreshed = review_store.get(row.id)
     assert refreshed.status == "pending"
     assert refreshed.fingerprint != row.fingerprint
     assert refreshed.notified == "[]"
+    guard_check.assert_awaited_once_with(changed, row.source_id, None)
     await decide(row.id, row.fingerprint[:12], "approve", 111, client)
     client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_guard_block_requires_explicit_approval_and_sends_once(monkeypatch):
+    original = message("blocked source text")
+    row = review_store.enqueue(
+        original, -100123, -100456, None, "guard_block:ABUSE:policy violation"
+    )
+    guard = AsyncMock(side_effect=AssertionError("approved Guard Block must not loop"))
+    monkeypatch.setattr(message_sender, "apply_ai_guardrails", guard)
+    client = SimpleNamespace(
+        get_messages=AsyncMock(return_value=[original]),
+        send_message=AsyncMock(return_value=SimpleNamespace(id=88)),
+    )
+
+    await decide(row.id, row.fingerprint[:12], "approve", 111, client)
+    await decide(row.id, row.fingerprint[:12], "approve", 222, client)
+
+    client.send_message.assert_awaited_once()
+    assert client.send_message.call_args.kwargs["entity"] == -100456
+    assert review_store.get(row.id).status == "sent"
+    guard.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -349,7 +379,7 @@ async def test_guard_block_stays_distinct_after_ai_rewrite(monkeypatch):
     await decide(row.id, row.fingerprint[:12], "retry", 111, client)
 
     refreshed = review_store.get(row.id)
-    assert refreshed.reason == "guard_block:ABUSE:ai_draft"
+    assert refreshed.reason == "guard_block:ABUSE:policy_violation"
     content, _ = reviews.card(refreshed)
     assert "🚫" in content
     assert "DROP" in content
@@ -362,6 +392,40 @@ def test_guard_block_stays_distinct_after_requeue():
     )
     review_store.requeue(row.id, "timeout")
     refreshed = review_store.get(row.id)
-    assert refreshed.reason == "guard_block:SPAM:timeout"
+    assert refreshed.reason == "guard_block:SPAM:spam"
     content, _ = reviews.card(refreshed)
     assert content.startswith("🚫")
+
+
+@pytest.mark.asyncio
+async def test_stale_guard_block_is_rechecked_and_keeps_new_drop_label(monkeypatch):
+    from app.services.review_kind import encode_guard_block, parse_review_reason
+
+    row = review_store.enqueue(
+        message("original blocked text"),
+        -100123,
+        -100456,
+        None,
+        "guard_block:ABUSE:original reason",
+    )
+    changed = message("updated potentially dangerous text")
+    guard_check = AsyncMock(
+        side_effect=AIReviewRequired(encode_guard_block("THREAT", "new threat reason"))
+    )
+    monkeypatch.setattr(message_sender, "prepare_message", guard_check)
+    client = SimpleNamespace(
+        get_messages=AsyncMock(return_value=[changed]), send_message=AsyncMock()
+    )
+
+    await decide(row.id, row.fingerprint[:12], "approve", 111, client)
+
+    refreshed = review_store.get(row.id)
+    parsed = parse_review_reason(refreshed.reason)
+    assert refreshed.status == "pending"
+    assert parsed.guard_label == "THREAT"
+    assert parsed.reason == "new threat reason"
+    content, _ = reviews.card(refreshed)
+    assert "DROP" in content
+    assert "تهدید" in content
+    guard_check.assert_awaited_once()
+    client.send_message.assert_not_awaited()
