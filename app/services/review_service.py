@@ -7,7 +7,7 @@ from app.database.database import get_session
 from app.database.models import ForwardJob, MessageStatus
 from app.database.repository import ForwardedMessageRepository, SettingsRepository
 from app.services import review_drafts, review_store
-from app.services.ai_policy import AIProcessingError, AIReviewRequired
+from app.services.ai_policy import AI_DROP_RESULT, AIProcessingError, AIReviewRequired
 from app.services.ai_settings import load_ai_settings
 from app.services.fanout import clear_delivery_marker, deliver
 from app.services.forward_results import record_result
@@ -162,7 +162,7 @@ async def _decide(review_id, version, action, admin_id, client):
                 chat_id=row.source_id,
                 message_id=row.message_id,
             )
-            if candidate == "__DROP__":
+            if candidate == AI_DROP_RESULT:
                 review_store.requeue(row.id, "ai_rejected")
                 return (
                     "گارد پیشنهاد رد داد؛ هنوز ارسال نشده است. می‌توانید رد، تأیید یا ویرایش کنید."

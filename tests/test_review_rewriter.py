@@ -1,7 +1,7 @@
 import pytest
 from guard_mocks import mock_guard
 
-from app.services.ai_policy import AIReviewRequired
+from app.services.ai_policy import AI_DROP_RESULT, AIReviewRequired
 from app.services.ai_settings import save_ai_value
 from app.services.guard.contracts import PolicyVerdict, RewriteDraft
 from app.services.guard_models import Label, ModerationResult
@@ -49,7 +49,7 @@ async def test_noncompliant_draft_is_not_returned(model):
 
 @pytest.mark.asyncio
 async def test_pure_abuse_recommends_drop_without_inventing_content(model):
-    assert await rewrite_draft("خیلی کسکشی") == "__DROP__"
+    assert await rewrite_draft("خیلی کسکشی") == AI_DROP_RESULT
     model.assert_not_awaited()
 
 

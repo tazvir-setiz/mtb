@@ -9,7 +9,7 @@ from telethon.tl.types import Message
 from app.config import settings
 from app.log_context import context, traced
 from app.services import review_store
-from app.services.ai_policy import AIProcessingError, AIReviewRequired
+from app.services.ai_policy import AI_DROP_RESULT, AIProcessingError, AIReviewRequired
 from app.services.ai_service import apply_ai_guardrails
 from app.services.ai_settings import load_ai_settings
 from app.services.text_sanitizer import sanitize_text
@@ -50,7 +50,7 @@ async def prepare_message(
         if approved
         else await apply_ai_guardrails(current_html, chat_id=source_id, message_id=msg_id)
     )
-    if processed_html == "__DROP__":
+    if processed_html == AI_DROP_RESULT:
         return None
     if not ai_enabled:
         processed_html = sanitize_text(processed_html, remove_links=False)

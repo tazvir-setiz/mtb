@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.services.ai_policy import AI_DROP_RESULT
 from app.handlers import review_edit, reviews
 from app.handlers.states import State, reset
 from app.services import review_drafts, review_service, review_store
@@ -97,7 +98,7 @@ def test_cancel_discards_editor_state_but_not_saved_draft():
 async def test_ai_drop_after_referral_keeps_human_actions(monkeypatch):
     row = queued()
     save_ai_value("enabled", "true")
-    monkeypatch.setattr(review_service, "rewrite_draft", AsyncMock(return_value="__DROP__"))
+    monkeypatch.setattr(review_service, "rewrite_draft", AsyncMock(return_value=AI_DROP_RESULT))
     client = SimpleNamespace(
         get_messages=AsyncMock(return_value=[original()]), send_message=AsyncMock()
     )

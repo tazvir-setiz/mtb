@@ -12,6 +12,7 @@ from app.handlers import username_settings
 from app.handlers.states import State
 from app.services import ai_service
 from app.services.ai_policy import (
+    AI_DROP_RESULT,
     DROP_CATEGORIES,
     REVIEW_CATEGORIES,
     AIProcessingError,
@@ -25,7 +26,7 @@ from app.telegram.forward_errors import ForwardErrorType, classify_error
 
 @pytest.mark.parametrize("category", DROP_CATEGORIES)
 def test_drop_categories_never_publish_body(category):
-    assert parse_decision(f"[{category}] unsafe body") == "__DROP__"
+    assert parse_decision(f"[{category}] unsafe body") == AI_DROP_RESULT
 
 
 @pytest.mark.parametrize("category", REVIEW_CATEGORIES)
