@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database.models import ForwardedMessage, MessageStatus
@@ -83,14 +83,16 @@ class ForwardedMessageRepository:
 
     @staticmethod
     def stats(session: Session) -> dict:
-        rows = list(session.execute(select(ForwardedMessage)).scalars())
-        total = len(rows)
-        success = sum(1 for r in rows if r.status == MessageStatus.SUCCESS)
-        failed = sum(1 for r in rows if r.status == MessageStatus.FAILED)
-        duplicate = sum(1 for r in rows if r.status == MessageStatus.DUPLICATE)
+        counts = session.execute(
+            select(ForwardedMessage.status, func.count(ForwardedMessage.id)).group_by(
+                ForwardedMessage.status
+            )
+        ).all()
+        status_counts = dict(counts)
+        total = sum(status_counts.values())
         return {
             "total": total,
-            "success": success,
-            "failed": failed,
-            "duplicate": duplicate,
+            "success": status_counts.get(MessageStatus.SUCCESS, 0),
+            "failed": status_counts.get(MessageStatus.FAILED, 0),
+            "duplicate": status_counts.get(MessageStatus.DUPLICATE, 0),
         }

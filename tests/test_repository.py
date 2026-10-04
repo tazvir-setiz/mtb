@@ -73,15 +73,36 @@ def test_retry_failed_messages_query():
 
 def test_statistics_counts():
     with get_session() as session:
-        job = ForwardJobRepository.create(session, -1001, -1002, 1, 3, 3)
+        job = ForwardJobRepository.create(session, -1001, -1002, 1, 7, 7)
         job_id = job.id
         ForwardedMessageRepository.record(session, job_id, -1001, 1, -1002, MessageStatus.SUCCESS)
-        ForwardedMessageRepository.record(session, job_id, -1001, 2, -1002, MessageStatus.FAILED)
-        ForwardedMessageRepository.record(session, job_id, -1001, 3, -1002, MessageStatus.DUPLICATE)
+        ForwardedMessageRepository.record(session, job_id, -1001, 2, -1002, MessageStatus.SUCCESS)
+        ForwardedMessageRepository.record(session, job_id, -1001, 3, -1002, MessageStatus.FAILED)
+        ForwardedMessageRepository.record(session, job_id, -1001, 4, -1002, MessageStatus.DUPLICATE)
+        ForwardedMessageRepository.record(session, job_id, -1001, 5, -1002, MessageStatus.DUPLICATE)
+        ForwardedMessageRepository.record(session, job_id, -1001, 6, -1002, MessageStatus.DUPLICATE)
+        ForwardedMessageRepository.record(session, job_id, -1001, 7, -1002, MessageStatus.SKIPPED)
 
     with get_session() as session:
         stats = ForwardedMessageRepository.stats(session)
-        assert stats["total"] == 3
-        assert stats["success"] == 1
-        assert stats["failed"] == 1
-        assert stats["duplicate"] == 1
+        assert stats == {"total": 7, "success": 2, "failed": 1, "duplicate": 3}
+
+
+def test_statistics_counts_are_zero_for_empty_history():
+    with get_session() as session:
+        stats = ForwardedMessageRepository.stats(session)
+
+    assert stats == {"total": 0, "success": 0, "failed": 0, "duplicate": 0}
+
+
+def test_statistics_counts_single_status():
+    with get_session() as session:
+        job = ForwardJobRepository.create(session, -1001, -1002, 1, 4, 4)
+        for message_id in range(1, 5):
+            ForwardedMessageRepository.record(
+                session, job.id, -1001, message_id, -1002, MessageStatus.SUCCESS
+            )
+
+    with get_session() as session:
+        stats = ForwardedMessageRepository.stats(session)
+        assert stats == {"total": 4, "success": 4, "failed": 0, "duplicate": 0}
