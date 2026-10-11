@@ -82,12 +82,73 @@ def guard_block_reason(parsed):
     return detail
 
 
+def get_row_reason(row):
+    """استخراج و قالب‌بندی دلیل نیاز به بررسی برای نمایش در کارت و فهرست."""
+    parsed = parse_review_reason(row.reason)
+    blocked = parsed.kind is ReviewKind.GUARD_BLOCK
+    return guard_block_reason(parsed) if blocked else REASONS.get(
+        row.reason, "محتوا نیاز به تصمیم مدیر دارد"
+    )
+
+
+def list_preview(text, max_len=75):
+    """تولید یک خلاصه کوتاه تک‌خطی و ایمن‌شده برای نمایش در فهرست بازبینی."""
+    cleaned = " ".join((text or "").split())
+    if not cleaned:
+        return "[بدون متن]"
+    if len(cleaned) > max_len:
+        return escape(cleaned[: max_len - 1]) + "…"
+    return escape(cleaned)
+
+
+def build_pending_list(rows, after_id=0):
+    """ساخت پیام فهرست شماره‌دار پیام‌های معلق به همراه دکمه‌های شیشه‌ای انتخاب هر مورد."""
+    header = "📋 <b>فهرست پیام‌های نیازمند بررسی:</b>\n\n"
+    items = []
+    for idx, row in enumerate(rows, 1):
+        parsed = parse_review_reason(row.reason)
+        blocked = parsed.kind is ReviewKind.GUARD_BLOCK
+        icon = "🚫" if blocked else "⚠️"
+        reason = escape(get_row_reason(row))
+        content = list_preview(row.preview)
+        items.append(
+            f"<b>{idx}. پیام #{row.id}</b>\n"
+            f"   {icon} <b>علت:</b> {reason}\n"
+            f"   📝 <b>محتوا:</b> <i>{content}</i>"
+        )
+    footer = "\n\n<i>برای مشاهده پیام کامل و اقدام (تأیید، ویرایش، رد)، روی دکمه شماره پیام کلیک کنید:</i>"
+    text = header + "\n\n".join(items) + footer
+
+    # ایجاد دکمه‌های شیشه‌ای به صورت دو دکمه در هر سطر
+    buttons = []
+    row_buttons = []
+    for idx, row in enumerate(rows, 1):
+        row_buttons.append(
+            InlineKeyboardButton(f"🔍 {idx}. پیام #{row.id}", callback_data=f"review:show:{row.id}")
+        )
+        if len(row_buttons) == 2:
+            buttons.append(row_buttons)
+            row_buttons = []
+    if row_buttons:
+        buttons.append(row_buttons)
+
+    # دکمه‌های ناوبری، به‌روزرسانی و صفحه بعد
+    nav_row = []
+    if after_id > 0:
+        nav_row.append(InlineKeyboardButton("⏮ صفحه اول", callback_data="review:list:0"))
+    nav_row.append(InlineKeyboardButton("🔄 به‌روزرسانی", callback_data=f"review:list:{after_id}"))
+    if len(rows) == 10:
+        nav_row.append(InlineKeyboardButton("موارد بعدی ➡️", callback_data=f"review:list:{rows[-1].id}"))
+    if nav_row:
+        buttons.append(nav_row)
+
+    return text, InlineKeyboardMarkup(buttons)
+
+
 def card(row):
     parsed = parse_review_reason(row.reason)
     blocked = parsed.kind is ReviewKind.GUARD_BLOCK
-    reason = guard_block_reason(parsed) if blocked else REASONS.get(
-        row.reason, "محتوا نیاز به تصمیم مدیر دارد"
-    )
+    reason = get_row_reason(row)
     route_count = len(review_store.routes(row))
     destination_line = (
         f"مقصد: {row.destination_id}" if route_count == 1 else f"مقصدها: {route_count} کانال"
@@ -221,17 +282,40 @@ async def show_pending(update, context, after_id=0):
         )
         return
     rows = review_store.pending(limit=10, after_id=after_id)
+    query = getattr(update, "callback_query", None)
     if not rows:
-        await update.effective_message.reply_text("پیام دیگری برای بررسی وجود ندارد.")
+        msg = (
+            "پیام دیگری برای بررسی وجود ندارد."
+            if after_id > 0
+            else "هیچ پیامی در صف بررسی وجود ندارد."
+        )
+        if query and hasattr(query, "answer"):
+            try:
+                await query.answer(msg, show_alert=True)
+                return
+            except TelegramError:
+                pass
+        await update.effective_message.reply_text(msg)
         return
-    for row in rows:
-        await send_card(context.bot, update.effective_user.id, row)
-        await asyncio.sleep(1.1)
+
+    text, markup = build_pending_list(rows, after_id)
+    if query and getattr(query, "message", None) and hasattr(query, "edit_message_text"):
+        try:
+            await query.edit_message_text(
+                text=text,
+                reply_markup=markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            return
+        except TelegramError:
+            pass
+
     await update.effective_message.reply_text(
-        "ادامه فهرست بررسی:",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("موارد بعدی", callback_data=f"review:list:{rows[-1].id}")]]
-        ),
+        text=text,
+        reply_markup=markup,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
 
@@ -246,6 +330,20 @@ async def on_callback(update, context):
     parts = (query.data or "").split(":")
     if len(parts) == 3 and parts[1] == "list" and parts[2].isdigit():
         await show_pending(update, context, int(parts[2]))
+        return
+    if len(parts) == 3 and parts[1] == "show" and parts[2].isdigit():
+        row = review_store.get(int(parts[2]))
+        if not row:
+            await update.effective_message.reply_text(
+                "این پیام یافت نشد یا قبلاً تعیین تکلیف شده است."
+            )
+            return
+        if row.status not in {"pending", "uncertain"}:
+            await update.effective_message.reply_text(
+                f"این پیام قبلاً تعیین تکلیف شده است (وضعیت: {row.status})."
+            )
+            return
+        await send_card(context.bot, update.effective_user.id, row)
         return
     if (
         len(parts) != 4

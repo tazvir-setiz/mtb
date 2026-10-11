@@ -18,8 +18,8 @@ from app.telegram import message_sender
 from app.telegram.forward_service import forward_range
 
 
-def message(text="متن برای بررسی https://example.com"):
-    return SimpleNamespace(id=7, message=text, entities=[], media=None, poll=None)
+def message(text="متن برای بررسی https://example.com", mid=7):
+    return SimpleNamespace(id=mid, message=text, entities=[], media=None, poll=None)
 
 
 def queued(original=None):
@@ -429,3 +429,115 @@ async def test_stale_guard_block_is_rechecked_and_keeps_new_drop_label(monkeypat
     assert "تهدید" in content
     guard_check.assert_awaited_once()
     client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_show_pending_sends_numbered_list_with_reasons_and_previews(monkeypatch):
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+    row1 = review_store.enqueue(message("متن پیام اول که برای تست فرستاده شده", mid=101), -100123, -100456, None, "low_confidence")
+    row2 = review_store.enqueue(message("متن پیام دوم که مشکوک به اسپم است", mid=102), -100123, -100456, None, "guard_block:SPAM")
+
+    reply_mock = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=reply_mock),
+        callback_query=None,
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+
+    await reviews.show_pending(update, context)
+
+    reply_mock.assert_awaited_once()
+    call_args = reply_mock.call_args
+    sent_text = call_args.kwargs["text"]
+    markup = call_args.kwargs["reply_markup"]
+
+    # Verify numbered list
+    assert "1. پیام #" in sent_text
+    assert "2. پیام #" in sent_text
+    assert "علت:" in sent_text
+    assert "اطمینان مدل کافی نیست" in sent_text
+    assert "اسپم یا تبلیغ ممنوع" in sent_text
+    assert "محتوا:" in sent_text
+    assert "متن پیام اول" in sent_text
+    assert "متن پیام دوم" in sent_text
+
+    # Verify buttons
+    callback_data_list = [
+        btn.callback_data for row in markup.inline_keyboard for btn in row if btn.callback_data
+    ]
+    assert f"review:show:{row1.id}" in callback_data_list
+    assert f"review:show:{row2.id}" in callback_data_list
+
+
+@pytest.mark.asyncio
+async def test_show_pending_empty_queue(monkeypatch):
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+    reply_mock = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=reply_mock),
+        callback_query=None,
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+
+    await reviews.show_pending(update, context)
+    reply_mock.assert_awaited_once_with("هیچ پیامی در صف بررسی وجود ندارد.")
+
+
+@pytest.mark.asyncio
+async def test_callback_review_show_sends_card(monkeypatch):
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+    row = queued(message("پیام برای نمایش کارت کامل"))
+
+    send_msg_mock = AsyncMock()
+    bot = SimpleNamespace(send_message=send_msg_mock)
+    context = SimpleNamespace(bot=bot)
+
+    query = SimpleNamespace(
+        data=f"review:show:{row.id}",
+        answer=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=AsyncMock()),
+        callback_query=query,
+    )
+
+    await reviews.on_callback(update, context)
+
+    query.answer.assert_awaited_once()
+    send_msg_mock.assert_awaited_once()
+    sent_text = send_msg_mock.call_args.kwargs["text"]
+    assert f"#{row.id}" in sent_text
+    markup = send_msg_mock.call_args.kwargs["reply_markup"]
+    labels = [btn.text for r in markup.inline_keyboard for btn in r]
+    assert "✅ تأیید نسخهٔ فعلی" in labels
+
+
+@pytest.mark.asyncio
+async def test_callback_review_show_already_resolved(monkeypatch):
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+    row = queued()
+    await decide(row.id, row.fingerprint[:12], "reject", 111, None)
+
+    reply_mock = AsyncMock()
+    query = SimpleNamespace(
+        data=f"review:show:{row.id}",
+        answer=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=reply_mock),
+        callback_query=query,
+    )
+
+    await reviews.on_callback(update, SimpleNamespace())
+    query.answer.assert_awaited_once()
+    reply_mock.assert_awaited_once()
+    assert "تعیین تکلیف" in reply_mock.call_args.args[0]
+
