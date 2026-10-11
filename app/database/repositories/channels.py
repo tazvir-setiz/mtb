@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import Channel, ChannelType
+from app.database.models import Channel, ChannelType, utc_now
 
 
 class ChannelRepository:
@@ -35,7 +33,7 @@ class ChannelRepository:
         if existing:
             existing.title = title
             existing.username = username
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = utc_now()
             session.flush()
             return existing
 

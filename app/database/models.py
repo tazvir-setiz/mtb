@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
@@ -14,6 +14,10 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Base(DeclarativeBase):
@@ -50,9 +54,9 @@ class Channel(Base):
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str] = mapped_column(String(255))
     type: Mapped[ChannelType] = mapped_column(Enum(ChannelType))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
 
@@ -72,7 +76,7 @@ class ForwardJob(Base):
     last_processed_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     messages: Mapped[list["ForwardedMessage"]] = relationship(back_populates="job")
 
@@ -96,7 +100,7 @@ class ForwardedMessage(Base):
     destination_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[MessageStatus] = mapped_column(Enum(MessageStatus))
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     job: Mapped[ForwardJob] = relationship(back_populates="messages")
 
@@ -133,7 +137,7 @@ class ReviewRequest(Base):
     notified: Mapped[str] = mapped_column(Text, default="[]")
     decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     destination_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 
 class ReviewDraft(Base):

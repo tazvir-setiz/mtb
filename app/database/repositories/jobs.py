@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import ForwardJob, JobStatus
+from app.database.models import ForwardJob, JobStatus, utc_now
 
 
 class ForwardJobRepository:
@@ -50,9 +48,9 @@ class ForwardJobRepository:
     def update_status(session: Session, job: ForwardJob, status: JobStatus) -> None:
         job.status = status
         if status == JobStatus.RUNNING and job.started_at is None:
-            job.started_at = datetime.utcnow()
+            job.started_at = utc_now()
         if status in (JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED):
-            job.finished_at = datetime.utcnow()
+            job.finished_at = utc_now()
         session.flush()
 
     @staticmethod

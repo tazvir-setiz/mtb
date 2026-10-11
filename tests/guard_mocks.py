@@ -1,9 +1,9 @@
 """Provider mocks for the split Guard v4 stages (the pipeline itself stays real)."""
 
-from app.services.grounding import GroundingResult
 from unittest.mock import AsyncMock
 
 from app.services import ai_service
+from app.services.grounding import GroundingResult
 from app.services.guard.contracts import (
     MeaningDecomposition,
     MeaningVerdict,
