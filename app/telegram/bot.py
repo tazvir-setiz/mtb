@@ -49,4 +49,16 @@ def build_application() -> Application:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     application.add_handler(MessageHandler(filters.Document.ALL, guard_settings.receive))
 
+    async def _on_error(update, context):
+        import logging
+        from telegram.error import NetworkError, TimedOut
+
+        logger = logging.getLogger(__name__)
+        if isinstance(context.error, (TimedOut, NetworkError)):
+            logger.warning("Telegram network timeout/error: %s", context.error)
+        else:
+            logger.exception("Unhandled telegram exception: %s", context.error)
+
+    application.add_error_handler(_on_error)
+
     return application

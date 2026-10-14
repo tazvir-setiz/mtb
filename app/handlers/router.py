@@ -26,7 +26,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await reject(update)
         return
 
-    await query.answer()
+    try:
+        await query.answer()
+    except Exception:
+        pass
     namespace, action, _arg = parse(query.data or "")
     if namespace != "guard" and get_state(getattr(context, "user_data", {}) or {}) in (
         State.GUARD_IMPORT,
