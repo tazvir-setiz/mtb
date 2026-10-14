@@ -27,6 +27,10 @@ def build_application() -> Application:
         Application.builder()
         .token(settings.bot_token)
         .defaults(Defaults(parse_mode=ParseMode.HTML))
+        .connect_timeout(30.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
+        .pool_timeout(30.0)
     )
 
     proxy_url = get_bot_api_proxy_url()
