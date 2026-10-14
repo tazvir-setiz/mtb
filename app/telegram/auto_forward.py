@@ -122,9 +122,31 @@ async def _on_new_message(
                 ] += 1
 
 
+def _channel_aliases(channel_id: int) -> set[int]:
+    aliases = {channel_id}
+    try:
+        from telethon.utils import get_peer_id, resolve_id
+
+        marked = get_peer_id(channel_id)
+        aliases.add(marked)
+        raw_id, _ = resolve_id(channel_id)
+        aliases.add(raw_id)
+        aliases.add(int(f"-100{raw_id}"))
+    except Exception:
+        pass
+    s = str(channel_id)
+    if s.startswith("-100") and len(s) < 14:
+        try:
+            legacy_raw = int(s[4:])
+            aliases.add(legacy_raw)
+            aliases.add(-1000000000000 - legacy_raw)
+        except Exception:
+            pass
+    return aliases
+
+
 async def start_listener(client: TelegramClient) -> bool:
     global _handler, _registered_client
-
     await stop_listener(client)
     with get_session() as session:
         sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
@@ -138,29 +160,40 @@ async def start_listener(client: TelegramClient) -> bool:
 
     source_ids = [channel.telegram_id for channel in sources]
     destination_ids = [channel.telegram_id for channel in destinations]
-    route_map = {
-        source_id: [
+    route_map = {}
+    chats_to_listen = set()
+    for source_id in source_ids:
+        routes = [
             (
                 destination_id,
                 _get_auto_job_id(source_id, destination_id),
             )
             for destination_id in destination_ids
         ]
-        for source_id in source_ids
-    }
+        for alias in _channel_aliases(source_id):
+            route_map[alias] = routes
+            chats_to_listen.add(alias)
 
     async def handler(event):
-        source_id = getattr(event, "chat_id", None)
-        if source_id not in route_map:
+        chat_id = getattr(event, "chat_id", None)
+        if chat_id is None:
+            return
+        routes = route_map.get(chat_id)
+        if routes is None:
+            for alias in _channel_aliases(chat_id):
+                if alias in route_map:
+                    routes = route_map[alias]
+                    break
+        if not routes:
             return
         await _on_new_message(
             event,
-            source_id,
-            route_map[source_id],
+            chat_id,
+            routes,
             listener=handler,
         )
 
-    client.add_event_handler(handler, events.NewMessage(chats=source_ids))
+    client.add_event_handler(handler, events.NewMessage(chats=list(chats_to_listen)))
     _handler = handler
     _registered_client = client
     logger.info(

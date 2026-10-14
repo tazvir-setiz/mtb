@@ -32,6 +32,8 @@ async def show_transfer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     clear_transfer_input(context.user_data)
     context.user_data.pop("transfer_source", None)
+    context.user_data.pop("transfer_sources", None)
+    context.user_data.pop("transfer_source_page", None)
     context.user_data.pop("transfer_destination_page", None)
     context.user_data.pop("transfer_destinations", None)
     sources, destinations = transfer_service.configured_channels()
@@ -43,6 +45,7 @@ async def show_transfer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     set_state(context.user_data, State.TRANSFER_MENU)
     if len(sources) == 1:
         context.user_data["transfer_source"] = sources[0].telegram_id
+        context.user_data["transfer_sources"] = [sources[0].telegram_id]
         await show_destinations(update, context)
         return
     await show_sources(update, context)
@@ -57,9 +60,11 @@ async def show_sources(update, context):
     _, action, arg = parse(getattr(update.callback_query, "data", "") or "")
     page = int(arg) if action == "sources" and arg and arg.isdigit() else 0
     page = min(page, max(0, (len(sources) - 1) // 10))
+    context.user_data["transfer_source_page"] = page
+    chosen = context.user_data.setdefault("transfer_sources", [])
     await update.callback_query.edit_message_text(
-        "📥 مبدأ پیام‌های تاریخی را انتخاب کنید؛ شناسه پیام فقط مربوط به همین مبدأ است.",
-        reply_markup=source_selection(sources, page),
+        "📥 یک یا چند کانال مبدأ را برای انتقال انتخاب کنید:",
+        reply_markup=source_selection(sources, chosen, page),
     )
 
 
@@ -70,19 +75,49 @@ async def select_source(update, context):
         return
     _, _, arg = parse(update.callback_query.data)
     sources, _ = transfer_service.configured_channels()
+    if arg == "all":
+        context.user_data["transfer_sources"] = [c.telegram_id for c in sources]
+        if len(sources) == 1:
+            context.user_data["transfer_source"] = sources[0].telegram_id
+        else:
+            context.user_data.pop("transfer_source", None)
+        await show_destinations(update, context)
+        return
+
     source = next((c for c in sources if str(c.telegram_id) == arg), None)
     if source is None:
         await show_transfer_menu(update, context)
         return
-    context.user_data["transfer_source"] = source.telegram_id
-    context.user_data["transfer_destinations"] = []
-    await show_destinations(update, context)
+
+    chosen = context.user_data.setdefault("transfer_sources", [])
+    if source.telegram_id in chosen:
+        chosen.remove(source.telegram_id)
+    else:
+        chosen.append(source.telegram_id)
+
+    if len(chosen) == 1:
+        context.user_data["transfer_source"] = chosen[0]
+    else:
+        context.user_data.pop("transfer_source", None)
+
+    page = context.user_data.get("transfer_source_page", 0)
+    await update.callback_query.edit_message_text(
+        "📥 یک یا چند کانال مبدأ را برای انتقال انتخاب کنید:",
+        reply_markup=source_selection(sources, chosen, page),
+    )
 
 
 async def show_destinations(update, context):
     from app.ui.callbacks import parse
 
     if get_state(context.user_data) != State.TRANSFER_MENU:
+        return
+    chosen_sources = context.user_data.get("transfer_sources")
+    if not chosen_sources and "transfer_source" in context.user_data:
+        chosen_sources = [context.user_data["transfer_source"]]
+        context.user_data["transfer_sources"] = chosen_sources
+    if not chosen_sources:
+        await update.callback_query.answer("حداقل یک مبدأ انتخاب کنید.", show_alert=True)
         return
     _, destinations = transfer_service.configured_channels()
     _, action, arg = parse(getattr(update.callback_query, "data", "") or "")
@@ -170,8 +205,11 @@ async def confirm_and_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data[KEY_CURRENT_JOB_ID] = job_id
     set_state(context.user_data, State.TRANSFERRING)
 
+    sources = source_id if isinstance(source_id, list) else [source_id]
+    total_deliveries = len(message_ids) * len(dest_id) * len(sources)
+
     await update.callback_query.edit_message_text(
-        messages.progress_text(0, len(message_ids) * len(dest_id), 0, 0, 0, 0),
+        messages.progress_text(0, total_deliveries, 0, 0, 0, 0),
         reply_markup=keyboards.in_progress(),
     )
     progress_message_id = update.callback_query.message.message_id

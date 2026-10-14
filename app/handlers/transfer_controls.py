@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 
 from app.database.database import get_session
 from app.database.models import JobStatus
-from app.database.repository import ForwardJobRepository
+from app.database.repository import ForwardJobRepository, SettingsRepository
 from app.handlers.states import KEY_CURRENT_JOB_ID, KEY_PROGRESS_MESSAGE_ID, State, set_state
 from app.services import transfer_service
 from app.ui import keyboards, messages
@@ -24,17 +24,33 @@ async def resume_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.callback_query.answer("عملیات فعالی یافت نشد.", show_alert=True)
         return
     with get_session() as session:
-        job = ForwardJobRepository.get(session, job_id)
-        if not job or job.status != JobStatus.PAUSED:
+        import json
+
+        raw_batch = SettingsRepository.get(session, f"job_batch:{job_id}")
+        job_ids = json.loads(raw_batch) if raw_batch else [job_id]
+
+        batch_jobs = [ForwardJobRepository.get(session, j_id) for j_id in job_ids]
+        if not any(j and j.status == JobStatus.PAUSED for j in batch_jobs):
             await update.callback_query.answer("این عملیات در وضعیت توقف نیست.", show_alert=True)
             return
+
+        for j in batch_jobs:
+            if j and j.status == JobStatus.PAUSED:
+                ForwardJobRepository.update_status(session, j, JobStatus.RUNNING)
+
+        primary_job = batch_jobs[0]
         try:
-            remaining = transfer_service.remaining_ids(session, job)
+            remaining = transfer_service.remaining_ids(session, primary_job)
         except ValueError as exc:
             await update.callback_query.message.reply_text(str(exc))
             return
-        ForwardJobRepository.update_status(session, job, JobStatus.RUNNING)
-        source_id, dest_id = job.source_channel_id, job.destination_channel_id
+
+        source_id = (
+            [j.source_channel_id for j in batch_jobs if j]
+            if len(batch_jobs) > 1
+            else primary_job.source_channel_id
+        )
+        dest_id = primary_job.destination_channel_id
 
     set_state(context.user_data, State.TRANSFERRING)
     progress_message_id = update.callback_query.message.message_id

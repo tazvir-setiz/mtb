@@ -88,15 +88,28 @@ def _page_buttons(prefix, page, count):
     return [row] if row else []
 
 
-def source_selection(channels, page=0):
-    return InlineKeyboardMarkup(
+def source_selection(channels, chosen=None, page=0):
+    if isinstance(chosen, int) and page == 0:
+        page, chosen = chosen, []
+    chosen = list(chosen) if chosen else []
+    rows = [
         [
-            [_cb(c.title[:60], f"transfer:source:{c.telegram_id}")]
-            for c in channels[page * 10 : (page + 1) * 10]
+            _cb(
+                ("✅ " if c.telegram_id in chosen else "▫️ ") + c.title[:55],
+                f"transfer:source:{c.telegram_id}",
+            )
         ]
-        + _page_buttons("transfer:sources", page, len(channels))
-        + [[_cb("‹ بازگشت", "nav:back")]]
+        for c in channels[page * 10 : (page + 1) * 10]
+    ]
+    rows.extend(_page_buttons("transfer:sources", page, len(channels)))
+    rows.extend(
+        [
+            [_cb("🌐 همه مبدأها", "transfer:source:all")],
+            [_cb("ادامه با مبدأهای انتخاب‌شده ›", "transfer:destinations")],
+            [_cb("‹ بازگشت", "nav:back")],
+        ]
     )
+    return InlineKeyboardMarkup(rows)
 
 
 def destination_selection(channels, chosen, page=0):
@@ -113,7 +126,7 @@ def destination_selection(channels, chosen, page=0):
     rows.extend(
         [
             [_cb("ادامه با مقصدهای انتخاب‌شده", "transfer:routes")],
-            [_cb("‹ انتخاب مبدأ", "menu:transfer")],
+            [_cb("‹ انتخاب مبدأ", "transfer:sources")],
         ]
     )
     return InlineKeyboardMarkup(rows)

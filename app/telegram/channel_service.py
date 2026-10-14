@@ -8,6 +8,7 @@ from telethon.errors import ChannelPrivateError, UsernameNotOccupiedError
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.types import Channel as TLChannel
 from telethon.tl.types import ChannelParticipantAdmin, ChannelParticipantCreator, Chat
+from telethon.utils import get_peer_id
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ def normalize_channel_ref(raw: str) -> str | int:
             return int(raw)
         except ValueError:
             pass
+    if raw.startswith("https://t.me/c/"):
+        parts = raw.split("https://t.me/c/")[-1].strip("/").split("/")
+        if parts and parts[0].isdigit():
+            return int(f"-100{parts[0]}")
     if raw.startswith("https://t.me/"):
         return "@" + raw.split("https://t.me/")[-1].strip("/")
     return raw if raw.startswith("@") else "@" + raw
@@ -70,7 +75,7 @@ async def resolve_channel(client: TelegramClient, raw: str) -> ChannelInfo:
             can_post = False
 
     return ChannelInfo(
-        telegram_id=entity.id if not isinstance(entity, TLChannel) else int(f"-100{entity.id}"),
+        telegram_id=get_peer_id(entity),
         title=getattr(entity, "title", "بدون نام"),
         username=getattr(entity, "username", None),
         is_admin=is_admin,

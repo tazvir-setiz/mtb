@@ -79,10 +79,10 @@ async def ensure_started() -> TelegramClient:
         except SessionPasswordNeededError:
             logger.error("حساب دارای Two-Step Verification است؛ رمز عبور را وارد کنید.")
             raise
-    if settings.telethon_string_session:
-        # StringSession contains credentials, but not channel access hashes.
-        # Populate the persistent entity cache for channels configured by numeric ID.
-        await client.get_dialogs()
+    try:
+        await client.get_dialogs(limit=50)
+    except Exception:
+        logger.debug("Could not pre-fetch dialogs", exc_info=True)
     return client
 
 

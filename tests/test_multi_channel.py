@@ -527,3 +527,112 @@ async def test_listener_refresh_replaces_routes_and_ignores_stale_events(monkeyp
     client.send_message.assert_awaited_once()
     assert client.send_message.call_args.kwargs["entity"] == -2002
     await auto_forward.disable(client)
+
+
+async def test_manual_multi_source_selection_and_transfer(monkeypatch):
+    with get_session() as session:
+        for s in (-1001, -1002):
+            ChannelRepository.upsert(session, s, f"Source {s}", ChannelType.SOURCE)
+        for d in (-2001, -2002):
+            ChannelRepository.upsert(session, d, f"Dest {d}", ChannelType.DESTINATION)
+
+    query = SimpleNamespace(edit_message_text=AsyncMock(), answer=AsyncMock())
+    update = SimpleNamespace(callback_query=query, effective_chat=SimpleNamespace(id=111))
+    context = SimpleNamespace(user_data={}, bot=SimpleNamespace(edit_message_text=AsyncMock()))
+
+    await transfer.show_transfer_menu(update, context)
+    query.data = "transfer:source:-1001"
+    await transfer.select_source(update, context)
+    query.data = "transfer:source:-1002"
+    await transfer.select_source(update, context)
+
+    query.data = "transfer:destinations"
+    await transfer.show_destinations(update, context)
+    for dst in (-2001, -2002):
+        query.data = f"transfer:destination:{dst}"
+        await transfer.toggle_destination(update, context)
+
+    await transfer.confirm_routes(update, context)
+    selected = transfer_service.get_channels(context.user_data)
+    assert selected[0] == [-1001, -1002]
+    assert selected[1] == [-2001, -2002]
+
+    context.user_data["range_start"] = 1
+    context.user_data["range_end"] = 2
+    from app.handlers.states import State, set_state
+
+    set_state(context.user_data, State.CONFIRM_TRANSFER)
+
+    client = client_for()
+    client.get_messages.side_effect = lambda source, ids: [original(ids[0])]
+    monkeypatch.setattr(transfer_service, "ensure_started", AsyncMock(return_value=client))
+
+    query.message = SimpleNamespace(message_id=999)
+    await transfer.confirm_and_start(update, context)
+    await asyncio.sleep(0.1)
+
+    assert client.send_message.await_count == 8
+    with get_session() as session:
+        for s in (-1001, -1002):
+            for d in (-2001, -2002):
+                for mid in (1, 2):
+                    assert ForwardedMessageRepository.exists(session, s, mid, d)
+
+
+async def test_manual_multi_source_all_button_and_batch_stop_retry(monkeypatch):
+    import json
+
+    with get_session() as session:
+        for s in (-1010, -1020):
+            ChannelRepository.upsert(session, s, f"Source {s}", ChannelType.SOURCE)
+        for d in (-2010, -2020):
+            ChannelRepository.upsert(session, d, f"Dest {d}", ChannelType.DESTINATION)
+
+    query = SimpleNamespace(edit_message_text=AsyncMock(), answer=AsyncMock())
+    update = SimpleNamespace(callback_query=query, effective_chat=SimpleNamespace(id=111))
+    context = SimpleNamespace(user_data={}, bot=SimpleNamespace(edit_message_text=AsyncMock()))
+
+    await transfer.show_transfer_menu(update, context)
+    query.data = "transfer:source:all"
+    await transfer.select_source(update, context)
+
+    for dst in (-2010, -2020):
+        query.data = f"transfer:destination:{dst}"
+        await transfer.toggle_destination(update, context)
+
+    await transfer.confirm_routes(update, context)
+    selected = transfer_service.get_channels(context.user_data)
+    assert set(selected[0]) == {-1010, -1020}
+    assert set(selected[1]) == {-2010, -2020}
+
+    job_id = transfer_service.create_job_for_ids([-1010, -1020], [-2010, -2020], [5])
+    with get_session() as session:
+        raw_batch = SettingsRepository.get(session, f"job_batch:{job_id}")
+        assert raw_batch is not None
+        batch_ids = json.loads(raw_batch)
+        assert len(batch_ids) == 2
+
+    transfer_service.stop_job(job_id)
+    from app.telegram.forward_service import _stop_flags
+
+    for b_id in batch_ids:
+        assert _stop_flags.get(b_id) is True
+
+
+async def test_auto_forward_unpadded_and_marked_id_routing(monkeypatch):
+    monkeypatch.setattr(auto_forward, "_handler", None)
+    monkeypatch.setattr(auto_forward, "_registered_client", None)
+    client = client_for()
+    marked_id = -1000012345678
+    unpadded_id = -10012345678
+    dest_id = -2001
+    with get_session() as session:
+        ChannelRepository.upsert(session, marked_id, "source short id", ChannelType.SOURCE)
+        ChannelRepository.upsert(session, dest_id, "dest", ChannelType.DESTINATION)
+
+    assert await auto_forward.enable(client)
+    await auto_forward._handler(
+        SimpleNamespace(chat_id=unpadded_id, client=client, message=original(55))
+    )
+    client.send_message.assert_awaited_once()
+    await auto_forward.disable(client)
