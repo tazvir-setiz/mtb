@@ -21,7 +21,7 @@ async def _post_init(application) -> None:
     await setup_bot_ui(application.bot)
 
     client = await ensure_started()
-    logging.getLogger(__name__).info("Telethon client متصل شد.")
+    logging.getLogger(__name__).info("Telethon client connected.")
     await auto_forward.sync_on_startup(client)
     application.bot_data["status_monitor"] = asyncio.create_task(monitor_status(client))
     application.bot_data["review_notifications"] = asyncio.create_task(

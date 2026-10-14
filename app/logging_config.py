@@ -9,6 +9,13 @@ from app.log_context import ContextFilter
 
 
 def setup_logging() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
     log_format = "%(asctime)s UTC | %(levelname)-8s | %(name)s:%(lineno)d | %(trace)s | %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
