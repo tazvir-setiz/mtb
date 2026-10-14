@@ -14,8 +14,13 @@ KEY = "guard_profile_v1"
 TOPICS = {
     "political": "محتوای سیاسی",
     "abuse": "توهین و فحاشی",
+    "hate": "نفرت‌پراکنی",
+    "threat": "تهدید و خشونت",
     "sexual": "محتوای جنسی",
     "spam": "تبلیغات و اسپم",
+    "injection": "تزریق دستور (Prompt Injection)",
+    "links": "لینک‌ها و ارجاعات خارجی",
+    "media": "رسانه و پیوست‌ها",
 }
 MODES = {"off": "بدون حساسیت", "standard": "معمولی", "strict": "سخت‌گیر"}
 BOUNDS = {
@@ -121,6 +126,23 @@ def save_profile(profile, expected):
                 "تنظیمات توسط درخواست دیگری عوض شده؛ فایل تازه بگیرید و دوباره تلاش کنید."
             )
         SettingsRepository.set(session, KEY, encode_profile(profile).decode())
+
+        from app.database.models import ReviewDraft, ReviewRequest
+
+        ai_draft_reviews = (
+            session.query(ReviewRequest)
+            .filter(
+                ReviewRequest.status == "pending",
+                ReviewRequest.reason.contains("ai_draft"),
+            )
+            .all()
+        )
+        for req in ai_draft_reviews:
+            session.query(ReviewDraft).filter(ReviewDraft.review_id == req.id).delete()
+            parts = [p for p in req.reason.split(":") if p != "ai_draft"]
+            req.reason = ":".join(parts) if parts else "policy_changed"
+        session.flush()
+
     from app.services.guard_runtime import runtime
 
     runtime.cache.clear()
@@ -142,7 +164,7 @@ def policy_suffix(profile):
             {"sensitivity": profile["sensitivity"]},
             ensure_ascii=False,
         )
-        + "\nCategory mapping: political=POLITICAL, abuse=ABUSE, sexual=PORN, spam=SPAM. "
+        + "\nCategory mapping: political=POLITICAL, abuse=ABUSE, hate=HATE, threat=THREAT, sexual=PORN, spam=SPAM, injection=INJECTION, links=SANITIZE, media=MEDIA. "
         "off: do not reject or rewrite solely for that category; assess all other enabled rules. "
         "standard: use the default contextual policy. strict: scrutinize that category more closely "
         "and rewrite violating material when meaning can be preserved; never reject merely for topic keywords. "

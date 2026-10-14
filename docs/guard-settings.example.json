@@ -3,8 +3,13 @@
   "sensitivity": {
     "political": "standard",
     "abuse": "standard",
+    "hate": "standard",
+    "threat": "standard",
     "sexual": "standard",
-    "spam": "standard"
+    "spam": "standard",
+    "injection": "standard",
+    "links": "standard",
+    "media": "standard"
   },
   "instructions": "",
   "limits": {

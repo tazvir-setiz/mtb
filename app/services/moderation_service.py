@@ -10,7 +10,7 @@ from app.services.ai_settings import load_ai_settings
 from app.services.context_manager import load_context, update_context
 from app.services.guard.pipeline import PIPELINE_VERSION, GuardPipeline
 from app.services.guard_models import Label, ModerationResult
-from app.services.guard_profile import custom_policy, load_profile
+from app.services.guard_profile import custom_policy, load_profile, revision
 from app.services.guard_runtime import runtime
 from app.services.rule_guard import evaluate_rules, political_topics
 from app.services.text_normalizer import normalize_text
@@ -62,7 +62,7 @@ async def moderate(chat_id, message_id, text, *, draft=False):
     key = fingerprint((
         PIPELINE_VERSION, chat_id, text, normalized.normalized,
         context, provider, config.fallback_model, config.news_grounding_enabled,
-        config.news_allowed_domains, vars(limits), policy, username_replacement(),
+        config.news_allowed_domains, vars(limits), policy, revision(profile), username_replacement(),
     ))
 
     cached = runtime.cached(key) if not draft else None
@@ -80,13 +80,17 @@ async def moderate(chat_id, message_id, text, *, draft=False):
         categories = {
             "political": Label.POLITICAL,
             "abuse": Label.ABUSE,
+            "hate": Label.HATE,
+            "threat": Label.THREAT,
             "sexual": Label.PORN,
             "spam": Label.SPAM,
+            "injection": Label.INJECTION,
+            "links": Label.SANITIZE,
         }
         disabled = tuple(
             categories[name]
             for name, mode in profile["sensitivity"].items()
-            if mode == "off"
+            if mode == "off" and name in categories
         )
         pipeline = GuardPipeline(config, limits, context, policy, disabled_labels=disabled)
         result = await pipeline.run(text, draft=draft)

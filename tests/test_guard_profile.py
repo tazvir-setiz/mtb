@@ -320,3 +320,126 @@ def test_documented_example_matches_supported_schema():
         (Path(__file__).resolve().parents[1] / "docs/guard-settings.example.json").read_bytes()
     )
     assert profile["limits"] == asdict(GuardSettings())
+
+
+def test_all_nine_categories_present_and_configurable():
+    profile = default_profile()
+    expected_categories = {
+        "political",
+        "abuse",
+        "hate",
+        "threat",
+        "sexual",
+        "spam",
+        "injection",
+        "links",
+        "media",
+    }
+    assert set(profile["sensitivity"]) == expected_categories
+
+    for cat in expected_categories:
+        for mode in ("off", "standard", "strict"):
+            p = copy.deepcopy(profile)
+            p["sensitivity"][cat] = mode
+            validated = validate_profile(p)
+            assert validated["sensitivity"][cat] == mode
+
+
+def test_save_profile_invalidates_automatic_drafts():
+    from app.database.database import get_session
+    from app.database.models import ReviewDraft, ReviewRequest
+
+    with get_session() as session:
+        req = ReviewRequest(
+            source_id=100,
+            message_id=200,
+            destination_id=300,
+            fingerprint="fp1234567890",
+            preview="preview text",
+            reason="guard_block:ABUSE:ai_draft",
+            status="pending",
+        )
+        session.add(req)
+        session.flush()
+
+        draft = ReviewDraft(
+            review_id=req.id,
+            text="draft candidate text",
+            revision="rev123",
+        )
+        session.add(draft)
+        session.flush()
+        req_id = req.id
+
+    runtime.cache["stale_key"] = (1, "cached_val")
+
+    current = load_profile()
+    new_prof = copy.deepcopy(current)
+    new_prof["instructions"] = "New strictly verified instruction"
+    save_profile(new_prof, revision(current))
+
+    assert "stale_key" not in runtime.cache
+
+    with get_session() as session:
+        updated_draft = session.get(ReviewDraft, req_id)
+        updated_req = session.get(ReviewRequest, req_id)
+        assert updated_draft is None
+        assert "ai_draft" not in updated_req.reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "topic,label",
+    [
+        ("hate", Label.HATE),
+        ("threat", Label.THREAT),
+        ("injection", Label.INJECTION),
+        ("spam", Label.SPAM),
+        ("sexual", Label.PORN),
+    ],
+)
+async def test_disabling_category_fails_closed_to_review(model, topic, label):
+    profile = load_profile()
+    profile["sensitivity"][topic] = "off"
+    persist(profile)
+
+    model.return_value = ModerationResult(label, 0.95, source="AI")
+    result = await moderation_service.moderate(1, 10, "بررسی محتوا")
+    assert result.action == "REVIEW"
+    assert result.reason == "policy_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_unchecked_media_fails_closed_to_review(monkeypatch):
+    from types import SimpleNamespace
+    from app.services.ai_policy import AIReviewRequired
+    from app.telegram.message_sender import prepare_message
+
+    save_ai_value("enabled", "true")
+    save_ai_value("api_key", "test-key")
+
+    mock_media = SimpleNamespace(to_dict=lambda: {"_": "MessageMediaPhoto"})
+    original = SimpleNamespace(
+        id=42,
+        message="متن سالم و معمولی",
+        entities=[],
+        media=mock_media,
+        poll=None,
+    )
+
+    from app.telegram import message_sender
+
+    monkeypatch.setattr(
+        message_sender,
+        "apply_ai_guardrails",
+        AsyncMock(return_value="متن سالم و معمولی"),
+    )
+
+    with pytest.raises(AIReviewRequired) as exc_info:
+        await prepare_message(original, -1001, None, approved=False)
+    assert "unchecked_media" in str(exc_info.value)
+
+    # When approved by admin, message with media is prepared for publication
+    prepared = await prepare_message(original, -1001, None, approved=True)
+    assert prepared is not None
+    assert prepared.media == mock_media

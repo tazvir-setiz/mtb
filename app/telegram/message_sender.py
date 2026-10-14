@@ -61,6 +61,12 @@ async def prepare_message(
     media = original.media
     if media and type(media).__name__ == "MessageMediaWebPage":
         media = None
+    if media and ai_enabled and not approved:
+        from app.services.guard.filters import MediaPolicyFilter
+
+        media_result = MediaPolicyFilter.evaluate(media, approved=approved)
+        if media_result.action == "REVIEW":
+            raise AIReviewRequired(media_result.reason or "unchecked_media")
     return PreparedMessage(processed_html, media)
 
 

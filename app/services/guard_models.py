@@ -2,6 +2,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
+class Action(str, Enum):
+    PUBLISH = "PUBLISH"
+    DROP = "DROP"
+    REVIEW = "REVIEW"
+    RETRY_PENDING = "RETRY_PENDING"
+
+
 class Label(str, Enum):
     INJECTION = "INJECTION"
     SPAM = "SPAM"
@@ -28,9 +35,13 @@ class ModerationResult:
     has_substance: bool | None = None
     ambiguities: tuple[str, ...] = ()
     grounding_query: str | None = None
+    media_checked: bool = False
+    _action_override: Action | None = None
 
     @property
     def action(self) -> str:
+        if self._action_override is not None:
+            return self._action_override.value
         if self.label in {
             Label.INJECTION,
             Label.SPAM,
@@ -39,7 +50,7 @@ class ModerationResult:
             Label.HATE,
             Label.THREAT,
         }:
-            return "DROP"
+            return Action.DROP.value
         if self.label in {Label.POLITICAL, Label.REVIEW}:
-            return "REVIEW"
-        return "PUBLISH"
+            return Action.REVIEW.value
+        return Action.PUBLISH.value
