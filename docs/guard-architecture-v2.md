@@ -2,6 +2,32 @@
 
 وضعیت: معماری چندمرحله‌ای V4.1 در `app/services/guard` پیاده شده است. مسیر فعلی شامل Analyze، Reassess در ابهام، Drop Audit، Meaning Decomposition، Rewrite، Policy Judge، Meaning Judge و یک Repair محدود است.
 
+## الگوهای بررسی‌شده از پروژه‌های مشابه
+
+بررسی پروژه‌های عمومی مشابه نشان داد که الگوهای قابل اتکا با معماری فعلی هم‌راستا هستند، نه جایگزین آن:
+
+- در `Heavrnl/TelegramForwarder`، فیلترها به‌صورت زنجیره‌ای و مستقل اجرا می‌شوند؛ بنابراین ruleهای محلی، فیلتر رسانه و AI نباید در handlerهای تلگرام پراکنده شوند.
+- در `mikeshu2001/newsparser-public`، احراز هویت نقش‌محور از pipeline محتوایی جداست و وضعیت محتوا lifecycle مشخصی مانند `pending_review` دارد.
+- در NVIDIA NeMo Guardrails و Guardrails AI، کنترل ورودی، دادهٔ بازیابی‌شده، فراخوانی ابزار و خروجی مدل جداگانه تعریف می‌شود و خروجی ساختاریافته پیش‌شرط تصمیم است.
+- در الگوهای OpenAI Moderation و Microsoft Prompt Shields، تشخیص (`signal`) با تصمیم نهایی (`policy decision`) یکی نیست؛ prompt injection و محتوای ممنوع نیز باید دو نوع تهدید جدا بمانند.
+
+نتیجهٔ اجرایی برای این پروژه:
+
+1. خطای AI باید به fallback، retry یا `REVIEW/RETRY_PENDING` برسد و هرگز انتشار fail-open ایجاد نکند.
+2. متن تلگرام، خبر و نتیجهٔ retrieval همیشه دادهٔ غیرقابل‌اعتماد هستند، نه دستور مدل.
+3. اصل پیام، draftها و نسخهٔ تأییدشده باید جدا و نسخه‌دار بمانند.
+4. تحلیل متن و رسانه باید stageهای مستقل داشته باشند؛ تا وقتی رسانه تحلیل نشده، نتیجه نباید «تأیید کامل پیام» تعبیر شود.
+5. lifecycle پایدار پیام (`NEW`، `ANALYZING`، `PENDING_REVIEW`، `FORWARDED` و وضعیت‌های خطا) برای retry و جلوگیری از ارسال تکراری لازم است.
+
+منابع:
+
+- [Heavrnl/TelegramForwarder](https://github.com/Heavrnl/TelegramForwarder)
+- [mikeshu2001/newsparser-public](https://github.com/mikeshu2001/newsparser-public)
+- [NVIDIA NeMo Guardrails](https://docs.nvidia.com/nemo/guardrails/latest/)
+- [Guardrails AI](https://guardrailsai.com/docs)
+- [OpenAI Moderation](https://developers.openai.com/api/docs/guides/moderation)
+- [Microsoft Prompt Shields](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/concepts/jailbreak-detection)
+
 این سند طرح کامل مقصد را نیز شرح می‌دهد. صف پایدار RETRY_PENDING، تحلیل رسانه، تشخیص تعارض سیاست در رابط تنظیمات، ذخیرهٔ پایدار گزارش هر مرحله و ارزیابی کیفیت با مدل واقعی هنوز اجرا نشده‌اند. خطای سرویس فعلاً مانند قبل به صف مدیر می‌رود. `Analysis` فعلی از label و confidence سازگار با نسخهٔ قبل به همراه violations/has_substance/ambiguities استفاده می‌کند؛ قرارداد مستقل Verification جدید است. ممیزی حذف با تحلیل مستقل دوم و توافق بر نوع تخلف انجام می‌شود، نه قالب جداگانهٔ DropAudit توصیف‌شده در طرح.
 
 ## مسئله و شواهد
