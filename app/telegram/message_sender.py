@@ -15,6 +15,8 @@ from app.services.ai_settings import load_ai_settings
 from app.services.text_sanitizer import sanitize_text
 
 logger = logging.getLogger(__name__)
+TELEGRAM_TEXT_LIMIT = 4096
+TELEGRAM_CHUNK_SIZE = 4000
 
 
 @dataclass(frozen=True)
@@ -79,13 +81,40 @@ async def send_prepared_message(client, original, source_id, destination_id, pre
             drop_author=True,
         )
         return result[0] if isinstance(result, list) else result
-    return await client.send_message(
-        entity=destination_id,
-        message=prepared.html,
-        file=prepared.media,
-        parse_mode="html",
-        link_preview=False,
-    )
+    plain_text, _ = telethon_html.parse(prepared.html)
+    if len(plain_text.encode("utf-16-le")) // 2 <= TELEGRAM_TEXT_LIMIT:
+        return await client.send_message(
+            entity=destination_id,
+            message=prepared.html,
+            file=prepared.media,
+            parse_mode="html",
+            link_preview=False,
+        )
+
+    chunks = []
+    remaining = plain_text
+    while remaining:
+        limit = TELEGRAM_CHUNK_SIZE
+        if len(remaining.encode("utf-16-le")) // 2 <= limit:
+            chunks.append(remaining)
+            break
+        cut = limit
+        while cut > 0 and len(remaining[:cut].encode("utf-16-le")) // 2 > limit:
+            cut -= 1
+        boundary = max(remaining.rfind("\n", 0, cut), remaining.rfind(" ", 0, cut))
+        chunks.append(remaining[: boundary if boundary > 0 else cut])
+        remaining = remaining[boundary if boundary > 0 else cut :].lstrip()
+
+    sent = None
+    for index, chunk in enumerate(chunks):
+        sent = await client.send_message(
+            entity=destination_id,
+            message=chunk,
+            file=prepared.media if index == 0 else None,
+            parse_mode=None,
+            link_preview=False,
+        )
+    return sent
 
 
 @traced

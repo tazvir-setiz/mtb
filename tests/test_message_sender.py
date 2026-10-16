@@ -73,6 +73,23 @@ async def test_web_preview_not_uploaded(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_long_prepared_message_is_sent_in_utf16_safe_chunks():
+    sent = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
+    client = SimpleNamespace(send_message=AsyncMock(side_effect=sent))
+    prepared = message_sender.PreparedMessage(("متن طولانی\n" * 600), None)
+
+    result = await message_sender.send_prepared_message(
+        client, make_message(), -1001, -1002, prepared
+    )
+
+    assert result is sent[-1]
+    assert client.send_message.await_count == 2
+    for call in client.send_message.call_args_list:
+        assert call.kwargs["parse_mode"] is None
+        assert len(call.kwargs["message"].encode("utf-16-le")) // 2 <= 4000
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("messages", [[], [None]])
 async def test_missing_message(messages):
     client = SimpleNamespace(get_messages=AsyncMock(return_value=messages))
