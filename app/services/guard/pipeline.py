@@ -280,17 +280,18 @@ class GuardPipeline:
         candidate,
         decomposition,
     ):
-        policy_verdict = await self.call(
-            "policy_judge",
-            candidate,
-            original=original,
-        )
-
-        meaning_verdict = await self.call(
-            "meaning_judge",
-            candidate,
-            original=original,
-            decomposition=decomposition,
+        policy_verdict, meaning_verdict = await asyncio.gather(
+            self.call(
+                "policy_judge",
+                candidate,
+                original=original,
+            ),
+            self.call(
+                "meaning_judge",
+                candidate,
+                original=original,
+                decomposition=decomposition,
+            ),
         )
 
         if not isinstance(policy_verdict, PolicyVerdict) or not isinstance(

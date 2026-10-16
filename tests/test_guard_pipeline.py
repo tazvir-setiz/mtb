@@ -12,6 +12,7 @@ from app.services.ai_policy import AIProcessingError
 from app.services.ai_settings import save_ai_value
 from app.services.context_manager import load_context, update_context
 from app.services.guard.contracts import (
+    MeaningVerdict,
     PolicyVerdict,
     RewriteDraft,
 )
@@ -376,3 +377,33 @@ async def test_noncompliant_rewrite_is_not_published(enabled):
     result = await moderation_service.moderate(1, 1, "موضع‌گیری درباره دولت")
     assert result.action == "REVIEW"
     assert result.reason == "rewrite_failed"
+
+
+@pytest.mark.asyncio
+async def test_judges_run_concurrently(enabled):
+    timeline = []
+
+    async def slow_policy(*args, **kwargs):
+        timeline.append("policy_start")
+        await asyncio.sleep(0.02)
+        timeline.append("policy_end")
+        return PolicyVerdict(True)
+
+    async def slow_meaning(*args, **kwargs):
+        timeline.append("meaning_start")
+        await asyncio.sleep(0.02)
+        timeline.append("meaning_end")
+        return MeaningVerdict(True)
+
+    enabled.policy.side_effect = slow_policy
+    enabled.semantic.side_effect = slow_meaning
+    enabled.side_effect = [
+        ModerationResult(Label.POLITICAL, 0.97, source="AI"),
+        ModerationResult(Label.REWRITE, 0.95, "متن بازنویسی", "AI"),
+    ]
+    enabled.writer.return_value = RewriteDraft(True, "متن بازنویسی")
+    result = await moderation_service.moderate(1, 1, "پیام تست")
+    assert result.action == "PUBLISH"
+    assert "policy_start" in timeline[:2]
+    assert "meaning_start" in timeline[:2]
+
