@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from html import escape, unescape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -252,18 +253,23 @@ async def send_card(bot, admin_id, row):
 
 async def notify_pending(bot):
     after_id = 0
+    unreachable_admins: dict[int, float] = {}
     while True:
         try:
+            now = time.monotonic()
             rows = review_store.pending(after_id=after_id)
             for row in rows:
                 after_id = row.id
                 if row.status == "sending":
                     continue
                 for admin_id in settings.admin_ids:
+                    if now - unreachable_admins.get(admin_id, 0) < 60:
+                        continue
                     if admin_id in json.loads(row.notified):
                         continue
                     try:
                         version = await send_card(bot, admin_id, row)
+                        unreachable_admins.pop(admin_id, None)
                         review_store.mark_notified(
                             row.id, admin_id, row.fingerprint, row.status, version
                         )
@@ -273,12 +279,15 @@ async def notify_pending(bot):
                             delay.total_seconds() if hasattr(delay, "total_seconds") else delay
                         )
                     except Exception as exc:
+                        detail = str(exc)
+                        if "chat not found" in detail.lower() or "blocked" in detail.lower():
+                            unreachable_admins[admin_id] = now
                         logger.warning(
                             "Review notification failed review_id=%d admin=%s type=%s detail=%s; available via /reviews",
                             row.id,
                             admin_id,
                             type(exc).__name__,
-                            str(exc)[:300],
+                            detail[:300],
                         )
                     await asyncio.sleep(1.1)
             if not rows:

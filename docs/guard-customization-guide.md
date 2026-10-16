@@ -104,7 +104,7 @@
 "limits": {
   "confidence_threshold": 0.85,
   "ai_confidence_threshold": 0.75,
-  "max_input_chars": 4000,
+  "max_input_chars": 16000,
   "max_output_tokens": 1800,
   "max_candidates": 8,
   "max_topics": 5,
@@ -158,7 +158,7 @@
   "limits": {
     "confidence_threshold": 0.85,
     "ai_confidence_threshold": 0.75,
-    "max_input_chars": 4000,
+    "max_input_chars": 16000,
     "max_output_tokens": 1800,
     "max_candidates": 8,
     "max_topics": 5,
@@ -200,7 +200,7 @@
   "limits": {
     "confidence_threshold": 0.85,
     "ai_confidence_threshold": 0.75,
-    "max_input_chars": 4000,
+    "max_input_chars": 16000,
     "max_output_tokens": 1800,
     "max_candidates": 8,
     "max_topics": 5,
