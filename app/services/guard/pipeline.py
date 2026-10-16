@@ -94,9 +94,10 @@ class GuardPipeline:
 
         limits = replace(
             self.limits,
-            timeout_seconds=min(
+            timeout_seconds=self.budget.adaptive_stage_timeout(
                 self.limits.timeout_seconds,
-                self.budget.remaining(),
+                stage,
+                len(text),
             ),
         )
 
@@ -510,6 +511,14 @@ class GuardPipeline:
                 return audited
 
         if result.label == Label.REWRITE:
+            if result.confidence < self.limits.ai_confidence_threshold:
+                return ModerationResult(
+                    Label.REVIEW,
+                    0,
+                    source="AI",
+                    reason="ambiguous_meaning",
+                )
+
             decomposition = await self._decompose(original)
 
             if decomposition.ambiguities:

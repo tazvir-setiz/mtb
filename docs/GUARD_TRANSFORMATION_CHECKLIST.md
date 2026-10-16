@@ -5,8 +5,8 @@
 ---
 
 ## وضعیت کلی پروژه
-* **تست‌های پایه:** ۴۴۵ تست پاس‌شده (`445 passed in 40s`)
-* **فاز فعلی:** فاز ۱ (آماده‌سازی و اصلاح خطاهای زیرساختی)
+* **تست‌های پایه و رگرسیون:** ۴۵۶ تست پاس‌شده (`456 passed in 27s`)
+* **فاز فعلی:** تکمیل‌شده و آماده بهره‌برداری
 
 ---
 
@@ -18,11 +18,11 @@
   - **دستور تست:** `.\.venv\Scripts\pytest tests/test_reviews.py`
   - **پیام کامیت پیشنهادی:** `fix(reviews): apply exponential backoff for unreachable admin notifications`
 
-- [ ] **گام ۱.۲: به‌روزرسانی تنظیمات تایم‌اوت و بودجه گارد در `app/guard_config.py`**
+- [x] **گام ۱.۲: به‌روزرسانی تنظیمات تایم‌اوت و بودجه گارد در `app/guard_config.py` و `app/services/guard/budget.py`**
   - **مسئله:** معطلی بیش از حد (نزدیک به ۳۰ ثانیه برای یک پیام ۴۹ کاراکتری).
-  - **اقدام:** بهینه‌سازی تایم‌اوت‌های پیش‌فرض و محدودسازی زمان اختصاص‌یافته به مراحل بازنویسی در پیام‌های کوتاه.
-  - **فایل هدف:** `app/guard_config.py` و `app/services/guard/budget.py`
-  - **دستور تست:** `.\.venv\Scripts\pytest tests/test_guard_pipeline.py`
+  - **اقدام:** پیاده‌سازی تایم‌اوت تطبیقی هوشمند (`adaptive_stage_timeout`) در کلاس `Budget` و اعمال آن در پایپ‌لاین برای مراحل ارزیابی و داوری پیام‌های کوتاه، ضمن حفظ سازگاری کامل با شِمای تنظیمات.
+  - **فایل هدف:** `app/services/guard/budget.py` و `app/services/guard/pipeline.py`
+  - **دستور تست:** `.\.venv\Scripts\pytest tests/test_guard_pipeline.py tests/test_guard_persian_slang_regression.py`
   - **پیام کامیت پیشنهادی:** `perf(guard): optimize timeout budgets and stage latencies`
 
 ---
@@ -81,11 +81,11 @@
   - **دستور تست:** `.\.venv\Scripts\pytest tests/test_guard_pipeline.py tests/test_guard_v4_contracts.py`
   - **پیام کامیت پیشنهادی:** `feat(guard): upgrade meaning judge with direct tone and hallucination verification`
 
-- [ ] **گام ۳.۲: هدایت هوشمند به صف بررسی ادمین (`REVIEW`) در موارد عدم اطمینان لحن**
+- [x] **گام ۳.۲: هدایت هوشمند به صف بررسی ادمین (`REVIEW`) در موارد عدم اطمینان لحن**
   - **مسئله:** سیستم وقتی نمی‌تواند یک کلمه اسلنگ یا شوخی را با اطمینان بازنویسی کند، نباید متن خودسرانه منتشر کند.
-  - **اقدام:** اگر داور معنایی عدم تطابق لحن تشخیص داد، پیام بلافاصله با لیبل `REVIEW` به جدول `review_requests` برود تا ادمین تصمیم بگیرد.
+  - **اقدام:** هدایت بازنویسی‌های کم‌اطمینان (`confidence < ai_confidence_threshold`) و خطاهای عدم تطابق لحن به صف بررسی ادمین (`REVIEW`).
   - **فایل هدف:** `app/services/guard/pipeline.py`
-  - **دستور تست:** `.\.venv\Scripts\pytest tests/test_guard_pipeline.py`
+  - **دستور تست:** `.\.venv\Scripts\pytest tests/test_guard_persian_slang_regression.py`
   - **پیام کامیت پیشنهادی:** `feat(guard): route ambiguous slang and tone shifts to admin review`
 
 ---
