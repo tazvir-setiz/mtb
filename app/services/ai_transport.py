@@ -11,7 +11,9 @@ logger = logging.getLogger(__name__)
 
 def model_options(config, mode: str | None = None):
     host = urlsplit(config.base_url).hostname
-    is_supported_host = host in {"api.avalai.ir", "api.deepseek.com"}
+    is_supported_host = host in {"api.avalai.ir", "api.deepseek.com", "api.gapgpt.app"} or (
+        bool(host) and any(d in host for d in ("avalai", "gapgpt", "deepseek"))
+    )
     model_lower = config.model.lower()
 
     if getattr(config, "thinking_disabled", False):

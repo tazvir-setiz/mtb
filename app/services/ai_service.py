@@ -102,7 +102,7 @@ async def _request(payload, text, config, limits, *, mode):
     try:
         timeout = httpx.Timeout(
             limits.timeout_seconds,
-            connect=min(5, limits.timeout_seconds),
+            connect=min(15, limits.timeout_seconds),
         )
         async with asyncio.timeout(limits.timeout_seconds):
             async with httpx.AsyncClient(timeout=timeout) as client:
