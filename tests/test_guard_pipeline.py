@@ -164,7 +164,8 @@ async def test_outage_opens_circuit_but_simple_messages_still_pass(enabled):
 
 @pytest.mark.asyncio
 async def test_oversized_input_is_not_truncated_and_published(enabled):
-    result = await moderation_service.moderate(1, 1, "سلام" * 1100)
+    oversized = "سلام" * (GuardSettings().max_input_chars // 4 + 100)
+    result = await moderation_service.moderate(1, 1, oversized)
     assert result.action == "REVIEW"
     enabled.assert_not_awaited()
 
