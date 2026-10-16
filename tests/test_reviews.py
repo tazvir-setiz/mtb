@@ -315,6 +315,27 @@ async def test_failed_notification_is_retried_not_marked_delivered(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_unreachable_admin_notification_uses_backoff(monkeypatch):
+    row = queued()
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111]))
+    bot = SimpleNamespace(send_message=AsyncMock(side_effect=Exception("Chat not found")))
+    sleeps = 0
+
+    async def sleep(_):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps > 3:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(reviews.asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await reviews.notify_pending(bot)
+    # The first attempt fails and triggers backoff, subsequent loops within backoff interval skip sending
+    assert bot.send_message.await_count == 1
+
+
+
+@pytest.mark.asyncio
 async def test_ai_retry_rewrites_instead_of_bypassing_guard(monkeypatch):
     save_ai_value("enabled", "true")
     row = queued()

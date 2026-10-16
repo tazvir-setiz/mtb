@@ -253,7 +253,7 @@ async def send_card(bot, admin_id, row):
 
 async def notify_pending(bot):
     after_id = 0
-    unreachable_admins: dict[int, float] = {}
+    unreachable_admins: dict[int, tuple[float, int]] = {}
     while True:
         try:
             now = time.monotonic()
@@ -263,8 +263,11 @@ async def notify_pending(bot):
                 if row.status == "sending":
                     continue
                 for admin_id in settings.admin_ids:
-                    if now - unreachable_admins.get(admin_id, 0) < 60:
-                        continue
+                    last_attempt, failures = unreachable_admins.get(admin_id, (0.0, 0))
+                    if failures > 0:
+                        backoff = min(3600.0, 60.0 * (2 ** min(failures - 1, 6)))
+                        if now - last_attempt < backoff:
+                            continue
                     if admin_id in json.loads(row.notified):
                         continue
                     try:
@@ -281,7 +284,8 @@ async def notify_pending(bot):
                     except Exception as exc:
                         detail = str(exc)
                         if "chat not found" in detail.lower() or "blocked" in detail.lower():
-                            unreachable_admins[admin_id] = now
+                            prev_time, prev_fail = unreachable_admins.get(admin_id, (0.0, 0))
+                            unreachable_admins[admin_id] = (now, prev_fail + 1)
                         logger.warning(
                             "Review notification failed review_id=%d admin=%s type=%s detail=%s; available via /reviews",
                             row.id,
