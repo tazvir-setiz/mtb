@@ -23,12 +23,17 @@ def model_options(config, mode: str | None = None):
             return {"reasoning_effort": "low"}
         return {"thinking": {"type": "disabled"}}
 
-    if is_supported_host and (
-        model_lower.startswith(("deepseek-v4", "deepseek-flash"))
-        or "-luna" in model_lower
-        or model_lower.endswith("-luna")
-    ):
-        return {"thinking": {"type": "disabled"}}
+    if is_supported_host:
+        if model_lower.startswith(("deepseek-v4", "deepseek-flash")):
+            return {"thinking": {"type": "disabled"}}
+
+        if "-luna" in model_lower or model_lower.endswith("-luna"):
+            if mode in {"meaning", "rewrite", "repair"}:
+                return {"thinking": {"type": "enabled", "budget_tokens": 250}}
+            return {"thinking": {"type": "disabled"}}
+
+    if any(m in model_lower for m in ("o1", "o3")):
+        return {"reasoning_effort": "low"}
 
     return {}
 
