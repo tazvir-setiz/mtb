@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from telegram.error import BadRequest
 
 from app.database.database import get_session
 from app.database.models import MessageStatus
@@ -192,6 +193,31 @@ def test_card_escapes_content_and_stays_within_telegram_limit(text):
     for buttons in markup.inline_keyboard:
         for button in buttons:
             assert not button.callback_data or len(button.callback_data.encode()) <= 64
+
+
+def test_card_escapes_dynamic_guard_reason():
+    row = queued(message("متن عادی"))
+    row.reason = "guard_block:ABUSE:<b>دلیل</b>"
+
+    content, _ = reviews.card(row)
+
+    assert "&lt;b&gt;دلیل&lt;/b&gt;" in content
+
+
+@pytest.mark.asyncio
+async def test_send_card_retries_without_markup_after_bad_request():
+    row = queued()
+    bot = SimpleNamespace(
+        send_message=AsyncMock(
+            side_effect=[BadRequest("can't parse entities"), SimpleNamespace(id=1)]
+        )
+    )
+
+    await reviews.send_card(bot, 111, row)
+
+    assert bot.send_message.await_count == 2
+    assert bot.send_message.call_args.kwargs["parse_mode"] is None
+    assert "reply_markup" not in bot.send_message.call_args.kwargs
 
 
 @pytest.mark.asyncio
@@ -540,4 +566,3 @@ async def test_callback_review_show_already_resolved(monkeypatch):
     query.answer.assert_awaited_once()
     reply_mock.assert_awaited_once()
     assert "تعیین تکلیف" in reply_mock.call_args.args[0]
-

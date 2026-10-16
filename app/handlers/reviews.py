@@ -1,10 +1,11 @@
 import asyncio
 import json
 import logging
-from html import escape
+import re
+from html import escape, unescape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import RetryAfter, TelegramError
+from telegram.error import BadRequest, RetryAfter, TelegramError
 from telethon.extensions import html
 
 from app.config import settings
@@ -148,7 +149,7 @@ def build_pending_list(rows, after_id=0):
 def card(row):
     parsed = parse_review_reason(row.reason)
     blocked = parsed.kind is ReviewKind.GUARD_BLOCK
-    reason = get_row_reason(row)
+    reason = escape(get_row_reason(row))
     route_count = len(review_store.routes(row))
     destination_line = (
         f"مقصد: {row.destination_id}" if route_count == 1 else f"مقصدها: {route_count} کانال"
@@ -212,6 +213,11 @@ def card(row):
     return text, InlineKeyboardMarkup(buttons)
 
 
+def _plain_card(text):
+    """Remove presentation markup before retrying a rejected HTML card."""
+    return unescape(re.sub(r"<[^>]*>", "", text))
+
+
 async def send_card(bot, admin_id, row):
     draft = review_drafts.get(row.id)
     text, markup = card(row)
@@ -225,13 +231,22 @@ async def send_card(bot, admin_id, row):
                 parse_mode=None,
                 disable_web_page_preview=True,
             )
-    await bot.send_message(
-        chat_id=admin_id,
-        text=text,
-        reply_markup=markup,
-        parse_mode="HTML",
-        disable_web_page_preview=True,
-    )
+    try:
+        await bot.send_message(
+            chat_id=admin_id,
+            text=text,
+            reply_markup=markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    except BadRequest:
+        # A malformed entity or button must not hide a review from the admin.
+        await bot.send_message(
+            chat_id=admin_id,
+            text=_plain_card(text),
+            parse_mode=None,
+            disable_web_page_preview=True,
+        )
     return version
 
 
@@ -259,10 +274,11 @@ async def notify_pending(bot):
                         )
                     except Exception as exc:
                         logger.warning(
-                            "Review notification failed review_id=%d admin=%s type=%s; available via /reviews",
+                            "Review notification failed review_id=%d admin=%s type=%s detail=%s; available via /reviews",
                             row.id,
                             admin_id,
                             type(exc).__name__,
+                            str(exc)[:300],
                         )
                     await asyncio.sleep(1.1)
             if not rows:
