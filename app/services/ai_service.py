@@ -1394,6 +1394,20 @@ removable_meaning: ["کیری"]
 protected_meaning: ["گوینده برنامه را به‌شدت منفی ارزیابی می‌کند"]
 removable_meaning: ["کیری"]
 
+SLANG, COLLOQUIAL IRONY, AND HUMOROUS TEASING:
+Do NOT confuse vulgar negative evaluations with informal slang expressions, sarcasm, teasing, or humor.
+For instance, in colloquial Persian slang, expressions like "چسی", "قپی", "شوآف" or "ادا و اطوار" refer to showing off, bragging, pretentious quirks, or comedic posturing.
+Do NOT decompose such playful or colloquial slang into a factual assertion that the subject is "خیلی بد" (terrible/defective).
+Always protect the communicative intent (e.g. "اشاره طنزآمیز یا کنایه‌آمیز به شوآف یا ادای جدید") and protect tone-carrying emojis (😂, 🤣, 😅).
+
+Example:
+"چسی جدید کتاب های کمک درسی 😂 کتابهای ماجرای ۲۰"
+protected_meaning: [
+  "کنایه و تمسخر طنزآمیز به شوآف یا ادای جدید کتاب‌های ماجرای ۲۰",
+  "ایموجی و لحن خنده 😂"
+]
+removable_meaning: ["چسی"]
+
 MULTIPLE MEANINGS MUST BE SPLIT AND PRESERVED INDEPENDENTLY.
 
 Critical example:
@@ -1556,6 +1570,17 @@ When vulgar wording carries a legitimate negative evaluation that decomposition 
 "این برنامه کیریه" -> "این برنامه خیلی بده"
 "این غذای گهیه" -> "این غذا خیلی بده"
 "این کد خیلی کثافته" -> "این کد خیلی بده"
+
+MINIMAL EDIT & TONE PRESERVATION FOR SLANG AND HUMOR:
+Do NOT convert casual humor, colloquial irony, teasing, or playful slang into serious defamatory assertions.
+Do NOT convert slang words about boasting or showmanship ("چسی", "قپی", "شوآف") into "خیلی بد است".
+Prefer minimal neutralization that preserves the original sentence structure, humor, and tone:
+"چسی جدید کتاب های کمک درسی 😂 کتابهای ماجرای ۲۰"
+-> "پز جدید کتاب های کمک درسی 😂 کتابهای ماجرای ۲۰"
+(or "حرکت عجیب کتاب های کمک درسی 😂 کتابهای ماجرای ۲۰")
+NEVER generate defamatory factual assertions like "کتابهای ماجرای ۲۰ خیلی بد هستند" which invert humor into serious quality allegations.
+Always preserve emojis indicating mood and humor (😂, 🤣, 😅, 🤦‍♂️).
+
 
 MULTIPLE PROTECTED MEANINGS:
 "این غذای کـیـری خیلی گرونه" has BOTH a strong negative evaluation of the food and the factual claim that it is very expensive. A valid rewrite must preserve BOTH, e.g. "این غذا خیلی بده و خیلی گرونه". "این غذا خیلی گرونه" is invalid because it loses the negative evaluation. "این غذا خیلی بده" is invalid because it loses the price claim.
@@ -1882,6 +1907,10 @@ async def judge_meaning(
         "causal claims, numbers, and relations are preserved. "
         "For example, if decomposition protects BOTH that food is strongly negatively evaluated and that "
         "it is very expensive, a candidate preserving only the price is meaning_changed. "
+        "TONE, HUMOR & DEFAMATION CHECK: Compare candidate directly with original. "
+        "Do not allow a casual, sarcastic, or humorous message (such as one with laughing emojis like 😂) "
+        "to be converted into a serious factual defamation claim (such as declaring a product or brand 'خیلی بد است' "
+        "when original was playful mockery or colloquial slang). Losing expressive emojis or inventing unstated qualitative defects is meaning_changed. "
         "Check negation, positive/negative polarity, subject/object, questions/requests, conditions, "
         "numbers, names, attribution and comparisons. Return concrete issues and repairability."
     )
