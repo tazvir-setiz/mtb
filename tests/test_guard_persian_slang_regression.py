@@ -102,3 +102,44 @@ async def test_slang_rewrite_failure_routes_to_review_not_defamatory_publish():
     res = await pipeline._rewrite_flow(original, decomp)
     assert res.action == "REVIEW"
     assert res.reason == "meaning_changed"
+
+
+def test_iranian_url_shorteners_sanitization():
+    from app.services.text_sanitizer import sanitize_text, publication_is_clean
+
+    text_b2n = "لینک ثبت نام در سایت https://b2n.ir/test1234 است"
+    clean_b2n = sanitize_text(text_b2n, remove_links=True)
+    assert "b2n.ir" not in clean_b2n
+    assert publication_is_clean(clean_b2n)
+
+    text_yun = "مشاهده کانال https://yun.ir/channel789"
+    clean_yun = sanitize_text(text_yun, remove_links=True)
+    assert "yun.ir" not in clean_yun
+    assert publication_is_clean(clean_yun)
+
+
+def test_rule_guard_detects_expanded_betting_and_scam_keywords():
+    from app.services.rule_guard import evaluate_rules
+    from app.services.text_normalizer import normalize_text
+
+    norm_bet = normalize_text("ورود به سایت شرط بندی و بازی انفجار با بونوس عالی", 4)
+    res_bet = evaluate_rules(norm_bet, {})
+    assert res_bet.label == Label.REVIEW
+
+
+@pytest.mark.asyncio
+async def test_classifier_prompt_includes_persian_spam_and_injection_examples():
+    request = AsyncMock(return_value=ModerationResult(Label.OK, 1))
+    config = AISettings(True, "key", "https://example.test", "model")
+    settings = GuardSettings()
+
+    from unittest.mock import patch
+    with patch("app.services.ai_service._request", request):
+        await ai_service.classify("پیام آزمایشی", {}, (), config, settings)
+
+    payload = request.call_args.args[0]
+    system = payload["messages"][0]["content"]
+    assert "سایت شرط‌بندی با واریز آنی" in system
+    assert "استخراج ترون و سود تضمینی" in system
+    assert "دستورات قبلی را فراموش کن" in system
+

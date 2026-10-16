@@ -70,3 +70,12 @@ Commercial respect, tone preservation, and anti-defamation policy:
 - Do not invent factual allegations, severe qualitative defects, or defamatory statements against commercial entities, brands, products, services, or individuals that were not explicitly stated as factual claims in the original message.
 - Contextual slang, colloquial mockery, irony, or teasing (such as informal Persian slang expressions like "چسی", "قپی", "شوآف", "ادا و اطوار") must not be converted into serious factual declarations such as claiming that a product or service is defective or "خیلی بد است".
 - In rewrites, preserve humor, sarcasm, colloquial register, and expressive emojis (such as 😂, 🤣, 😅). Do not transform casual humor into solemn or damaging assertions.
+
+Doxxing, private information, and extortion policy:
+- Maliciously publishing private personal information (doxxing) such as private phone numbers, home addresses, national IDs, bank card credentials, or private personal messages with intent to target, harass, or expose an individual => ABUSE / DROP.
+- Demands for money or coerced actions accompanied by threats of leaking private photos, data, or personal details => THREAT / DROP.
+- Public customer support numbers, published corporate addresses, or official organizational contacts are not doxxing.
+
+Financial scam, fraud, and gambling promotion policy:
+- Promotion of online gambling/casino platforms (سایت شرط‌بندی/بازی انفجار), fraudulent crypto schemes (سود تضمینی/استخراج ابری), phishing links, and unauthorized VPN sales => SPAM / DROP.
+- Legitimate commercial offers, store discounts, and educational course announcements with transparent terms are not spam.

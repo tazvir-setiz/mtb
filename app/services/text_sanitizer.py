@@ -10,7 +10,10 @@ USERNAME_SETTING = "message_username_replacement"
 USERNAME = re.compile(r"(?<![\w@])@[A-Za-z][A-Za-z0-9_]{0,31}(?!\w)")
 VALID_USERNAME = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 URL = re.compile(r"(?:https?://|www\.|(?:t|telegram)\.me/)[^\s<>]+", re.IGNORECASE)
-SHORT_URL = re.compile(r"\b(?:bit\.ly|tinyurl\.com|t\.co|is\.gd|goo\.gl)/[^\s<>]+", re.I)
+SHORT_URL = re.compile(
+    r"\b(?:bit\.ly|tinyurl\.com|t\.co|is\.gd|goo\.gl|b2n\.ir|yun\.ir|cutt\.ly|rebrand\.ly)/[^\s<>]+",
+    re.I,
+)
 MARKDOWN_LINK = re.compile(r"\[([^\]\n]*)\]\([^\s)]*\)")
 
 

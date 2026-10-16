@@ -49,6 +49,25 @@
   - **دستور تست:** `.\.venv\Scripts\pytest tests/test_prompt_consistency.py`
   - **پیام کامیت پیشنهادی:** `docs(prompts): add anti-defamation and register preservation guidelines`
 
+- [x] **گام ۲.۴: گارد افشای اطلاعات خصوصی (Anti-Doxxing & PII Protection) و باج‌گیری**
+  - **مسئله:** انتشار شماره تلفن شخصی، آدرس منزل، کد ملی و اطلاعات حساب افراد برای ایجاد مزاحمت و باج‌گیری.
+  - **اقدام:** افزودن بند صریح Doxxing & Extortion به `guardrails.txt` و دسته‌بندی تحت `ABUSE / DROP` یا `THREAT / DROP`.
+  - **فایل هدف:** `app/prompts/guardrails.txt`
+  - **دستور تست:** `.\.venv\Scripts\pytest tests/test_ai_policy.py`
+
+- [x] **گام ۲.۵: فیلتر اسپم، سایت‌های شرط‌بندی/قمار و کوتاه کننده‌های لینک ایرانی (`b2n.ir`, `yun.ir`)**
+  - **مسئله:** فرار لینک‌های فیشینگ و اسپم از طریق سرویس‌های کوتاه کننده لینک ایرانی (b2n و yun) و تبلیغات سایت‌های شرط‌بندی/انفجار.
+  - **اقدام:** به‌روزرسانی عبارات `SHORT_URL` در `text_sanitizer.py` و کلیدواژه‌های `SPAM` در `rule_guard.py` و ارائه مثال‌های عینی به مدل در `ai_service.py`.
+  - **فایل هدف:** `app/services/text_sanitizer.py`، `app/services/rule_guard.py`، `app/services/ai_service.py`
+  - **دستور تست:** `.\.venv\Scripts\pytest tests/test_guard_persian_slang_regression.py`
+
+- [x] **گام ۲.۶: ارتقای گارد تزریق پرامپت (Prompt Injection & Jailbreak Defense)**
+  - **مسئله:** کمبود مثال‌های عینی فارسی در تفکیک حملات جیل‌بریک/دستکاری هوش مصنوعی از مباحث آموزشی.
+  - **اقدام:** افزودن سناریوهای واقعی فارسی در بخش `INJECTION` پرامپت کلاسیفایر `ai_service.py`.
+  - **فایل هدف:** `app/services/ai_service.py`
+  - **دستور تست:** `.\.venv\Scripts\pytest tests/test_guard_persian_slang_regression.py`
+
+
 ---
 
 ## فاز ۳: ارتقای داوری معنایی و جلوگیری از خطای آبشاری (Ground-Truth Meaning Judge)
