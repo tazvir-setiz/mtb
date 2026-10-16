@@ -9,12 +9,25 @@ from app.services.ai_policy import AIProcessingError
 logger = logging.getLogger(__name__)
 
 
-def model_options(config):
+def model_options(config, mode: str | None = None):
     host = urlsplit(config.base_url).hostname
-    if host in {"api.avalai.ir", "api.deepseek.com"} and config.model.lower().startswith(
-        ("deepseek-v4", "deepseek-flash")
+    is_supported_host = host in {"api.avalai.ir", "api.deepseek.com"}
+    model_lower = config.model.lower()
+
+    if getattr(config, "thinking_disabled", False):
+        if is_supported_host or "deepseek" in model_lower or "luna" in model_lower:
+            return {"thinking": {"type": "disabled"}}
+        if any(m in model_lower for m in ("o1", "o3")):
+            return {"reasoning_effort": "low"}
+        return {"thinking": {"type": "disabled"}}
+
+    if is_supported_host and (
+        model_lower.startswith(("deepseek-v4", "deepseek-flash"))
+        or "-luna" in model_lower
+        or model_lower.endswith("-luna")
     ):
         return {"thinking": {"type": "disabled"}}
+
     return {}
 
 

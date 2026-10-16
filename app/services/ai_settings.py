@@ -16,6 +16,7 @@ class AISettings:
     fallback_model: str = FALLBACK_MODEL
     news_grounding_enabled: bool = True
     news_allowed_domains: tuple[str, ...] = tuple(NEWS_DOMAINS.split(","))
+    thinking_disabled: bool = False
 
 
 def load_ai_settings(defaults: Settings = settings) -> AISettings:
@@ -37,6 +38,10 @@ def load_ai_settings(defaults: Settings = settings) -> AISettings:
             news_allowed_domains=parse_domains(SettingsRepository.get(
                 session, "news_allowed_domains", default=defaults.news_allowed_domains,
             )),
+            thinking_disabled=read(
+                "thinking_disabled",
+                "true" if getattr(defaults, "ai_thinking_disabled", False) else "false",
+            ).lower() in {"true", "1", "yes"},
         )
 
 

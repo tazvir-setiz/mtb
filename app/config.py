@@ -67,6 +67,7 @@ class Settings:
     news_grounding_enabled: bool = True
     news_allowed_domains: str = NEWS_DOMAINS
     ai_guardrails: str = ""
+    ai_thinking_disabled: bool = False
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_ids
@@ -110,6 +111,7 @@ def load_settings() -> Settings:
         news_grounding_enabled=env_flag("NEWS_GROUNDING_ENABLED", "true"),
         news_allowed_domains=optional_env("NEWS_ALLOWED_DOMAINS", NEWS_DOMAINS),
         ai_guardrails=load_guardrails(),
+        ai_thinking_disabled=env_flag("AI_THINKING_DISABLED", "false"),
     )
 
 
