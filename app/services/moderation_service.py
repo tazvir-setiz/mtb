@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from app.guard_config import GuardSettings, guard_settings
 from app.services import ai_service
-from app.services.ai_settings import load_ai_settings
+from app.services.ai_settings import format_topic_policy, load_ai_settings
 from app.services.context_manager import load_context, update_context
 from app.services.guard.pipeline import PIPELINE_VERSION, GuardPipeline
 from app.services.guard_models import Label, ModerationResult
@@ -46,6 +46,8 @@ async def moderate(chat_id, message_id, text, *, draft=False):
     profile = load_profile(guard_settings, instructions=ai_service.settings.ai_guardrails)
     limits = GuardSettings(**profile["limits"])
     policy = ai_service.compact_prompt(profile)
+    if config.topic_filter_enabled and config.target_topics:
+        policy += "\n" + format_topic_policy(config.target_topics, config.off_topic_action)
 
     if not config.enabled:
         return record_decision(ModerationResult(Label.OK, 1, text, "DISABLED"), chat_id, message_id, started)
@@ -63,6 +65,7 @@ async def moderate(chat_id, message_id, text, *, draft=False):
         PIPELINE_VERSION, chat_id, text, normalized.normalized,
         context, provider, config.fallback_model, config.news_grounding_enabled,
         config.news_allowed_domains, vars(limits), policy, revision(profile), username_replacement(),
+        config.topic_filter_enabled, config.target_topics, config.off_topic_action,
     ))
 
     cached = runtime.cached(key) if not draft else None
@@ -74,6 +77,7 @@ async def moderate(chat_id, message_id, text, *, draft=False):
 
     if (
         custom_policy(profile)
+        or (config.topic_filter_enabled and bool(config.target_topics))
         or (draft and result.label != Label.ABUSE)
         or result.confidence < limits.confidence_threshold
     ):

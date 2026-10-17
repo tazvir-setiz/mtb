@@ -28,6 +28,21 @@ def parse_topics(value: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(x.strip() for x in value.split(",") if x.strip()))
 
 
+def format_topic_policy(target_topics: tuple[str, ...], off_topic_action: str = "DROP") -> str:
+    if not target_topics:
+        return ""
+    topics_list = ", ".join(f'"{t}"' for t in target_topics)
+    action_label = "SPAM" if off_topic_action.upper() == "DROP" else "REVIEW"
+    return (
+        f"\nTopic Filtering Policy (MANDATORY):\n"
+        f"- Target topics: [{topics_list}].\n"
+        f"- Verify whether the message is substantially related to at least one of these allowed target topics.\n"
+        f"- If the message is off-topic or unrelated to the target topics, classify it as {action_label} "
+        f'with violations=[{{"rule_id":"off_topic","evidence":"off_topic"}}] and ambiguities=["off_topic"].\n'
+        f"- If the message is related to at least one target topic, proceed with standard policy evaluation.\n"
+    )
+
+
 def load_ai_settings(defaults: Settings = settings) -> AISettings:
     with get_session() as session:
 

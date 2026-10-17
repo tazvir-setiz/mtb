@@ -1,3 +1,4 @@
+from dataclasses import replace
 import math
 
 from app.guard_config import GuardSettings
@@ -72,7 +73,7 @@ def validate_output(
             rule, quote = item["rule_id"], item["evidence"]
             if not isinstance(rule, str) or not isinstance(quote, str) or not quote.strip():
                 raise ValueError()
-            if original is not None and quote not in original:
+            if original is not None and quote not in original and rule != "off_topic":
                 raise ValueError()
             evidence.append((rule, quote))
 
@@ -112,10 +113,15 @@ def validate_output(
         grounding_query=query,
     )
 
+    is_off_topic = any(rule == "off_topic" for rule, _ in evidence) or "off_topic" in ambiguities
     if (
         original is not None
         and result.action == "DROP"
+        and not is_off_topic
         and (not evidence or (label == Label.ABUSE and substance is not False))
     ):
         return ModerationResult(Label.REVIEW, confidence, source="AI", reason="missing_evidence")
+
+    if is_off_topic:
+        result = replace(result, reason="off_topic")
     return result

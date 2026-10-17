@@ -7,7 +7,7 @@ import httpx
 
 from app.config import BASE_DIR, settings
 from app.guard_config import GuardSettings
-from app.services.ai_policy import AIProcessingError, AIReviewRequired
+from app.services.ai_policy import AI_DROP_RESULT, AIProcessingError, AIReviewRequired
 from app.services.ai_response import CONTRACTS, validated_completion
 from app.services.ai_settings import AISettings
 from app.services.ai_transport import AIRequestError, model_options
@@ -1970,6 +1970,8 @@ async def apply_ai_guardrails(
 
     result = await moderate(chat_id, message_id, html_text)
     if result.action == "DROP":
+        if result.reason == "off_topic":
+            return AI_DROP_RESULT
         raise AIReviewRequired(encode_guard_block(result.label.value, result.reason))
     if result.action == "REVIEW":
         raise AIReviewRequired(result.reason or result.label.value.lower())
