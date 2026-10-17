@@ -147,3 +147,27 @@ async def test_next_ai_request_uses_saved_provider_model_and_key(monkeypatch):
     save_ai_value("enabled", "false")
     assert await ai_service.apply_ai_guardrails("original") == "original"
     assert client.post.await_count == 1  # OK classification has no rewrite stages.
+
+
+def test_topic_filter_settings_storage_and_parsing():
+    settings = load_ai_settings()
+    assert settings.topic_filter_enabled is False
+    assert settings.target_topics == ()
+    assert settings.off_topic_action == "DROP"
+
+    save_ai_value("topic_filter_enabled", "true")
+    save_ai_value("target_topics", "تکنولوژی, هوش مصنوعی , اخبار تکنولوژی")
+    save_ai_value("off_topic_action", "REVIEW")
+
+    updated = load_ai_settings()
+    assert updated.topic_filter_enabled is True
+    assert updated.target_topics == ("تکنولوژی", "هوش مصنوعی", "اخبار تکنولوژی")
+    assert updated.off_topic_action == "REVIEW"
+
+    # Test toggle off and default action
+    save_ai_value("topic_filter_enabled", "false")
+    save_ai_value("off_topic_action", "DROP")
+    updated2 = load_ai_settings()
+    assert updated2.topic_filter_enabled is False
+    assert updated2.off_topic_action == "DROP"
+

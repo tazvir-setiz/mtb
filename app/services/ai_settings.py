@@ -17,6 +17,15 @@ class AISettings:
     news_grounding_enabled: bool = True
     news_allowed_domains: tuple[str, ...] = tuple(NEWS_DOMAINS.split(","))
     thinking_disabled: bool = False
+    topic_filter_enabled: bool = False
+    target_topics: tuple[str, ...] = ()
+    off_topic_action: str = "DROP"
+
+
+def parse_topics(value: str) -> tuple[str, ...]:
+    if not value:
+        return ()
+    return tuple(dict.fromkeys(x.strip() for x in value.split(",") if x.strip()))
 
 
 def load_ai_settings(defaults: Settings = settings) -> AISettings:
@@ -42,6 +51,12 @@ def load_ai_settings(defaults: Settings = settings) -> AISettings:
                 "thinking_disabled",
                 "true" if getattr(defaults, "ai_thinking_disabled", False) else "false",
             ).lower() in {"true", "1", "yes"},
+            topic_filter_enabled=read(
+                "topic_filter_enabled",
+                "true" if getattr(defaults, "ai_topic_filter_enabled", False) else "false",
+            ).lower() in {"true", "1", "yes"},
+            target_topics=parse_topics(read("target_topics", getattr(defaults, "ai_target_topics", ""))),
+            off_topic_action="REVIEW" if read("off_topic_action", getattr(defaults, "ai_off_topic_action", "DROP")).upper() == "REVIEW" else "DROP",
         )
 
 
@@ -90,13 +105,26 @@ def validate_ai_value(name: str, value: str) -> str | None:
 
 
 def save_ai_value(name: str, value: str) -> None:
-    if name not in {"enabled", "api_key", "base_url", "model", "fallback_model",
-                    "news_grounding_enabled", "news_allowed_domains"}:
+    if name not in {
+        "enabled",
+        "api_key",
+        "base_url",
+        "model",
+        "fallback_model",
+        "news_grounding_enabled",
+        "news_allowed_domains",
+        "thinking_disabled",
+        "topic_filter_enabled",
+        "target_topics",
+        "off_topic_action",
+    }:
         raise ValueError("Unknown AI setting")
-    if name == "news_grounding_enabled" and value not in {"true", "false"}:
+    if name in {"news_grounding_enabled", "thinking_disabled", "topic_filter_enabled"} and value not in {"true", "false"}:
         raise ValueError("Expected true or false")
     if name == "news_allowed_domains" and value and not parse_domains(value):
         raise ValueError("Expected comma-separated public domain names")
+    if name == "off_topic_action" and value.upper() not in {"DROP", "REVIEW"}:
+        raise ValueError("Expected DROP or REVIEW")
     if name == "fallback_model" and value and validate_ai_value(name, value):
         raise ValueError("Invalid fallback model")
     current = load_ai_settings()

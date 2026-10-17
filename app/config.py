@@ -68,6 +68,9 @@ class Settings:
     news_allowed_domains: str = NEWS_DOMAINS
     ai_guardrails: str = ""
     ai_thinking_disabled: bool = False
+    ai_topic_filter_enabled: bool = False
+    ai_target_topics: str = ""
+    ai_off_topic_action: str = "DROP"
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_ids
@@ -112,6 +115,9 @@ def load_settings() -> Settings:
         news_allowed_domains=optional_env("NEWS_ALLOWED_DOMAINS", NEWS_DOMAINS),
         ai_guardrails=load_guardrails(),
         ai_thinking_disabled=env_flag("AI_THINKING_DISABLED", "false"),
+        ai_topic_filter_enabled=env_flag("AI_TOPIC_FILTER_ENABLED", "false"),
+        ai_target_topics=optional_env("AI_TARGET_TOPICS", ""),
+        ai_off_topic_action=optional_env("AI_OFF_TOPIC_ACTION", "DROP").upper(),
     )
 
 
