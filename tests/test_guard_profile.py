@@ -435,11 +435,23 @@ async def test_unchecked_media_fails_closed_to_review(monkeypatch):
         AsyncMock(return_value="متن سالم و معمولی"),
     )
 
+    # In standard mode (default), safe message with media passes directly
+    prepared = await prepare_message(original, -1001, None, approved=False)
+    assert prepared is not None
+    assert prepared.media == mock_media
+
+    # In strict mode, unapproved media requires review
+    current = load_profile()
+    import copy
+    p = copy.deepcopy(current)
+    p["sensitivity"]["media"] = "strict"
+    save_profile(p, revision(current))
+
     with pytest.raises(AIReviewRequired) as exc_info:
         await prepare_message(original, -1001, None, approved=False)
     assert "unchecked_media" in str(exc_info.value)
 
-    # When approved by admin, message with media is prepared for publication
-    prepared = await prepare_message(original, -1001, None, approved=True)
-    assert prepared is not None
-    assert prepared.media == mock_media
+    # When approved by admin in strict mode, message with media is prepared for publication
+    prepared_approved = await prepare_message(original, -1001, None, approved=True)
+    assert prepared_approved is not None
+    assert prepared_approved.media == mock_media

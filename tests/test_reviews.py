@@ -392,6 +392,8 @@ def test_guard_block_card_is_visually_distinct():
     assert "🚫" in content
     assert "DROP" in content
     assert "توهین مستقیم" in content
+    assert "پیش‌نمایش کوتاه" not in content
+    assert "blocked text" not in content
     labels = [button.text for line in markup.inline_keyboard for button in line]
     assert "⚠️ ارسال با تأیید مدیر" in labels
     assert "🤖 ساخت نسخهٔ قابل انتشار" in labels
@@ -587,3 +589,36 @@ async def test_callback_review_show_already_resolved(monkeypatch):
     query.answer.assert_awaited_once()
     reply_mock.assert_awaited_once()
     assert "تعیین تکلیف" in reply_mock.call_args.args[0]
+
+
+def test_get_row_reason_resolves_pipeline_reasons_clearly():
+    r1 = SimpleNamespace(reason="ambiguous_meaning")
+    assert "مبهم" in reviews.get_row_reason(r1)
+
+    r2 = SimpleNamespace(reason="no_protected_meaning")
+    assert "فاقد محتوای مفید" in reviews.get_row_reason(r2)
+
+    r3 = SimpleNamespace(reason="grounding_unresolved")
+    assert "راستی‌آزمایی" in reviews.get_row_reason(r3)
+
+    r4 = SimpleNamespace(reason="conflicting_drop_decisions")
+    assert "توافق" in reviews.get_row_reason(r4)
+
+    r5 = SimpleNamespace(reason="unchecked_media")
+    assert "رسانه یا فایل پیوست" in reviews.get_row_reason(r5)
+
+    r6 = SimpleNamespace(reason="low_confidence:ادعای سود نامتعارف")
+    assert "اطمینان مدل کافی نیست" in reviews.get_row_reason(r6)
+    assert "ادعای سود نامتعارف" in reviews.get_row_reason(r6)
+
+    r7 = SimpleNamespace(reason="پیام مشکوک به فیشینگ درگاه بانکی")
+    assert reviews.get_row_reason(r7) == "پیام مشکوک به فیشینگ درگاه بانکی"
+
+    r8 = SimpleNamespace(reason="some_unregistered_code")
+    assert "some_unregistered_code" in reviews.get_row_reason(r8)
+
+
+def test_guard_block_reason_translates_known_sub_reasons():
+    parsed = reviews.parse_review_reason("guard_block:ABUSE:pure_abuse")
+    desc = reviews.guard_block_reason(parsed)
+    assert "فحاشی و توهین مستقیم" in desc

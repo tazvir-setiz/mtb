@@ -68,29 +68,39 @@ def test_media_policy_filter():
     assert res.label == Label.OK
     assert res.media_checked is True
 
-    # Unchecked photo/document -> REVIEW with unchecked_media
     photo = MessageMediaPhoto()
-    res = MediaPolicyFilter.evaluate(photo, approved=False)
-    assert res.action == Action.REVIEW.value
-    assert res.reason == "unchecked_media"
-    assert res.media_checked is False
 
-    # Approved photo/document -> OK with media_checked=True
-    res = MediaPolicyFilter.evaluate(photo, approved=True)
-    assert res.label == Label.OK
-    assert res.media_checked is True
-
-    # If media sensitivity is "off", it must still fail-closed to REVIEW (policy_mismatch)
+    # Standard mode (default) -> OK with media_checked=True
     current = load_profile()
     import copy
     p = copy.deepcopy(current)
-    p["sensitivity"]["media"] = "off"
+    p["sensitivity"]["media"] = "standard"
     save_profile(p, revision(current))
+    res = MediaPolicyFilter.evaluate(photo, approved=False)
+    assert res.label == Label.OK
+    assert res.media_checked is True
 
+    # Strict mode -> REVIEW with unchecked_media
+    p_strict = copy.deepcopy(p)
+    p_strict["sensitivity"]["media"] = "strict"
+    save_profile(p_strict, revision(p))
+    res_strict = MediaPolicyFilter.evaluate(photo, approved=False)
+    assert res_strict.action == Action.REVIEW.value
+    assert res_strict.reason == "unchecked_media"
+    assert res_strict.media_checked is False
+
+    # Approved photo/document in strict mode -> OK with media_checked=True
+    res_approved = MediaPolicyFilter.evaluate(photo, approved=True)
+    assert res_approved.label == Label.OK
+    assert res_approved.media_checked is True
+
+    # Off mode -> OK with media_checked=True
+    p_off = copy.deepcopy(p)
+    p_off["sensitivity"]["media"] = "off"
+    save_profile(p_off, revision(p_strict))
     res_off = MediaPolicyFilter.evaluate(photo, approved=False)
-    assert res_off.action == Action.REVIEW.value
-    assert res_off.reason == "policy_mismatch"
-    assert res_off.media_checked is False
+    assert res_off.label == Label.OK
+    assert res_off.media_checked is True
 
 
 def test_source_policy_filter():

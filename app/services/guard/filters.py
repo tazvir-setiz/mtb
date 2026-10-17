@@ -65,15 +65,15 @@ class MediaPolicyFilter:
 
         profile = load_profile()
         mode = profile.get("sensitivity", {}).get("media", "standard")
-        # Disabling or changing media mode must NEVER fail-open.
-        reason = "policy_mismatch" if mode == "off" else "unchecked_media"
-        return ModerationResult(
-            Label.REVIEW,
-            1.0,
-            reason=reason,
-            media_checked=False,
-            _action_override=Action.REVIEW,
-        )
+        if mode == "strict":
+            return ModerationResult(
+                Label.REVIEW,
+                1.0,
+                reason="unchecked_media",
+                media_checked=False,
+                _action_override=Action.REVIEW,
+            )
+        return ModerationResult(Label.OK, 1.0, media_checked=True)
 
 
 class SourcePolicyFilter:

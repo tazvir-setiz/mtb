@@ -441,7 +441,11 @@ class GuardPipeline:
             original,
         )
 
-        if result.grounding_query and result.label in {Label.REVIEW, Label.REWRITE}:
+        if (
+            self.config.news_grounding_enabled
+            and result.grounding_query
+            and result.label in {Label.REVIEW, Label.REWRITE}
+        ):
             if not await self._ground(original, result.grounding_query):
                 return ModerationResult(Label.REVIEW, 0, source="AI", reason="grounding_unresolved")
             result = await self.call("reassess", original, reconsider=True)
@@ -453,12 +457,20 @@ class GuardPipeline:
                 escalation="unresolved_review" if result.label != Label.POLITICAL else None,
             )
             # A newly identified need must also be resolved before publication.
-            if result.grounding_query and not self.grounding_attempted:
+            if (
+                self.config.news_grounding_enabled
+                and result.grounding_query
+                and not self.grounding_attempted
+            ):
                 if not await self._ground(original, result.grounding_query):
                     return ModerationResult(Label.REVIEW, 0, source="AI", reason="grounding_unresolved")
                 result = await self.call("reassess", original, reconsider=True)
 
-        if result.grounding_query:
+        if (
+            self.config.news_grounding_enabled
+            and result.grounding_query
+            and result.action == "REVIEW"
+        ):
             return ModerationResult(Label.REVIEW, 0, source="AI", reason="grounding_unresolved")
 
         if result.action == "DROP":

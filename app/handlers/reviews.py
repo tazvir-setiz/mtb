@@ -20,46 +20,76 @@ from app.telegram.client import ensure_started
 logger = logging.getLogger(__name__)
 GUARD_BLOCK_REASONS = {
     "abuse": "گارد پیام را توهین مستقیم تشخیص داده است",
+    "pure_abuse": "پیام حاوی فحاشی و توهین مستقیم است",
     "hate": "گارد پیام را حمله یا نفرت‌پراکنی تشخیص داده است",
     "threat": "گارد پیام را تهدید تشخیص داده است",
     "porn": "گارد پیام را محتوای جنسی صریح تشخیص داده است",
     "spam": "گارد پیام را اسپم یا تبلیغ ممنوع تشخیص داده است",
     "injection": "گارد پیام را تلاش برای دورزدن یا نفوذ به دستورها تشخیص داده است",
     "off_topic": "پیام خارج از موضوعات تعیین‌شده در فیلتر موضوعی است",
+    "policy_violation": "نقض قوانین و سیاست‌های محتوایی",
 }
 
 REASONS = {
+    # Guard / Policy Categories
+    "spam": "گارد پیام را اسپم یا تبلیغاتی تشخیص داده است",
+    "abuse": "گارد پیام را حاوی توهین تشخیص داده است",
+    "pure_abuse": "پیام حاوی فحاشی و توهین مستقیم و بدون محتوای مفید است",
+    "hate": "گارد پیام را حاوی حمله یا نفرت‌پراکنی تشخیص داده است",
+    "threat": "گارد پیام را حاوی تهدید تشخیص داده است",
+    "porn": "گارد پیام را حاوی محتوای نامناسب جنسی تشخیص داده است",
+    "injection": "گارد در پیام تلاش برای دورزدن قوانین یا نفوذ به دستورها تشخیص داده است",
     "off_topic": "پیام مرتبط با موضوعات تعیین‌شده در فیلتر موضوعی نیست",
-    "send_uncertain": "نتیجهٔ ارسال مشخص نیست؛ پیش از تلاش مجدد مقصدها را بررسی کنید",
+    "political": "پس از بازنگری خودکار، مدل همچنان پیام را موضع‌گیری یا تبلیغ سیاسی تشخیص داده است",
+    "policy_violation": "نقض قوانین و سیاست‌های محتوایی",
+
+    # AI Reasoning & Semantic Pipeline Verdicts
+    "ambiguous_meaning": "مفهوم یا ادعای پیام مبهم و دوپهلو است و مدل نتوانست با اطمینان آن را تأیید کند",
+    "no_protected_meaning": "پیام فاقد محتوای مفید یا مستقل برای بازنویسی و انتشار است",
+    "grounding_unresolved": "پیام حاوی ادعای خبری یا فکت نامشخص است و راستی‌آزمایی آن انجام نشد",
+    "conflicting_drop_decisions": "مراحل مختلف گارد درباره دلیل حذف پیام به توافق نرسیدند",
+    "conflicting_decisions": "مراحل گارد درباره دلیل حذف توافق ندارند",
     "missing_evidence": "مدل برای حذف پیام شاهد معتبر یا دلیل کافی ارائه نکرد",
     "meaning_changed": "بازنویسی معنی یا اطلاعات اصلی را تغییر داده است",
     "invalid_verification": "پاسخ مرحلهٔ بررسی نهایی معتبر نبود",
     "policy_mismatch": "پاسخ مدل با حساسیت‌های انتخاب‌شده سازگار نیست",
-    "conflicting_decisions": "مراحل گارد درباره دلیل حذف توافق ندارند",
-    "budget_exhausted": "سقف زمان یا مراحل بررسی تمام شد؛ ارسال انجام نشد",
+    "rewrite_failed": "بازنویسی خودکار نتوانست از بررسی نهایی قوانین عبور کند",
+    "failed_rewrite_verification": "نسخهٔ بازنویسی‌شده از بررسی نهایی انطباق با قوانین عبور نکرد",
+    "low_confidence": "اطمینان مدل کافی نیست",
+    "review": "مدل درباره محتوای پیام مطمئن نیست",
+
+    # Draft & Review State
     "ai_draft": "پیش‌نویس بازنگری AI آمادهٔ تصمیم شماست؛ هنوز ارسال نشده",
     "manual_draft": "ویرایش شما ذخیره شد؛ برای ارسال تأیید کنید",
     "ai_rejected": "AI پیشنهاد رد داده؛ تصمیم نهایی با شماست",
-    "rewrite_failed": "بازنویسی نتوانست از بررسی نهایی قوانین عبور کند",
+    "pending_admin_decision": "پیام مشابه در انتظار تصمیم‌گیری مدیر در صف بررسی است",
+    "content_changed": "محتوای پیام پس از درخواست قبلی تغییر کرده است",
+    "poll": "نظرسنجی نیاز به بررسی و تأیید مدیر دارد",
+    "unchecked_media": "رسانه یا فایل پیوست نیاز به بررسی و تأیید مدیر دارد",
+
+    # System & Transport Status
+    "send_uncertain": "نتیجهٔ ارسال مشخص نیست؛ پیش از تلاش مجدد مقصدها را بررسی کنید",
+    "budget_exhausted": "سقف زمان یا مراحل بررسی تمام شد؛ ارسال انجام نشد",
     "timeout": "مهلت پاسخ AI تمام شد؛ می‌توانید بررسی با AI را دوباره اجرا کنید",
     "response_truncated": "پاسخ مدل به سقف توکن رسید و ناقص ماند",
-    "provider_refusal": "سرویس پاسخ قابل انتشار تولید نکرد",
+    "provider_refusal": "سرویس AI از پاسخ‌دهی به این پیام خودداری کرد",
     "invalid_output": "قالب پاسخ مدل معتبر نبود",
-    "missing_api_key": "کلید API تنظیم نشده است",
-    "invalid_credentials": "سرویس کلید API یا دسترسی حساب را نپذیرفت",
-    "rate_limit": "محدودیت درخواست یا اعتبار سرویس AI",
-    "bad_request": "آدرس، مدل یا پارامترهای درخواست AI پذیرفته نشد",
-    "provider_error": "خطای HTTP سرویس AI",
-    "connection_error": "اتصال به سرویس AI برقرار نشد",
-    "poll": "نظرسنجی نیاز به تأیید مدیر دارد",
-    "low_confidence": "اطمینان مدل کافی نیست",
-    "review": "مدل درباره محتوای پیام مطمئن نیست",
-    "political": "پس از بازنگری خودکار، مدل همچنان پیام را موضع‌گیری یا تبلیغ سیاسی تشخیص داده است",
-    "service_unavailable": "سرویس AI خطا داده یا پاسخ معتبر نداده است",
+    "missing_api_key": "کلید API سرویس AI تنظیم نشده است",
+    "invalid_credentials": "سرویس AI کلید یا دسترسی حساب را نپذیرفت",
+    "rate_limit": "محدودیت درخواست یا اتمام اعتبار سرویس AI",
+    "bad_request": "پارامترها یا درخواست ارسالی به AI پذیرفته نشد",
+    "provider_error": "خطای سرویس‌دهنده هوش مصنوعی (HTTP Error)",
+    "connection_error": "اتصال به سرویس هوش مصنوعی برقرار نشد",
+    "service_unavailable": "سرویس AI در دسترس نیست یا پاسخ معتبر نداد",
     "circuit_open": "سرویس AI موقتاً در دوره توقف پس از خطاست",
     "input_too_long": "طول پیام بیش از سقف بررسی خودکار است",
-    "unsafe_output": "خروجی از بررسی نهایی پاک‌سازی عبور نکرد",
-    "content_changed": "محتوای پیام پس از درخواست قبلی تغییر کرده است",
+    "unsafe_output": "خروجی پردازش‌شده حاوی لینک یا محتوای ناامن است",
+    "ai_disabled": "بررسی هوش مصنوعی در تنظیمات غیرفعال است",
+    "invalid_meaning": "خطا در استخراج معنای پیام توسط مدل",
+    "invalid_rewrite": "خطا در تولید بازنویسی توسط مدل",
+    "invalid_judge": "خطا در داوری انطباق متن توسط مدل",
+    "unknown_stage": "مرحله پردازش نامعتبر در گارد",
+    "AI decision requires review": "پالایش پیام توسط هوش مصنوعی نیاز به بررسی و تأیید مدیر دارد",
 }
 
 
@@ -77,22 +107,56 @@ def escaped_preview(value):
 
 
 def guard_block_reason(parsed):
-    code = (parsed.guard_label or parsed.reason or "unknown").lower()
-    detail = GUARD_BLOCK_REASONS.get(
-        code, "گارد این پیام را برای انتشار نامناسب تشخیص داده است"
-    )
-    if parsed.reason and parsed.reason.lower() not in {code, parsed.guard_label.lower() if parsed.guard_label else ""}:
-        return f"{detail} — دلیل: {parsed.reason}"
+    code = (parsed.guard_label or parsed.reason or "unknown").strip().lower()
+    detail = GUARD_BLOCK_REASONS.get(code) or REASONS.get(code)
+    if not detail:
+        if any("\u0600" <= c <= "\u06ff" for c in code):
+            detail = code
+        else:
+            detail = "گارد این پیام را برای انتشار نامناسب تشخیص داده است"
+
+    extra = (parsed.reason or "").strip()
+    if extra and extra.lower() not in {code, (parsed.guard_label or "").strip().lower()}:
+        extra_desc = REASONS.get(extra.lower(), extra)
+        return f"{detail} — دلیل: {extra_desc}"
     return detail
 
 
 def get_row_reason(row):
     """استخراج و قالب‌بندی دلیل نیاز به بررسی برای نمایش در کارت و فهرست."""
-    parsed = parse_review_reason(row.reason)
-    blocked = parsed.kind is ReviewKind.GUARD_BLOCK
-    return guard_block_reason(parsed) if blocked else REASONS.get(
-        row.reason, "محتوا نیاز به تصمیم مدیر دارد"
-    )
+    raw = (getattr(row, "reason", None) or "").strip()
+    if not raw:
+        return "محتوا نیاز به تصمیم مدیر دارد"
+
+    parsed = parse_review_reason(raw)
+    if parsed.kind is ReviewKind.GUARD_BLOCK:
+        return guard_block_reason(parsed)
+
+    # 1. Direct match in REASONS or GUARD_BLOCK_REASONS
+    if raw in REASONS:
+        return REASONS[raw]
+    raw_lower = raw.lower()
+    if raw_lower in REASONS:
+        return REASONS[raw_lower]
+    if raw_lower in GUARD_BLOCK_REASONS:
+        return GUARD_BLOCK_REASONS[raw_lower]
+
+    # 2. Key-detail match if raw contains separator (e.g. "low_confidence:detail" or "review:detail")
+    if ":" in raw:
+        base, _, detail = raw.partition(":")
+        base_lower = base.strip().lower()
+        detail = detail.strip()
+        matched = REASONS.get(base_lower) or GUARD_BLOCK_REASONS.get(base_lower)
+        if matched:
+            detail_desc = REASONS.get(detail.lower(), detail)
+            return f"{matched} — جزئیات: {detail_desc}" if detail else matched
+
+    # 3. If raw already contains meaningful Persian text
+    if any("\u0600" <= c <= "\u06ff" for c in raw):
+        return raw
+
+    # 4. If raw is an English identifier/phrase, display it informatively instead of a generic fallback
+    return f"نیاز به بررسی مدیر — ({raw})"
 
 
 def list_preview(text, max_len=75):
@@ -163,11 +227,7 @@ def card(row):
             f"مبدأ: {row.source_id} — پیام: {row.message_id}\n"
             f"{destination_line}\n"
             f"تشخیص گارد: {reason}\n"
-            "تصمیم گارد: <b>DROP</b>\n\n"
-            "⚠️ این پیام به مقصد ارسال نشده است. ارسال نسخهٔ فعلی فقط با تأیید صریح مدیر انجام می‌شود.\n\n"
-            f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
-            "می‌توانید نسخهٔ فعلی را با اختیار مدیر ارسال کنید، متن را دستی ویرایش کنید، "
-            "از AI نسخهٔ قابل انتشار بسازید یا پیام را برای همیشه رد کنید."
+            "تصمیم گارد: <b>DROP</b>"
         )
     else:
         text = (

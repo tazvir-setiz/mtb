@@ -124,4 +124,9 @@ def validate_output(
 
     if is_off_topic:
         result = replace(result, reason="off_topic")
+    elif label == Label.REVIEW and not result.reason:
+        if ambiguities:
+            result = replace(result, reason=ambiguities[0])
+        elif evidence:
+            result = replace(result, reason=evidence[0][0])
     return result
