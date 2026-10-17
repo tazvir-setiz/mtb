@@ -20,15 +20,15 @@ CONFIG = AISettings(
 
 def test_thinking_override_is_scoped_to_supported_provider_and_model():
     assert model_options(CONFIG) == {"thinking": {"type": "disabled"}}
-    assert model_options(replace(CONFIG, model="gpt-6-luna")) == {"thinking": {"type": "disabled"}}
+    assert model_options(replace(CONFIG, model="gpt-6-luna")) == {"thinking": {"type": "disabled"}, "reasoning_effort": "low"}
     assert model_options(replace(CONFIG, model="another-model")) == {}
     assert model_options(replace(CONFIG, base_url="https://unrelated.test/v1")) == {}
     assert model_options(replace(CONFIG, model="another-model", thinking_disabled=True)) == {"thinking": {"type": "disabled"}}
-    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna")) == {"thinking": {"type": "disabled"}}
-    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna"), mode="meaning") == {"thinking": {"type": "enabled", "budget_tokens": 250}}
-    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna"), mode="rewrite") == {"thinking": {"type": "enabled", "budget_tokens": 250}}
-    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna"), mode="policy_judge") == {"thinking": {"type": "disabled"}}
-    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna", thinking_disabled=True), mode="rewrite") == {"thinking": {"type": "disabled"}}
+    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna")) == {"thinking": {"type": "disabled"}, "reasoning_effort": "low"}
+    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna"), mode="meaning") == {"thinking": {"type": "enabled", "budget_tokens": 100}, "reasoning_effort": "low"}
+    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna"), mode="rewrite") == {"thinking": {"type": "enabled", "budget_tokens": 100}, "reasoning_effort": "low"}
+    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna"), mode="policy_judge") == {"thinking": {"type": "disabled"}, "reasoning_effort": "low"}
+    assert model_options(replace(CONFIG, base_url="https://api.gapgpt.app/v1/chat/completions", model="gpt-6-luna", thinking_disabled=True), mode="rewrite") == {"thinking": {"type": "disabled"}, "reasoning_effort": "low"}
     assert model_options(replace(CONFIG, model="o1-mini", thinking_disabled=True, base_url="https://api.openai.com/v1")) == {"reasoning_effort": "low"}
 
 

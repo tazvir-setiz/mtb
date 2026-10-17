@@ -15,22 +15,26 @@ def model_options(config, mode: str | None = None):
         bool(host) and any(d in host for d in ("avalai", "gapgpt", "deepseek"))
     )
     model_lower = config.model.lower()
+    is_luna = "-luna" in model_lower or model_lower.endswith("-luna")
 
     if getattr(config, "thinking_disabled", False):
-        if is_supported_host or "deepseek" in model_lower or "luna" in model_lower:
-            return {"thinking": {"type": "disabled"}}
+        if is_supported_host or "deepseek" in model_lower or is_luna:
+            res = {"thinking": {"type": "disabled"}}
+            if is_luna:
+                res["reasoning_effort"] = "low"
+            return res
         if any(m in model_lower for m in ("o1", "o3")):
             return {"reasoning_effort": "low"}
         return {"thinking": {"type": "disabled"}}
 
-    if is_supported_host:
+    if is_supported_host or is_luna:
         if model_lower.startswith(("deepseek-v4", "deepseek-flash")):
             return {"thinking": {"type": "disabled"}}
 
-        if "-luna" in model_lower or model_lower.endswith("-luna"):
+        if is_luna:
             if mode in {"meaning", "rewrite", "repair"}:
-                return {"thinking": {"type": "enabled", "budget_tokens": 250}}
-            return {"thinking": {"type": "disabled"}}
+                return {"thinking": {"type": "enabled", "budget_tokens": 100}, "reasoning_effort": "low"}
+            return {"thinking": {"type": "disabled"}, "reasoning_effort": "low"}
 
     if any(m in model_lower for m in ("o1", "o3")):
         return {"reasoning_effort": "low"}
