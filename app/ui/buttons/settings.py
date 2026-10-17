@@ -15,6 +15,7 @@ def settings_menu() -> InlineKeyboardMarkup:
             [_cb("✍️ امضا / زیرنویس", "settings:signature", style=STYLE_PRIMARY)],
             [_cb("👤 آیدی‌های داخل پیام", "settings:usernames", style=STYLE_PRIMARY)],
             [_cb("🤖 تنظیمات هوش مصنوعی", "settings:ai", style=STYLE_PRIMARY)],
+            [_cb("🎯 فیلتر موضوعی", "settings:topics", style=STYLE_PRIMARY)],
             [_cb("🛡 حساسیت و فایل تنظیمات گارد", "guard:show", style=STYLE_PRIMARY)],
             [_cb("⏱ فاصله ارسال", "settings:delay")],
             [_cb("🗑 پاک کردن داده‌های عملیات", "settings:clear_data", style=STYLE_DANGER)],
@@ -72,6 +73,29 @@ def ai_menu(enabled: bool = False) -> InlineKeyboardMarkup:
                 _cb("🗑 حذف کلید", "ai:clear_key", style=STYLE_DANGER),
             ],
             [_cb("🌐 آدرس سرویس", "ai:url"), _cb("🧠 مدل", "ai:model")],
+            [_cb("🎯 فیلتر موضوعی", "settings:topics", style=STYLE_PRIMARY)],
             [_cb("‹ تنظیمات", "menu:settings")],
+        ]
+    )
+
+
+def topics_menu(enabled: bool = False, action: str = "DROP", topics: tuple[str, ...] = ()) -> InlineKeyboardMarkup:
+    toggle_text = "⏹ غیرفعال‌سازی فیلتر" if enabled else "▶️ فعال‌سازی فیلتر"
+    action_label = "حذف مستقیم (DROP)" if action == "DROP" else "بررسی مدیر (REVIEW)"
+    return InlineKeyboardMarkup(
+        [
+            [_cb(toggle_text, "topics:toggle", style=STYLE_PRIMARY)],
+            [_cb(f"🔄 برخورد: {action_label}", "topics:toggle_action")],
+            [_cb("✏️ ویرایش موضوعات مجاز", "topics:edit", style=STYLE_PRIMARY)],
+            [_cb("‹ هوش مصنوعی", "settings:ai"), _cb("‹ منوی تنظیمات", "menu:settings")],
+        ]
+    )
+
+
+def topic_edit_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [_cb("🗑 پاک کردن همه موضوعات", "topics:clear", style=STYLE_DANGER)],
+            [_cb("✕ لغو و بازگشت", "settings:topics")],
         ]
     )

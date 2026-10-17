@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import ContextTypes
 
-from app.handlers import ai_settings, review_edit, source, transfer, username_settings
+from app.handlers import ai_settings, review_edit, source, topic_settings, transfer, username_settings
 from app.handlers import settings as settings_handlers
 from app.handlers.auth import is_authorized, reject
 from app.handlers.callback_routes import CALLBACK_ROUTES
@@ -39,6 +39,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     ):
         reset(context.user_data)
     if get_state(getattr(context, "user_data", {}) or {}) in ai_settings.INPUT_FIELDS:
+        reset(context.user_data)
+    if namespace != "topics" and get_state(getattr(context, "user_data", {}) or {}) == State.TOPIC_INPUT:
         reset(context.user_data)
 
     try:
@@ -81,6 +83,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await username_settings.save(update, context)
         elif state in ai_settings.INPUT_FIELDS:
             await ai_settings.save(update, context)
+        elif state == State.TOPIC_INPUT:
+            await topic_settings.save(update, context)
         else:
             await update.message.reply_text(
                 "از دکمه‌های داشبورد استفاده کنید یا /menu را بزنید.",
