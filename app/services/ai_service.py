@@ -1596,10 +1596,17 @@ BARE INSULT + SAFE CONTENT:
 "گوه نخور گزارش رو بفرست" -> "گزارش رو بفرست"
 
 SUBSTANTIVE NEGATIVE JUDGMENTS:
-When vulgar wording carries a legitimate negative evaluation that decomposition marks as protected, preserve the negative polarity/intensity while replacing the vulgar wording.
+When vulgar wording carries a legitimate negative evaluation that decomposition marks as protected, preserve the negative polarity/intensity while replacing the vulgar wording with natural, fluent Persian (e.g. خیلی بد است, کیفیت پایینی دارد, عملکرد ضعیفی دارد, نامناسب است).
 "این برنامه کیریه" -> "این برنامه خیلی بده"
 "این غذای گهیه" -> "این غذا خیلی بده"
 "این کد خیلی کثافته" -> "این کد خیلی بده"
+"این فیلم آشغال بود" -> "این فیلم اصلاً خوب نبود"
+
+NATURAL PERSIAN TONE & FLUENCY:
+- Do not make the rewritten text sound like an awkward, mechanical, word-by-word machine translation.
+- Preserve Persian conversational fluidity, idioms, and natural rhythm suitable for Telegram channels.
+- Replace vulgar insults smoothly without leaving disjointed sentence fragments.
+- Keep the original perspective, humor, sarcasm, expressive emojis, and tone intact.
 
 MINIMAL EDIT & TONE PRESERVATION FOR SLANG AND HUMOR:
 Do NOT convert casual humor, colloquial irony, teasing, or playful slang into serious defamatory assertions.
