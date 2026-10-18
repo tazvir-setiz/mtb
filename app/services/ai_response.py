@@ -1,4 +1,6 @@
+import json
 import logging
+import re
 
 from app.services.ai_policy import AIProcessingError
 from app.services.ai_transport import AIRequestError, post_completion
@@ -95,6 +97,19 @@ def read_choice(response, payload):
             payload.get("thinking", {}).get("type", "provider_default"),
         )
         if finish in {"length", "content_filter", "tool_calls"}:
+            if finish == "length":
+                content = (choice.get("message") or {}).get("content")
+                if content and isinstance(content, str):
+                    clean = content.strip()
+                    fenced = re.fullmatch(r"\s*```(?:json)?\s*\n(.*?)\n```\s*", clean, re.S)
+                    to_check = (fenced.group(1) if fenced else clean).strip()
+                    if to_check.startswith("{") and to_check.endswith("}"):
+                        try:
+                            json.loads(to_check)
+                            logger.info("Accepted complete JSON response despite finish_reason=length")
+                            return content
+                        except ValueError:
+                            pass
             raise AIRequestError("response_truncated" if finish == "length" else "provider_refusal")
         if choice["message"].get("refusal"):
             raise AIRequestError("provider_refusal")
@@ -122,11 +137,9 @@ async def validated_completion(client, config, payload, limits, original, *, mod
 
     attempts = 1 if fallback_attempt.get() else 2
     for attempt in range(1, attempts + 1):
-        response = await post_completion(client, config, payload)
-
-        raw = read_choice(response, payload)
-
         try:
+            response = await post_completion(client, config, payload)
+            raw = read_choice(response, payload)
             result = _validate(mode, raw, limits, original)
 
             if attempt == 2:
@@ -145,22 +158,42 @@ async def validated_completion(client, config, payload, limits, original, *, mod
                 getattr(exc, "detail", None),
             )
 
-            if attempt == attempts:
+            if attempt == attempts or reason == "provider_refusal":
                 raise
 
             runtime.metrics["format_retries"] += 1
 
-            payload = dict(
-                payload,
-                messages=[
-                    *payload["messages"],
-                    {
-                        "role": "system",
-                        "content": (
-                            "Your previous response failed validation. "
-                            "Re-evaluate the same task. "
-                            "Return ONLY the required JSON schema. " + CONTRACTS[mode]
-                        ),
-                    },
-                ],
-            )
+            if reason == "response_truncated":
+                current_tokens = payload.get("max_tokens") or limits.max_output_tokens
+                boosted = min(max(current_tokens * 2, 4096), 8192)
+                payload = dict(
+                    payload,
+                    max_tokens=boosted,
+                    max_completion_tokens=boosted,
+                    messages=[
+                        *payload["messages"],
+                        {
+                            "role": "system",
+                            "content": (
+                                "Your previous response was truncated because it exceeded the token limit. "
+                                "Be extremely concise, omit reasoning/explanations, and return ONLY the JSON object: "
+                                + CONTRACTS[mode]
+                            ),
+                        },
+                    ],
+                )
+            else:
+                payload = dict(
+                    payload,
+                    messages=[
+                        *payload["messages"],
+                        {
+                            "role": "system",
+                            "content": (
+                                "Your previous response failed validation. "
+                                "Re-evaluate the same task. "
+                                "Return ONLY the required JSON schema. " + CONTRACTS[mode]
+                            ),
+                        },
+                    ],
+                )

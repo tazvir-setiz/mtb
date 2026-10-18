@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from app.guard_config import guard_settings
 from app.database.database import get_session
 from app.database.repository import SettingsRepository
 from app.handlers import username_settings
@@ -112,7 +113,7 @@ async def test_ai_response_contract(monkeypatch, outcome):
             await ai_service.apply_ai_guardrails("original")
     payload = client.post.call_args.kwargs["json"]
     assert json.loads(payload["messages"][1]["content"])["msg"] == "original"
-    assert payload["max_tokens"] == 1800
+    assert payload["max_tokens"] == guard_settings.max_output_tokens
 
 
 def test_username_sanitization_and_hidden_links():

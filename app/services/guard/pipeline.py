@@ -353,15 +353,6 @@ class GuardPipeline:
                 "AI",
             )
 
-        if not policy_v.repairable or not meaning_v.repairable:
-            reason = "meaning_changed" if not meaning_v.passed else "rewrite_failed"
-            return ModerationResult(
-                Label.REVIEW,
-                0,
-                source="AI",
-                reason=reason,
-            )
-
         issues = tuple(policy_v.issues) + tuple(meaning_v.issues)
 
         runtime.metrics["repair_attempts"] += 1

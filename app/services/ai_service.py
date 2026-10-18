@@ -155,6 +155,7 @@ def _payload(config, limits, system, data, mode, temperature=0):
         ],
         "temperature": temperature,
         "max_tokens": limits.max_output_tokens,
+        "max_completion_tokens": limits.max_output_tokens,
         **model_options(config, mode=mode),
     }
 
