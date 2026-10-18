@@ -9,7 +9,7 @@ class GuardSettings:
     confidence_threshold: float = 0.85
     ai_confidence_threshold: float = 0.75
     max_input_chars: int = 16000
-    max_output_tokens: int = 1800
+    max_output_tokens: int = 800
     max_candidates: int = 8
     max_topics: int = 5
     max_entities: int = 8
