@@ -401,13 +401,16 @@ def test_guard_block_card_is_visually_distinct():
 
 
 def test_normal_review_card_keeps_existing_review_style():
-    row = queued()
+    row = queued(message("some sample message text"))
     content, markup = reviews.card(row)
     assert content.startswith("🔎")
     assert "DROP" not in content
+    assert "پیش‌نمایش کوتاه" not in content
+    assert "some sample message text" not in content
     labels = [button.text for line in markup.inline_keyboard for button in line]
     assert "✅ تأیید نسخهٔ فعلی" in labels
     assert "🤖 بازنویسی با AI" in labels
+    assert "👁 مشاهده متن پیام" in labels
 
 
 @pytest.mark.asyncio
@@ -622,3 +625,28 @@ def test_guard_block_reason_translates_known_sub_reasons():
     parsed = reviews.parse_review_reason("guard_block:ABUSE:pure_abuse")
     desc = reviews.guard_block_reason(parsed)
     assert "فحاشی و توهین مستقیم" in desc
+
+
+@pytest.mark.asyncio
+async def test_callback_review_preview_sends_text(monkeypatch):
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+    row = queued(message("متن کامل پیام اصلی برای تست نمایش"))
+
+    reply_mock = AsyncMock()
+    query = SimpleNamespace(
+        data=f"review:preview:{row.id}:1",
+        answer=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=reply_mock),
+        callback_query=query,
+    )
+
+    await reviews.on_callback(update, SimpleNamespace())
+    query.answer.assert_awaited_once()
+    reply_mock.assert_awaited_once()
+    sent_text = reply_mock.call_args.args[0]
+    assert "متن پیام" in sent_text
+    assert "متن کامل پیام اصلی برای تست نمایش" in sent_text

@@ -231,11 +231,10 @@ def card(row):
         )
     else:
         text = (
-            f"🔎 بررسی پیام #{row.id}\nمبدأ: {row.source_id} — پیام: {row.message_id}\n"
-            f"{destination_line}\nدلیل: {reason}\n\n"
-            f"پیش‌نمایش کوتاه:\n{escaped_preview(row.preview)}\n\n"
-            "«بازنویسی با AI» متن تازهٔ مطابق گارد یا پیشنهاد حذف می‌سازد و خودکار ارسال نمی‌کند. تأیید، نسخهٔ فعلی را می‌فرستد؛ لینک‌ها و آیدی‌ها پاک‌سازی "
-            "و امضای فعلی اضافه می‌شود. نظرسنجی با تأیید شما مستقیم فوروارد می‌شود."
+            f"🔎 بررسی پیام #{row.id}\n"
+            f"مبدأ: {row.source_id} — پیام: {row.message_id}\n"
+            f"{destination_line}\n"
+            f"دلیل: {reason}"
         )
     buttons = []
     if row.status == "pending":
@@ -252,6 +251,9 @@ def card(row):
                 InlineKeyboardButton("✏️ ویرایش دستی" if blocked else "✏️ ویرایش", callback_data=f"review:edit:{suffix}"),
                 InlineKeyboardButton(reject_label, callback_data=f"review:reject:{suffix}"),
             ]
+        )
+        buttons.append(
+            [InlineKeyboardButton("👁 مشاهده متن پیام", callback_data=f"review:preview:{suffix}")]
         )
     else:
         text += "\n⚠️ ارسال در جریان است یا نتیجه‌اش مشخص نیست. پیش از هر اقدام مقصد را بررسی کنید."
@@ -435,6 +437,16 @@ async def on_callback(update, context):
             )
             return
         await send_card(context.bot, update.effective_user.id, row)
+        return
+    if len(parts) >= 3 and parts[1] == "preview" and parts[2].isdigit():
+        row = review_store.get(int(parts[2]))
+        if row:
+            preview_text = (row.preview or "[پیام بدون متن]").strip()
+            await update.effective_message.reply_text(
+                f"📝 <b>متن پیام #{row.id}:</b>\n\n{escape(preview_text)}",
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
         return
     if (
         len(parts) != 4
