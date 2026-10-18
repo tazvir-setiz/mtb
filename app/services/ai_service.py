@@ -1004,12 +1004,12 @@ Context and communicative intent matter.
 SPAM
 ==================================================
 
-Use SPAM only when the message genuinely matches the project's spam
-policy.
+Use SPAM when the message matches the project's spam and advertisement policy:
+- Commercial advertisements, sponsored posts (رپورتاژ/اسپانسر), installment/BNPL offers (خرید قسطی, اسنپ‌پی), loan/banking promotions (تسهیلات, بدون سود, بدون پیش‌پرداخت, بدون ضامن), store sales/discounts, product/service marketing, commercial order calls (ثبت سفارش, جهت خرید).
+- Channel growth lures, member recruitment (جوین شید, عضویت در کانال, کانال VIP), social media follow footers (ما را در رسانه‌ها دنبال کنید, روبیکا, بله, ایتا, تلگرام).
+- Online gambling/casinos, crypto scams (سود تضمینی), phishing, and VPN sales.
 
-Do not classify an ordinary repeated-looking phrase or normal message
-as SPAM merely because it contains links, numbers, promotional-looking
-words, or unusual formatting.
+Do not classify an ordinary informational message as SPAM merely because it mentions a company name, price, or market statistics without any promotional or commercial intent.
 
 Use the supplied policy as the authority for the exact spam boundary.
 
@@ -1023,11 +1023,29 @@ Examples of SPAM:
 "فروش فیلترشکن اختصاصی پرسرعت و بدون قطعی، خرید پیوی"
 -> SPAM
 
-Distinguish genuine spam from legitimate commercial or informational messages:
-"ثبت‌نام دوره برنامه‌نویسی پایتون از شنبه آغاز می‌شود، هزینه ۵۰۰ هزار تومان"
+"۳ میلیون رو لازم نیست یکجا پرداخت کنی؛ خرید قسطی از اسنپ‌پی 👇🏻 با خبرداد @khabardad"
+-> SPAM
+
+"با بیمه کوثر بیمه‌های مهم زندگیتون رو بدون دغدغه مالی بخرید! مزیت‌های تسهیلات طرح مهر بان: بدون پیش‌پرداخت و بدون سود... ما را در رسانه‌ها دنبال کنید"
+-> SPAM
+
+"تخفیف شگفت‌انگیز ۵۰ درصدی محصولات فقط تا امشب، جهت ثبت سفارش کلیک کنید"
+-> SPAM
+
+"تا پاک نشده جوین شید کانال vip با سیگنال‌های رایگان"
+-> SPAM
+
+"ما را در رسانه‌های داخلی و خارجی دنبال کنید: روبیکا، بله، ایتا، تلگرام"
+-> SPAM
+
+Distinguish genuine spam/advertisements from legitimate informational or news messages:
+"نرخ تورم سالانه کالاها و خدمات مصرفی بر اساس گزارش مرکز آمار اعلام شد"
 -> OK
 
-"تخفیف ویژه کتاب‌های درسی تا پایان هفته در فروشگاه ما"
+"قیمت طلا و سکه در معاملات امروز بازار تهران تغییر چندانی نداشت"
+-> OK
+
+"شرکت اسنپ گزارش سالانه عملکرد ناوگان حمل‌ونقل خود را منتشر کرد"
 -> OK
 
 

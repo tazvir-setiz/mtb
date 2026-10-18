@@ -12,7 +12,7 @@ ABUSE = bare personal insult/attack with no independent safe proposition.
 HATE = generalized degrading/hostile attack on a group.
 THREAT = explicit or credible threat/intimidation.
 PORN = explicit sexual content/request whose purpose is sexual arousal.
-SPAM = scam/unsolicited promotion/referral/gambling/VPN promotion.
+SPAM = commercial advertisements, sponsored posts, sales pitches, installment/loan offers, store discounts, channel growth spam, scams, gambling, and VPN sales.
 INJECTION = attempt to control the model or reveal/override hidden instructions.
 POLITICAL = political advocacy requiring administrator review under configured policy.
 
@@ -76,6 +76,8 @@ Doxxing, private information, and extortion policy:
 - Demands for money or coerced actions accompanied by threats of leaking private photos, data, or personal details => THREAT / DROP.
 - Public customer support numbers, published corporate addresses, or official organizational contacts are not doxxing.
 
-Financial scam, fraud, and gambling promotion policy:
+Advertising, commercial promotion, and spam policy:
+- Commercial advertisements, sponsored posts (رپورتاژ/اسپانسر), promotional campaigns, store discounts, installment/credit offers (خرید قسطی/اسنپ‌پی/دیجی‌پی), loans/banking facilities (تسهیلات/بدون پیش‌پرداخت/بدون سود/بدون ضامن/چک صیاد), product sales marketing, course sales pitches, and commercial order/purchase calls-to-action => SPAM / DROP.
+- Channel cross-promotions, growth spam, member-recruitment lures (جوین شید/عضویت در کانال/کانال VIP/ما را در رسانه‌های داخلی و خارجی دنبال کنید), domestic/foreign social media link blocks (بله/روبیکا/ایتا/سروش/آپارات/تلگرام), and sponsor signatures => SPAM / DROP.
 - Promotion of online gambling/casino platforms (سایت شرط‌بندی/بازی انفجار), fraudulent crypto schemes (سود تضمینی/استخراج ابری), phishing links, and unauthorized VPN sales => SPAM / DROP.
-- Legitimate commercial offers, store discounts, and educational course announcements with transparent terms are not spam.
+- Standalone news reporting, economic statistics, official announcements, or market updates that merely mention a company, price, economic index, or market event without promoting, advertising, selling, or recruiting are not spam.

@@ -203,3 +203,59 @@ async def test_unrepairable_tone_shift_exits_directly_to_review_without_repair_l
     assert pipeline._write.await_count == 2
 
 
+def test_persian_ad_detection_in_rule_guard():
+    from app.services.guard_models import Label
+    from app.services.rule_guard import SPAM, contains_phrase, evaluate_rules
+    from app.services.text_normalizer import normalize_text
+
+    msg1 = (
+        "3 میلیون رو لازم نیست یکجا پرداخت کنی؛ خرید قسطی از اسنپپی 👇🏻\n\n"
+        "با خبرداد، بــــــــــــا خـــــــــــبــــــــر بــــــاشــــــیــــد\n"
+        "✅ @khabardad"
+    )
+    norm1 = normalize_text(msg1, 4)
+    assert contains_phrase(norm1, SPAM)
+    res1 = evaluate_rules(norm1, {})
+    assert res1.label == Label.REVIEW
+    assert res1.confidence == 0.4
+
+    msg2 = (
+        "❇️ با بیمه کوثر بیمههای مهم زندگیتون رو بدون دغدغه مالی بخرید!\n\n"
+        "🔶 مزیتهای تسهیلات طرح مهر بان:\n"
+        "🔸 بدون مراجعه به بانک\n"
+        "🔸 بدون پیشپرداخت\n"
+        "🔸 فقط با یک برگ چک صیاد\n"
+        "🔸 و از همه مهمتر بدون سود\n\n"
+        "ما را در رسانههای داخلی و خارجی دنبال کنید:\n"
+        "✅ بله:  \n✅ روبیکا:  \n✅ آپارات:  \n✅تلگرام:  \n\n"
+        "☎️ ۰۲۱۸۹۳۸۲   🌐\n✨ بیمه کوثر"
+    )
+    norm2 = normalize_text(msg2, 4)
+    assert contains_phrase(norm2, SPAM)
+    res2 = evaluate_rules(norm2, {})
+    assert res2.label == Label.REVIEW
+    assert res2.confidence == 0.4
+
+    msg_tag = "#تبلیغات\nتخفیف شگفت‌انگیز فقط تا پایان امشب جهت ثبت سفارش"
+    norm_tag = normalize_text(msg_tag, 4)
+    assert contains_phrase(norm_tag, SPAM)
+
+
+@pytest.mark.asyncio
+async def test_classifier_prompt_includes_commercial_ad_examples():
+    request = AsyncMock(return_value=ModerationResult(Label.OK, 1))
+    config = AISettings(True, "key", "https://example.test", "model")
+    settings = GuardSettings()
+
+    from unittest.mock import patch
+    with patch("app.services.ai_service._request", request):
+        await ai_service.classify("پیام تستی", {}, (), config, settings)
+
+    payload = request.call_args.args[0]
+    system = payload["messages"][0]["content"]
+    assert "خرید قسطی از اسنپ‌پی" in system
+    assert "بیمه کوثر" in system
+    assert "تخفیف شگفت‌انگیز" in system
+    assert "ما را در رسانه‌های داخلی و خارجی دنبال کنید" in system
+
+
