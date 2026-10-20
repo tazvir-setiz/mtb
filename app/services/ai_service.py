@@ -1004,12 +1004,15 @@ Context and communicative intent matter.
 SPAM
 ==================================================
 
-Use SPAM when the message matches the project's spam and advertisement policy:
+Use SPAM ONLY when the PRIMARY substantive purpose of the message is an advertisement, commercial promotion, scam, or dedicated channel recruitment:
 - Commercial advertisements, sponsored posts (رپورتاژ/اسپانسر), installment/BNPL offers (خرید قسطی, اسنپ‌پی), loan/banking promotions (تسهیلات, بدون سود, بدون پیش‌پرداخت, بدون ضامن), store sales/discounts, product/service marketing, commercial order calls (ثبت سفارش, جهت خرید).
-- Channel growth lures, member recruitment (جوین شید, عضویت در کانال, کانال VIP), social media follow footers (ما را در رسانه‌ها دنبال کنید, روبیکا, بله, ایتا, تلگرام).
+- Dedicated channel recruitment / exchange posts with no substantive news value (جوین شید تا پاک نشده, عضویت در کانال VIP).
 - Online gambling/casinos, crypto scams (سود تضمینی), phishing, and VPN sales.
 
-Do not classify an ordinary informational message as SPAM merely because it mentions a company name, price, or market statistics without any promotional or commercial intent.
+CRITICAL RULE: NEWS, SPORTS, AND INFORMATIONAL POSTS ARE NEVER SPAM:
+- News reports, sports coverage, official statements, interviews, quotes, and informational posts are NOT advertisements or spam, EVEN IF they end with standard channel signatures, source links, "مشروح خبر", or channel follow footers (e.g., "👈دریافت آخرین اخبار: سایت | ایتا | بله | روبیکا | اینستاگرام | سروش" or "@snntv" / "@snn_sports").
+- Normal channel metadata, social links, and signatures must be handled by SANITIZE (link/username cleanup), NEVER SPAM.
+- Do not classify an informational or news message as SPAM merely because it mentions a company name, price, economic statistics, or includes channel follow links at the end.
 
 Use the supplied policy as the authority for the exact spam boundary.
 
@@ -1035,10 +1038,19 @@ Examples of SPAM:
 "تا پاک نشده جوین شید کانال vip با سیگنال‌های رایگان"
 -> SPAM
 
-"ما را در رسانه‌های داخلی و خارجی دنبال کنید: روبیکا، بله، ایتا، تلگرام"
+"ما را در رسانه‌های داخلی و خارجی دنبال کنید: روبیکا، بله، ایتا، تلگرام" (پیام صرفاً تبلیغاتی/دعوت به عضویت بدون هیچ محتوای خبری)
 -> SPAM
 
-Distinguish genuine spam/advertisements from legitimate informational or news messages:
+Distinguish genuine spam/advertisements from legitimate informational or news messages (publish with SANITIZE or OK):
+"🎥بازیکنان ملوان هم از زمین بازی بیرون رفتند\n\n👈دریافت آخرین اخبار:\nسایت |اینستاگرام\n\n🏆 @snn_sports"
+-> OK (or SANITIZE)
+
+"🎥تناقضهای مزدک پایان ندارد\n🔸عمید صادقیپور در برنامه «راس یک» با انتقاد از اظهارات مزدک... [مشروح خبر](https://snn.ir/006B5U)\n👈دریافت آخرین اخبار:\n[سایت](https://snn.ir/) | [ایتا](https://eitaa.com/snn_ir) | [بله](https://ble.ir/snn_ir) | [روبیکا](https://rubika.ir/snntv)"
+-> SANITIZE
+
+"🎥#پوشش_زنده|سرلشکر ایزدی: اروپاییها از ایستادگی ایران مقابل آمریکا شگفتزدهاند...\n[مشروح خبر](https://snn.ir/006B6f)\n👈دریافت آخرین اخبار:\n[سایت](https://snn.ir/) | [ایتا](https://eitaa.com/snn_ir) | [بله](https://ble.ir/snn_ir)\n🆔 @snntv"
+-> SANITIZE
+
 "نرخ تورم سالانه کالاها و خدمات مصرفی بر اساس گزارش مرکز آمار اعلام شد"
 -> OK
 

@@ -257,5 +257,42 @@ async def test_classifier_prompt_includes_commercial_ad_examples():
     assert "بیمه کوثر" in system
     assert "تخفیف شگفت‌انگیز" in system
     assert "ما را در رسانه‌های داخلی و خارجی دنبال کنید" in system
+    assert "بازیکنان ملوان" in system
+    assert "تناقضهای مزدک" in system
+    assert "سرلشکر ایزدی" in system
+
+
+def test_news_posts_with_channel_footers_are_not_flagged_as_spam_in_rules():
+    from app.services.rule_guard import SPAM, contains_phrase
+    from app.services.text_normalizer import normalize_text
+
+    news1 = (
+        "🎥بازیکنان ملوان هم از زمین بازی بیرون رفتند\n\n"
+        "👈دریافت آخرین اخبار:\n"
+        "سایت |اینستاگرام\n\n"
+        "🏆 @snn_sports"
+    )
+    assert not contains_phrase(normalize_text(news1, 4), SPAM)
+
+    news2 = (
+        "🎥تناقضهای مزدک پایان ندارد\n"
+        "🔸عمید صادقیپور در برنامه «راس یک» با انتقاد از اظهارات مزدک، به تناقض میان صحبتهای او درباره تیم ملی ایران اشاره کرد؛ جایی که یکبار از «تیم جمهوری اسلامی» و بار دیگر از «تیم تراکتور ایران» صحبت میکند.\n"
+        "[مشروح خبر](https://snn.ir/006B5U)\n"
+        "👈دریافت آخرین اخبار:\n"
+        "[سایت](https://snn.ir/) | [ایتا](https://eitaa.com/snn_ir) | [بله](https://ble.ir/snn_ir) | [روبیکا](https://rubika.ir/snntv) | [سروش پلاس](https://splus.ir/snntv)"
+    )
+    assert not contains_phrase(normalize_text(news2, 4), SPAM)
+
+    news3 = (
+        "🎥#پوشش_زنده|سرلشکر ایزدی: اروپاییها از ایستادگی ایران مقابل آمریکا شگفتزدهاند\n"
+        "جانشین فرمانده کل سپاه پاسداران انقلاب اسلامی در مراسم سالگرد بازدید رهبر شهید انقلاب از لشکر ۱۰ سیدالشهدا:\n"
+        "🔸باید هوشیار باشیم و اجازه ندهیم مردم از صحنه خارج شوند؛ امام فرمودند هرکس باید یک نیرو برای حفظ اسلام باشد.\n"
+        "[مشروح خبر](https://snn.ir/006B6f)\n"
+        "👈دریافت آخرین اخبار:\n"
+        "[سایت](https://snn.ir/) | [ایتا](https://eitaa.com/snn_ir) | [بله](https://ble.ir/snn_ir)\n"
+        "🆔 @snntv"
+    )
+    assert not contains_phrase(normalize_text(news3, 4), SPAM)
+
 
 

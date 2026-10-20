@@ -77,7 +77,13 @@ Doxxing, private information, and extortion policy:
 - Public customer support numbers, published corporate addresses, or official organizational contacts are not doxxing.
 
 Advertising, commercial promotion, and spam policy:
-- Commercial advertisements, sponsored posts (رپورتاژ/اسپانسر), promotional campaigns, store discounts, installment/credit offers (خرید قسطی/اسنپ‌پی/دیجی‌پی), loans/banking facilities (تسهیلات/بدون پیش‌پرداخت/بدون سود/بدون ضامن/چک صیاد), product sales marketing, course sales pitches, and commercial order/purchase calls-to-action => SPAM / DROP.
-- Channel cross-promotions, growth spam, member-recruitment lures (جوین شید/عضویت در کانال/کانال VIP/ما را در رسانه‌های داخلی و خارجی دنبال کنید), domestic/foreign social media link blocks (بله/روبیکا/ایتا/سروش/آپارات/تلگرام), and sponsor signatures => SPAM / DROP.
-- Promotion of online gambling/casino platforms (سایت شرط‌بندی/بازی انفجار), fraudulent crypto schemes (سود تضمینی/استخراج ابری), phishing links, and unauthorized VPN sales => SPAM / DROP.
-- Standalone news reporting, economic statistics, official announcements, or market updates that merely mention a company, price, economic index, or market event without promoting, advertising, selling, or recruiting are not spam.
+- Primary Purpose Rule: SPAM / DROP applies strictly when the main, substantive purpose of the message is commercial advertising, selling a product/service, commercial promotion, financial/loan pitches, or spam.
+- The following are SPAM / DROP:
+  * Commercial advertisements and sponsored posts (رپورتاژ/اسپانسر), store discounts, product/course sales pitches, and commercial order calls (جهت سفارش/برای خرید).
+  * Installment/BNPL offers (خرید قسطی/اسنپ‌پی/دیجی‌پی), loans/banking facilities (تسهیلات/بدون پیش‌پرداخت/بدون سود/بدون ضامن/چک صیاد).
+  * Standalone channel recruitment/exchange spam with no substantive news value (جوین شید تا پاک نشده/کانال VIP سیگنال/لینک عضویت).
+  * Promotion of online gambling/casino platforms (سایت شرط‌بندی/بازی انفجار), fraudulent crypto schemes (سود تضمینی/استخراج ابری), phishing links, and unauthorized VPN sales.
+- Critical Rule for News, Sports, and Informational Posts:
+  * News reports, sports coverage, official statements, interviews, analytical articles, and educational posts are NOT advertisements or spam.
+  * The presence of channel branding, author attribution, source links ("[مشروح خبر]"), channel IDs (e.g., "@snn_sports", "@snntv"), or standard channel follow footers (e.g., "👈دریافت آخرین اخبار: سایت | ایتا | بله | روبیکا | اینستاگرام | سروش") at the end of a news post does NOT make it an advertisement or spam.
+  * Such footers and links are normal channel metadata handled by SANITIZE (which strips links and cleans usernames), NOT by dropping the message. Classify such news posts as OK or SANITIZE, NEVER SPAM.
