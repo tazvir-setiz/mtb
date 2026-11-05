@@ -64,7 +64,7 @@ class Settings:
     ai_base_url: str = "https://api.openai.com/v1/chat/completions"
     ai_model: str = PRIMARY_MODEL
     ai_fallback_model: str = FALLBACK_MODEL
-    news_grounding_enabled: bool = True
+    news_grounding_enabled: bool = False
     news_allowed_domains: str = NEWS_DOMAINS
     ai_guardrails: str = ""
     ai_thinking_disabled: bool = False
@@ -111,7 +111,7 @@ def load_settings() -> Settings:
         ai_base_url=optional_env("AI_BASE_URL", "https://api.openai.com/v1/chat/completions"),
         ai_model=optional_env("AI_MODEL", PRIMARY_MODEL),
         ai_fallback_model=optional_env("AI_FALLBACK_MODEL", FALLBACK_MODEL),
-        news_grounding_enabled=env_flag("NEWS_GROUNDING_ENABLED", "true"),
+        news_grounding_enabled=env_flag("NEWS_GROUNDING_ENABLED", "false"),
         news_allowed_domains=optional_env("NEWS_ALLOWED_DOMAINS", NEWS_DOMAINS),
         ai_guardrails=load_guardrails(),
         ai_thinking_disabled=env_flag("AI_THINKING_DISABLED", "false"),

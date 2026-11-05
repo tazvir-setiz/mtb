@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -22,9 +22,27 @@ _ensure_sqlite_dir(settings.database_url)
 engine = create_engine(
     settings.database_url,
     hide_parameters=True,
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
+    connect_args=(
+        {"check_same_thread": False, "timeout": 30}
+        if settings.database_url.startswith("sqlite")
+        else {}
+    ),
 )
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    if engine.dialect.name == "sqlite":
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+        except Exception:
+            pass
+        finally:
+            cursor.close()
 
 
 def init_db() -> None:

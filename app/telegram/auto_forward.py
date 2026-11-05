@@ -27,7 +27,34 @@ _AUTO_JOB_MARKER = -1
 
 _handler = None  # type: ignore[var-annotated]
 _registered_client: TelegramClient | None = None
-_processing_lock = asyncio.Lock()
+class ProcessingLimiter:
+    """Bounded concurrency limiter with an asyncio.Lock-compatible interface."""
+
+    def __init__(self, max_concurrent: int = 5):
+        self._max = max_concurrent
+        self._active = 0
+        self._sem = asyncio.Semaphore(max_concurrent)
+
+    async def acquire(self):
+        await self._sem.acquire()
+        self._active += 1
+
+    def release(self):
+        self._active = max(0, self._active - 1)
+        self._sem.release()
+
+    def locked(self) -> bool:
+        return self._active > 0
+
+    async def __aenter__(self):
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+
+
+_processing_lock = ProcessingLimiter(max_concurrent=5)
 _waiting = 0
 _counts = Counter()
 

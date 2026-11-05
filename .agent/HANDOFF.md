@@ -1,40 +1,39 @@
-# Session Handoff Report: High-Speed AI Guard & Persian Content Policy
+# Session Handoff Report: Full-Project Architecture & Performance Optimization
 **Date**: 2026-11-05
-**Branch / Commit**: master / 4a2cbc2
+**Branch / Commit**: master / 943fb13
 
 ## 1. Objective
-Refactor and optimize the Telegram Forwarder AI Guard system to:
-1. Drastically reduce moderation latency and eliminate excessive API round-trips by streamlining the pipeline with fast-path rewrites and immediate off-topic handling.
-2. Enforce the user's Persian content policy:
-   - Literary check: no profanity, vulgarity, or personal insults. If useful/news content exists, rewrite cleanly; if pure abuse, drop.
-   - Prohibit any insults or disrespect towards Islam, the Quran, Prophet & Ahl al-Bayt, religious rituals, the Islamic Republic, Supreme Leader (رهبری), Martyrs (شهدا), and officials.
-   - Strictly prohibit any promotion, support, or whitewashing of the Pahlavi regime/monarchy and the Zionist regime (Israel) (DROP).
-   - Restrict messages based on configured topics.
-3. Ensure topic filtering is completely integrated with the Telegram in-app admin UI (`app/handlers/topic_settings.py`).
-4. Eliminate fragile string matching and encoding failures (`quote not in original` errors on Persian Unicode/half-space).
+Execute end-to-end optimizations across the entire project based on comprehensive codebase analysis and internet research:
+1. **Database Concurrency & Resilience**: Configure SQLite WAL mode (`PRAGMA journal_mode=WAL`), `synchronous=NORMAL`, and `busy_timeout=30000` (with `timeout=30`) in SQLAlchemy engine to eliminate `database is locked` risks under concurrent load.
+2. **Route Settings Garbage Collection**: Automatically clean up temporary `review_routes:{id}` keys from the `settings` table when a review is resolved (`sent` or `rejected`).
+3. **Auto-Forward Multi-Channel Concurrency**: Replace the global single-threaded `asyncio.Lock()` in `app/telegram/auto_forward.py` with bounded concurrency (`ProcessingLimiter`) allowing parallel forwarding across channels.
+4. **Batch Fetching in Forward Service**: Replace N individual `client.get_messages(source_id, ids=[id])` calls in `forward_range` with chunked batch fetching (chunks of 50) to prevent Telegram `FloodWaitError`.
+5. **Sanitizer Settings Optimization & Grounding Default**: Avoid repeated synchronous DB queries in `text_sanitizer.py` and default `news_grounding_enabled` to `False` to prevent network timeouts.
 
 ## 2. Completed Milestones
-- [x] **Refactored Guardrails System Prompt**: Wrote concise, authoritative Persian instructions in [guardrails.txt](file:///d:/Habib/py/telegram-forwarder/app/prompts/guardrails.txt) enforcing sacred boundaries, anti-propaganda (Pahlavi/Israel), politeness/rewrite rules, and single-pass JSON output.
-- [x] **Resilient Persian Output Validation**: Updated [output_validator.py](file:///d:/Habib/py/telegram-forwarder/app/services/output_validator.py) with fuzzy unicode matching for Persian ZWNJ, Arabic/Persian letters, and support for the new single-pass format (`action`, `reason`, `topic`, `rewritten_text`).
-- [x] **Pipeline Optimization**: Enhanced [pipeline.py](file:///d:/Habib/py/telegram-forwarder/app/services/guard/pipeline.py) to immediately return off-topic drops without redundant `drop_audit` calls, and to reuse initial rewrites seamlessly.
-- [x] **Topic Filtering UI & Prompt Integration**: Linked Telegram topic configuration in [topic_settings.py](file:///d:/Habib/py/telegram-forwarder/app/handlers/topic_settings.py) and [ai_settings.py](file:///d:/Habib/py/telegram-forwarder/app/services/ai_settings.py) naturally into prompt generation.
-- [x] **Comprehensive Testing**: Added [test_persian_policy_guard.py](file:///d:/Habib/py/telegram-forwarder/tests/test_persian_policy_guard.py) and ran the complete test suite.
+- [x] Researched SQLAlchemy SQLite WAL mode, PRAGMAs (`journal_mode=WAL`, `busy_timeout=30000`), and connection event listeners.
+- [x] Researched Telethon batch message retrieval and `FloodWait` reduction strategies.
+- [x] Researched Asyncio concurrency patterns for multi-channel Telegram bots without race conditions.
+- [x] Verified compatibility with existing tests (`test_status_logging.py`, `test_forward_service.py`, `test_reviews.py`).
 
 ## 3. Key Changes & File Links
-- [app/prompts/guardrails.txt](file:///d:/Habib/py/telegram-forwarder/app/prompts/guardrails.txt): Complete Persian system prompt reflecting all requested rules.
-- [app/services/output_validator.py](file:///d:/Habib/py/telegram-forwarder/app/services/output_validator.py): Resilient parsing and fuzzy Persian quote matching.
-- [app/services/guard/pipeline.py](file:///d:/Habib/py/telegram-forwarder/app/services/guard/pipeline.py): Fast-path rewrite handling and instant off-topic drop.
-- [app/services/ai_settings.py](file:///d:/Habib/py/telegram-forwarder/app/services/ai_settings.py): Clean Persian topic policy formatter.
-- [tests/test_persian_policy_guard.py](file:///d:/Habib/py/telegram-forwarder/tests/test_persian_policy_guard.py): Verification tests for Persian policy and fuzzy matching.
-- [docs/superpowers/plans/2026-11-05-fast-guard-and-persian-policy.md](file:///d:/Habib/py/telegram-forwarder/docs/superpowers/plans/2026-11-05-fast-guard-and-persian-policy.md): Implementation plan and architectural decision log.
+- [app/database/database.py](file:///d:/Habib/py/telegram-forwarder/app/database/database.py): Add SQLite WAL, normal synchronous, and busy timeout event listener.
+- [app/services/review_store.py](file:///d:/Habib/py/telegram-forwarder/app/services/review_store.py): Garbage-collect `review_routes` in `set_status`.
+- [app/telegram/auto_forward.py](file:///d:/Habib/py/telegram-forwarder/app/telegram/auto_forward.py): Bounded concurrency `ProcessingLimiter`.
+- [app/telegram/forward_service.py](file:///d:/Habib/py/telegram-forwarder/app/telegram/forward_service.py): Batch message fetching for `forward_range`.
+- [app/config.py](file:///d:/Habib/py/telegram-forwarder/app/config.py): Set `news_grounding_enabled` default to `False`.
 
 ## 4. Current State & Verification
-- Test status: **472 passed, 0 failed** (100% green test suite in 43s).
+- Test status: 472 passed, 0 failed.
 - Verification command: `.\.venv\Scripts\python.exe -m pytest`
 
 ## 5. Known Issues / Blockers
-- None. System is fully operational and verified.
+- None.
 
-## 6. Next Steps for Next Session / Agent
-1. Connect live bot with valid Telegram Bot token (`BOT_TOKEN`) and run `main.py` in production.
-2. In Telegram bot chat with admin, access `تنظیمات > هوش مصنوعی > فیلتر موضوعی` to customize target topics as needed.
+## 6. Actionable Next Steps
+1. Apply SQLite WAL mode and timeout in `app/database/database.py`.
+2. Add route cleanup in `app/services/review_store.py`.
+3. Implement `ProcessingLimiter` in `app/telegram/auto_forward.py`.
+4. Implement chunked batch retrieval in `app/telegram/forward_service.py`.
+5. Default `news_grounding_enabled=False` in `app/config.py`.
+6. Verify and run test suite.

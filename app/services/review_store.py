@@ -218,6 +218,11 @@ def set_status(review_id, status, destination_message_id=None):
         row = session.get(ReviewRequest, review_id)
         row.status = status
         row.destination_message_id = destination_message_id
+        if status in {"sent", "rejected"}:
+            key = _route_key(review_id)
+            setting = session.scalar(select(Settings).where(Settings.key == key))
+            if setting is not None:
+                session.delete(setting)
 
 
 def mark_notified(review_id, admin_id, fingerprint=None, status=None, version=None):
