@@ -11,23 +11,51 @@ from app.config import settings
 from app.database.models import Base
 
 
+def normalize_database_url(url: str) -> str:
+    """Normalize database connection URLs for PostgreSQL and cloud providers."""
+    if not url:
+        return url
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
+    if url.startswith("postgresql://") and "+psycopg" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
 def _ensure_sqlite_dir(database_url: str) -> None:
     if database_url.startswith("sqlite:///"):
         db_path = Path(database_url.replace("sqlite:///", "", 1))
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
 
-_ensure_sqlite_dir(settings.database_url)
+def create_app_engine(database_url: str):
+    url = normalize_database_url(database_url)
+    _ensure_sqlite_dir(url)
+    is_sqlite = url.startswith("sqlite")
+    is_postgres = "postgres" in url
 
-engine = create_engine(
-    settings.database_url,
-    hide_parameters=True,
-    connect_args=(
-        {"check_same_thread": False, "timeout": 30}
-        if settings.database_url.startswith("sqlite")
-        else {}
-    ),
-)
+    if is_postgres:
+        return create_engine(
+            url,
+            hide_parameters=True,
+            pool_size=10,
+            max_overflow=20,
+            pool_timeout=30,
+            pool_pre_ping=True,
+            pool_recycle=300,
+        )
+    return create_engine(
+        url,
+        hide_parameters=True,
+        connect_args=(
+            {"check_same_thread": False, "timeout": 30}
+            if is_sqlite
+            else {}
+        ),
+    )
+
+
+engine = create_app_engine(settings.database_url)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 

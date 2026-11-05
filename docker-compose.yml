@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forwarder_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forwarder_db
+      POSTGRES_USER: forwarder
+      POSTGRES_PASSWORD: forwarder_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forwarder -d forwarder_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build: .
+    container_name: forwarder_bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://forwarder:forwarder_password@postgres:5432/forwarder_db
+      TELETHON_SESSION: /data/forwarder_session
+    volumes:
+      - ./data:/data
+      - ./sessions:/app/sessions
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:
