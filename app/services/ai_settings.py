@@ -32,14 +32,15 @@ def format_topic_policy(target_topics: tuple[str, ...], off_topic_action: str = 
     if not target_topics:
         return ""
     topics_list = ", ".join(f'"{t}"' for t in target_topics)
-    action_label = "SPAM" if off_topic_action.upper() == "DROP" else "REVIEW"
+    action_label = "DROP" if off_topic_action.upper() == "DROP" else "REVIEW"
+    compat_label = "SPAM" if action_label == "DROP" else "REVIEW"
     return (
-        f"\nTopic Filtering Policy (MANDATORY):\n"
-        f"- Target topics: [{topics_list}].\n"
-        f"- Verify whether the message is substantially related to at least one of these allowed target topics.\n"
-        f"- If the message is off-topic or unrelated to the target topics, classify it as {action_label} "
-        f'with violations=[{{"rule_id":"off_topic","evidence":"off_topic"}}] and ambiguities=["off_topic"].\n'
-        f"- If the message is related to at least one target topic, proceed with standard policy evaluation.\n"
+        f"\n==================================================\n"
+        f"دستورالعمل فیلتر موضوعی (MANDATORY Topic Filtering Policy):\n"
+        f"- موضوعات مجاز برای انتشار: [{topics_list}].\n"
+        f"- پیام را با موضوعات مجاز فوق بسنجید.\n"
+        f"- اگر پیام به هیچ‌یک از این موضوعات مرتبط نباشد (off_topic)، تصمیم باید {action_label} (یا برچسب {compat_label}) باشد.\n"
+        f"==================================================\n"
     )
 
 

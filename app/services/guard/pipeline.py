@@ -306,7 +306,32 @@ class GuardPipeline:
         self,
         original,
         decomposition,
+        initial_candidate=None,
     ):
+        if initial_candidate:
+            candidate = sanitize_text(
+                initial_candidate,
+                remove_links=True,
+                replacement=self.replacement,
+            )
+            if candidate.strip() and publication_is_clean(
+                candidate,
+                replacement=self.replacement,
+            ):
+                policy_v, meaning_v = await self._judge(
+                    original,
+                    candidate,
+                    decomposition,
+                )
+                if policy_v.passed and meaning_v.passed:
+                    runtime.metrics["verified_messages"] += 1
+                    return ModerationResult(
+                        Label.REWRITE,
+                        1,
+                        candidate,
+                        "AI",
+                    )
+
         draft = await self._write(
             original,
             decomposition,
@@ -474,6 +499,9 @@ class GuardPipeline:
             return ModerationResult(Label.REVIEW, 0, source="AI", reason="grounding_unresolved")
 
         if result.action == "DROP":
+            if result.reason == "off_topic":
+                return result
+
             first = result
 
             audited = await self.call(
@@ -552,6 +580,7 @@ class GuardPipeline:
             return await self._rewrite_flow(
                 original,
                 decomposition,
+                initial_candidate=result.text,
             )
 
         if result.action != "PUBLISH":
