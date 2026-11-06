@@ -210,10 +210,17 @@ def build_pending_list(rows, after_id=0):
     if nav_row:
         buttons.append(nav_row)
 
+    buttons.append([InlineKeyboardButton("🏠 بازگشت به داشبورد", callback_data="nav:home")])
+
     return text, InlineKeyboardMarkup(buttons)
 
 
-def card(row):
+def card(
+    row,
+    note: str | None = None,
+    show_preview: bool = False,
+    in_list: bool = False,
+):
     parsed = parse_review_reason(row.reason)
     blocked = parsed.kind is ReviewKind.GUARD_BLOCK
     reason = escape(get_row_reason(row))
@@ -236,9 +243,29 @@ def card(row):
             f"{destination_line}\n"
             f"دلیل: {reason}"
         )
+
+    draft = review_drafts.get(row.id)
+
+    if note:
+        text += f"\n\n💡 <b>وضعیت اقدام:</b> <i>{escape(note)}</i>"
+
+    if draft and getattr(draft, "text", None):
+        plain_draft = draft.text.strip()
+        text += (
+            f"\n\n📝 <b>پیش‌نویس بازنویسی AI (آماده تأیید):</b>\n"
+            f"<blockquote>{escape(plain_draft[:1500])}</blockquote>"
+        )
+
+    if show_preview:
+        preview_text = (row.preview or "[پیام بدون متن]").strip()
+        text += (
+            f"\n\n📄 <b>متن اصلی پیام:</b>\n"
+            f"<blockquote>{escape(preview_text[:1500])}</blockquote>"
+        )
+
     buttons = []
     if row.status == "pending":
-        suffix = f"{row.id}:{review_drafts.version(row)}"
+        suffix = f"{row.id}:{review_drafts.version(row, draft)}"
         rewrite_label = "🤖 ساخت نسخهٔ قابل انتشار" if blocked else "🤖 بازنویسی با AI"
         approve_label = "⚠️ ارسال با تأیید مدیر" if blocked else "✅ تأیید نسخهٔ فعلی"
         reject_label = "🗑 رد نهایی" if blocked else "⛔ رد پیام"
@@ -252,20 +279,34 @@ def card(row):
                 InlineKeyboardButton(reject_label, callback_data=f"review:reject:{suffix}"),
             ]
         )
-        buttons.append(
-            [InlineKeyboardButton("👁 مشاهده متن پیام", callback_data=f"review:preview:{suffix}")]
-        )
+        if show_preview:
+            buttons.append(
+                [InlineKeyboardButton("🙈 بستن متن پیام", callback_data=f"review:hide_preview:{suffix}")]
+            )
+        else:
+            buttons.append(
+                [InlineKeyboardButton("👁 مشاهده متن پیام", callback_data=f"review:preview:{suffix}")]
+            )
+        if in_list:
+            buttons.append(
+                [InlineKeyboardButton("📋 بازگشت به فهرست", callback_data="review:list:0")]
+            )
     else:
-        text += "\n⚠️ ارسال در جریان است یا نتیجه‌اش مشخص نیست. پیش از هر اقدام مقصد را بررسی کنید."
+        text += "\n\n⚠️ ارسال در جریان است یا نتیجه‌اش مشخص نیست. پیش از هر اقدام مقصد را بررسی کنید."
         if row.status == "uncertain":
             buttons.append(
                 [
                     InlineKeyboardButton(
                         "مقصد را بررسی کردم؛ بازگشت به صف",
-                        callback_data=f"review:reset:{row.id}:{review_drafts.version(row)}",
+                        callback_data=f"review:reset:{row.id}:{review_drafts.version(row, draft)}",
                     )
                 ]
             )
+        if in_list:
+            buttons.append(
+                [InlineKeyboardButton("📋 بازگشت به فهرست", callback_data="review:list:0")]
+            )
+
     source = str(row.source_id)
     if source.startswith("-100"):
         buttons.append(
@@ -287,15 +328,6 @@ async def send_card(bot, admin_id, row):
     draft = review_drafts.get(row.id)
     text, markup = card(row)
     version = review_drafts.version(row, draft)
-    if draft:
-        plain, _ = html.parse(draft.text)
-        for start in range(0, len(plain), 1500):
-            await bot.send_message(
-                chat_id=admin_id,
-                text="متن کامل پیش‌نویس:\n" + plain[start : start + 1500],
-                parse_mode=None,
-                disable_web_page_preview=True,
-            )
     try:
         await bot.send_message(
             chat_id=admin_id,
@@ -401,6 +433,9 @@ async def show_pending(update, context, after_id=0):
                 disable_web_page_preview=True,
             )
             return
+        except BadRequest as exc:
+            if "not modified" in str(exc).lower():
+                return
         except TelegramError:
             pass
 
@@ -424,6 +459,7 @@ async def on_callback(update, context):
     if len(parts) == 3 and parts[1] == "list" and parts[2].isdigit():
         await show_pending(update, context, int(parts[2]))
         return
+
     if len(parts) == 3 and parts[1] == "show" and parts[2].isdigit():
         row = review_store.get(int(parts[2]))
         if not row:
@@ -436,11 +472,62 @@ async def on_callback(update, context):
                 f"این پیام قبلاً تعیین تکلیف شده است (وضعیت: {row.status})."
             )
             return
+        if query and getattr(query, "message", None) and hasattr(query, "edit_message_text"):
+            text, markup = card(row, in_list=True)
+            try:
+                await query.edit_message_text(
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                return
+            except BadRequest as exc:
+                if "not modified" in str(exc).lower():
+                    return
+            except TelegramError:
+                pass
         await send_card(context.bot, update.effective_user.id, row)
         return
+
+    if parts[1] == "hide_preview" and len(parts) >= 3 and parts[2].isdigit():
+        row = review_store.get(int(parts[2]))
+        if row and query and getattr(query, "message", None) and hasattr(query, "edit_message_text"):
+            text, markup = card(row, show_preview=False, in_list=True)
+            try:
+                await query.edit_message_text(
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                return
+            except BadRequest as exc:
+                if "not modified" in str(exc).lower():
+                    return
+            except TelegramError:
+                pass
+        return
+
     if len(parts) >= 3 and parts[1] == "preview" and parts[2].isdigit():
         row = review_store.get(int(parts[2]))
         if row:
+            if query and getattr(query, "message", None) and hasattr(query, "edit_message_text"):
+                text, markup = card(row, show_preview=True, in_list=True)
+                try:
+                    await query.edit_message_text(
+                        text=text,
+                        reply_markup=markup,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                    return
+                except BadRequest as exc:
+                    if "not modified" in str(exc).lower():
+                        return
+                except TelegramError:
+                    pass
+            # Fallback for unit tests where query.message or edit_message_text is absent:
             preview_text = (row.preview or "[پیام بدون متن]").strip()
             await update.effective_message.reply_text(
                 f"📝 <b>متن پیام #{row.id}:</b>\n\n{escape(preview_text)}",
@@ -448,17 +535,20 @@ async def on_callback(update, context):
                 disable_web_page_preview=True,
             )
         return
+
     if (
         len(parts) != 4
         or parts[1] not in {"approve", "reject", "reset", "retry", "edit"}
         or not parts[2].isdigit()
     ):
         return
+
     if parts[1] == "edit":
         row = review_store.get(int(parts[2]))
         if row:
             await review_edit.begin(update, context, row, parts[3])
         return
+
     try:
         client = await ensure_started() if parts[1] in {"approve", "retry"} else None
     except Exception as exc:
@@ -467,13 +557,64 @@ async def on_callback(update, context):
             "اتصال تلگرام برقرار نشد. درخواست ذخیره شده؛ دوباره تلاش کنید."
         )
         return
+
     result = await decide(int(parts[2]), parts[3], parts[1], update.effective_user.id, client)
+    row = review_store.get(int(parts[2]))
+
+    # In-place update for interactive callbacks:
+    can_edit = bool(query and getattr(query, "message", None) and hasattr(query, "edit_message_text"))
+    if can_edit:
+        if parts[1] == "retry" and row and row.status == "pending":
+            text, markup = card(row, note=result, in_list=True)
+            version = review_drafts.version(row, review_drafts.get(row.id))
+            review_store.mark_notified(
+                row.id, update.effective_user.id, row.fingerprint, row.status, version
+            )
+            try:
+                await query.edit_message_text(
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                return
+            except BadRequest as exc:
+                if "not modified" in str(exc).lower():
+                    return
+                logger.warning("Could not edit retry card: %s", exc)
+            except TelegramError:
+                pass
+        elif parts[1] in {"approve", "reject"}:
+            done_icon = "✅" if parts[1] == "approve" else "⛔"
+            done_title = "تأیید شد" if parts[1] == "approve" else "رد شد"
+            done_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 بازگشت به صف بازبینی", callback_data="review:list:0")],
+                [InlineKeyboardButton("🏠 داشبورد", callback_data="nav:home")],
+            ])
+            done_text = (
+                f"{done_icon} <b>پیام #{parts[2]} {done_title}</b>\n\n"
+                f"<blockquote>{escape(result)}</blockquote>"
+            )
+            try:
+                await query.edit_message_text(
+                    text=done_text,
+                    reply_markup=done_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                return
+            except BadRequest as exc:
+                if "not modified" in str(exc).lower():
+                    return
+            except TelegramError:
+                pass
+
+    # Fallback when message cannot be edited in-place:
     try:
         await query.edit_message_reply_markup(reply_markup=None)
     except TelegramError:
         pass
     await update.effective_message.reply_text(result)
-    row = review_store.get(int(parts[2]))
     if row and row.status == "pending":
         version = await send_card(context.bot, update.effective_user.id, row)
         review_store.mark_notified(

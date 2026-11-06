@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.handlers.callback_routes import CALLBACK_ROUTES
@@ -128,3 +129,103 @@ async def test_system_health_report_generation(monkeypatch):
 def test_callback_routes_health_and_refresh():
     assert ("system", "health") in CALLBACK_ROUTES
     assert ("menu", "refresh") in CALLBACK_ROUTES
+
+
+@pytest.mark.asyncio
+async def test_review_actions_update_in_place_without_spam(monkeypatch):
+    from app.handlers import reviews
+    from app.services import review_store
+
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+
+    original = SimpleNamespace(id=50, message="متن تست برای بازنویسی", entities=[], media=None, poll=None)
+    row = review_store.enqueue(original, -100111, -100222, None, "abuse")
+
+    monkeypatch.setattr(reviews, "decide", AsyncMock(return_value="بازنگری آماده است؛ پس از مشاهده، تأیید کنید."))
+    monkeypatch.setattr(reviews, "ensure_started", AsyncMock())
+
+    edit_mock = AsyncMock()
+    reply_mock = AsyncMock()
+    query = SimpleNamespace(
+        data=f"review:retry:{row.id}:abc",
+        answer=AsyncMock(),
+        message=SimpleNamespace(message_id=99),
+        edit_message_text=edit_mock,
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=reply_mock),
+        callback_query=query,
+    )
+
+    await reviews.on_callback(update, SimpleNamespace())
+
+    edit_mock.assert_awaited_once()
+    reply_mock.assert_not_awaited()
+    assert "بازنگری آماده است" in edit_mock.call_args.kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_review_approve_updates_in_place_without_spam(monkeypatch):
+    from app.handlers import reviews
+    from app.services import review_store
+
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+    original = SimpleNamespace(id=51, message="پیام تایید", entities=[], media=None, poll=None)
+    row = review_store.enqueue(original, -100111, -100222, None, "review")
+
+    monkeypatch.setattr(reviews, "decide", AsyncMock(return_value="پیام با تأیید شما ارسال شد."))
+    monkeypatch.setattr(reviews, "ensure_started", AsyncMock())
+
+    edit_mock = AsyncMock()
+    reply_mock = AsyncMock()
+    query = SimpleNamespace(
+        data=f"review:approve:{row.id}:abc",
+        answer=AsyncMock(),
+        message=SimpleNamespace(message_id=100),
+        edit_message_text=edit_mock,
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=reply_mock),
+        callback_query=query,
+    )
+
+    await reviews.on_callback(update, SimpleNamespace())
+
+    edit_mock.assert_awaited_once()
+    reply_mock.assert_not_awaited()
+    assert "تأیید شد" in edit_mock.call_args.kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_review_preview_toggles_in_place(monkeypatch):
+    from app.handlers import reviews
+    from app.services import review_store
+
+    monkeypatch.setattr(reviews, "settings", SimpleNamespace(admin_ids=[111], is_admin=lambda x: x == 111))
+    original = SimpleNamespace(id=52, message="متن مخفی پیام آزمایشی", entities=[], media=None, poll=None)
+    row = review_store.enqueue(original, -100111, -100222, None, "review")
+
+    edit_mock = AsyncMock()
+    reply_mock = AsyncMock()
+    query = SimpleNamespace(
+        data=f"review:preview:{row.id}:abc",
+        answer=AsyncMock(),
+        message=SimpleNamespace(message_id=101),
+        edit_message_text=edit_mock,
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=111),
+        effective_chat=SimpleNamespace(type="private", id=111),
+        effective_message=SimpleNamespace(reply_text=reply_mock),
+        callback_query=query,
+    )
+
+    await reviews.on_callback(update, SimpleNamespace())
+
+    edit_mock.assert_awaited_once()
+    reply_mock.assert_not_awaited()
+    assert "متن مخفی پیام آزمایشی" in edit_mock.call_args.kwargs["text"]
