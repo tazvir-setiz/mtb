@@ -95,3 +95,9 @@ async def test_topic_filter_drop_off_topic_immediately(model):
     # Cleanup
     save_ai_value("topic_filter_enabled", "false")
     save_ai_value("target_topics", "")
+
+
+def test_anti_american_and_resistance_news_policy_is_in_guardrails():
+    from app.services import ai_service
+    assert "اخبار، تحلیل‌ها و مواضع ضدآمریکایی و جبهه مقاومت" in ai_service.DEFAULT_PROMPT
+

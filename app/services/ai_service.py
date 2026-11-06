@@ -127,6 +127,21 @@ async def _request(payload, text, config, limits, *, mode):
         ) from None
     except Exception as exc:
         status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        if isinstance(exc, httpx.HTTPStatusError):
+            logger.warning(
+                "AI request HTTP error model=%s stage=%s status=%d body=%s",
+                config.model,
+                mode,
+                exc.response.status_code,
+                exc.response.text[:500],
+            )
+        else:
+            logger.warning(
+                "AI request exception model=%s stage=%s error=%s",
+                config.model,
+                mode,
+                exc,
+            )
         reason = (
             "timeout"
             if isinstance(exc, (TimeoutError, httpx.TimeoutException))
@@ -468,6 +483,8 @@ Do NOT use POLITICAL merely for:
 - historical discussion
 - academic analysis
 - reporting that another person expressed a political view
+- news reports and analysis of foreign/US elections, leaders, and candidate defeats (e.g., Trump, US election coverage, CNN montages) -> OK
+- official statements and news reports regarding the Resistance Axis, IRGC, naval defense, and Strait of Hormuz actions -> OK
 
 Independent safety violations take precedence:
 - direct personal abuse -> ABUSE
@@ -830,6 +847,8 @@ and analysis are not POLITICAL merely because they mention politics:
 "در خبر درباره حماس صحبت شد" -> OK
 "این گزارش مواضع حزب‌الله را بررسی می‌کند" -> OK
 "انصارالله در این بیانیه موضع خود را اعلام کرد" -> OK
+"سی‌ان‌ان از شکست کاندیداهای ترامپ گزارش داد" -> OK
+"روابط عمومی سپاه از برخورد با شناورها یا نفتکش‌های متخلف در تنگه هرمز خبر داد" -> OK
 
 Political viewpoint alone is never ABUSE, HATE, THREAT or DROP. Direct
 personal abuse, threats, generalized attacks on people and other independent

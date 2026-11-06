@@ -16,6 +16,12 @@ def model_options(config, mode: str | None = None):
     )
     model_lower = config.model.lower()
     is_luna = "-luna" in model_lower or model_lower.endswith("-luna")
+    is_gpt = model_lower.startswith(("gpt-", "chatgpt-", "o1", "o3"))
+
+    if is_gpt:
+        if any(m in model_lower for m in ("o1", "o3")) or is_luna:
+            return {"reasoning_effort": "low"}
+        return {}
 
     if getattr(config, "thinking_disabled", False):
         if is_supported_host or "deepseek" in model_lower or is_luna:
@@ -23,8 +29,6 @@ def model_options(config, mode: str | None = None):
             if is_luna:
                 res["reasoning_effort"] = "low"
             return res
-        if any(m in model_lower for m in ("o1", "o3")):
-            return {"reasoning_effort": "low"}
         return {"thinking": {"type": "disabled"}}
 
     if is_supported_host or is_luna:
@@ -35,9 +39,6 @@ def model_options(config, mode: str | None = None):
             if mode in {"meaning", "rewrite", "repair"}:
                 return {"thinking": {"type": "enabled", "budget_tokens": 100}, "reasoning_effort": "low"}
             return {"thinking": {"type": "disabled"}, "reasoning_effort": "low"}
-
-    if any(m in model_lower for m in ("o1", "o3")):
-        return {"reasoning_effort": "low"}
 
     return {}
 
@@ -69,6 +70,12 @@ async def post_completion(client, config, payload):
             if attempt == attempts or (
                 status is not None and status not in {408, 429, 500, 502, 503, 504}
             ):
+                if isinstance(exc, httpx.HTTPStatusError):
+                    logger.warning(
+                        "AI request HTTP failure status=%s body=%s",
+                        status,
+                        exc.response.text[:500],
+                    )
                 raise
             logger.warning(
                 "AI transient failure type=%s status=%s retry=1 remaining_budget=shared",
