@@ -34,6 +34,14 @@ async def command_recent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
+async def command_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update):
+        await reject(update)
+        return
+
+    await dashboard.show_health_check(update, context)
+
+
 async def command_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_authorized(update):
         await reject(update)

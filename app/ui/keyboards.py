@@ -15,6 +15,7 @@ from app.ui.buttons.settings import topic_edit_menu as topic_edit_menu
 from app.ui.buttons.settings import topics_menu as topics_menu
 from app.ui.buttons.settings import username_menu as username_menu
 from app.ui.buttons.statistics import confirm_clear_statistics as confirm_clear_statistics
+from app.ui.buttons.statistics import health_menu as health_menu
 from app.ui.buttons.statistics import stats_menu as stats_menu
 from app.ui.buttons.transfer import confirm_transfer as confirm_transfer
 from app.ui.buttons.transfer import failed_messages_menu as failed_messages_menu

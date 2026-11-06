@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from html import escape
+from sqlalchemy import func
 
 from telegram import Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from app.config import settings
 from app.database.database import get_session
-from app.database.models import ChannelType
+from app.database.models import ChannelType, ReviewRequest
 from app.database.repository import (
     ChannelRepository,
     ForwardedMessageRepository,
@@ -15,6 +17,7 @@ from app.database.repository import (
 )
 from app.handlers.states import State, reset, set_state
 from app.services.ai_settings import load_ai_settings
+from app.services.statistics_service import get_system_health_report
 from app.telegram import auto_forward
 from app.telegram.client import ensure_started
 from app.ui import keyboards, messages
@@ -34,16 +37,25 @@ def _dashboard_content() -> tuple[str, object]:
         destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
         stats = ForwardedMessageRepository.stats(session)
         signature = SettingsRepository.get(session, "signature_text")
+        pending_count = (
+            session.query(func.count(ReviewRequest.id))
+            .filter(ReviewRequest.status.in_(["pending", "sending", "uncertain"]))
+            .scalar()
+            or 0
+        )
 
     auto_enabled = auto_forward.is_enabled()
+    ai_cfg = load_ai_settings(settings)
 
     text = messages.dashboard(
         _channel_summary(sources),
         _channel_summary(destinations),
         stats["success"],
         auto_enabled,
-        ai_enabled=load_ai_settings(settings).enabled,
+        ai_enabled=ai_cfg.enabled,
         signature_enabled=bool(signature),
+        pending_reviews=pending_count,
+        ai_model=ai_cfg.model if ai_cfg.enabled else None,
     )
     markup = keyboards.main_menu(
         source_ready=bool(sources),
@@ -51,6 +63,7 @@ def _dashboard_content() -> tuple[str, object]:
         auto_forward_enabled=auto_enabled,
         source_id=sources[0].telegram_id if len(sources) == 1 else None,
         destination_id=destinations[0].telegram_id if len(destinations) == 1 else None,
+        pending_reviews=pending_count,
     )
     return text, markup
 
@@ -64,13 +77,38 @@ async def show_dashboard(
     text, markup = _dashboard_content()
 
     if edit and update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=markup)
+        try:
+            await update.callback_query.edit_message_text(text, reply_markup=markup)
+        except BadRequest as exc:
+            if "not modified" not in str(exc).lower():
+                raise
     elif update.callback_query:
         await update.callback_query.message.reply_text(text, reply_markup=markup)
     else:
         await update.effective_message.reply_text(text, reply_markup=markup)
 
     set_state(context.user_data, State.MAIN_MENU)
+
+
+async def refresh_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.callback_query:
+        await update.callback_query.answer("داشبورد به‌روزرسانی شد")
+    await show_dashboard(update, context, edit=True)
+
+
+async def show_health_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.callback_query:
+        await update.callback_query.answer("در حال سنجش وضعیت سلامت سیستم...")
+    report = await get_system_health_report()
+    markup = keyboards.health_menu()
+    if update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(report, reply_markup=markup)
+        except BadRequest as exc:
+            if "not modified" not in str(exc).lower():
+                raise
+    else:
+        await update.effective_message.reply_text(report, reply_markup=markup)
 
 
 async def toggle_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

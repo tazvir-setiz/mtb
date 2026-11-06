@@ -14,6 +14,7 @@ async def setup_bot_ui(bot: Bot) -> None:
         BotCommand("menu", "🏠 داشبورد اصلی"),
         BotCommand("stats", "📊 آمار انتقال‌ها"),
         BotCommand("recent", "🕘 پیام‌های اخیر"),
+        BotCommand("status", "🩺 تست سلامت سیستم"),
         BotCommand("reviews", "🔎 تصمیم‌گیری درباره پیام‌های متوقف‌شده"),
         BotCommand("settings", "⚙️ تنظیمات"),
         BotCommand("help", "❓ راهنما"),

@@ -11,6 +11,8 @@ def main_menu(
     auto_forward_enabled: bool = False,
     source_id: int | None = None,
     destination_id: int | None = None,
+    *,
+    pending_reviews: int = 0,
 ) -> InlineKeyboardMarkup:
     ready = source_ready and destination_ready
 
@@ -53,12 +55,23 @@ def main_menu(
     else:
         rows.append([_disabled("🔒 انتقال · ابتدا مبدأ و مقصد را تنظیم کنید")])
 
+    review_label = (
+        f"🔎 پیام‌های نیازمند تصمیم ({pending_reviews})"
+        if pending_reviews > 0
+        else "🔎 پیام‌های نیازمند تصمیم"
+    )
+    review_style = STYLE_PRIMARY if pending_reviews > 0 else None
+
     rows.extend(
         [
-            [_cb("🔎 پیام‌های نیازمند تصمیم", "menu:reviews")],
+            [_cb(review_label, "menu:reviews", style=review_style)],
             [
-                _cb("🕘 اخیر", "menu:recent"),
-                _cb("📊 آمار", "menu:stats", style=STYLE_PRIMARY),
+                _cb("📊 آمار و عملکرد", "menu:stats", style=STYLE_PRIMARY),
+                _cb("🕘 پیام‌های اخیر", "menu:recent"),
+            ],
+            [
+                _cb("🩺 تست سلامت", "system:health"),
+                _cb("🔄 به‌روزرسانی", "menu:refresh"),
             ],
             [
                 _cb("⚙️ تنظیمات", "menu:settings"),

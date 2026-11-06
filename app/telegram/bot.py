@@ -12,6 +12,7 @@ from app.config import settings
 from app.handlers import guard_settings, reviews, start
 from app.handlers.commands import (
     command_cancel,
+    command_health,
     command_help,
     command_recent,
     command_settings,
@@ -43,6 +44,8 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("menu", start.handle_start))
     application.add_handler(CommandHandler("stats", command_stats))
     application.add_handler(CommandHandler("recent", command_recent))
+    application.add_handler(CommandHandler("health", command_health))
+    application.add_handler(CommandHandler("status", command_health))
     application.add_handler(CommandHandler("settings", command_settings))
     application.add_handler(CommandHandler("help", command_help))
     application.add_handler(CommandHandler("cancel", command_cancel))

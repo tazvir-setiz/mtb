@@ -46,6 +46,8 @@ CALLBACK_ROUTES: dict[tuple[str, str], CallbackHandler] = {
     ("menu", "transfer"): transfer.show_transfer_menu,
     ("menu", "recent"): statistics.show_recent,
     ("menu", "stats"): statistics.show_statistics,
+    ("menu", "refresh"): dashboard.refresh_dashboard,
+    ("system", "health"): dashboard.show_health_check,
     ("menu", "settings"): settings_handlers.show_settings,
     ("menu", "help"): settings_handlers.show_help,
     ("menu", "auto_toggle"): dashboard.toggle_auto_forward,
