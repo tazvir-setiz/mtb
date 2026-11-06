@@ -1,56 +1,62 @@
-# Multi-channel forwarding audit
+# راهنمای فوروارد چندکاناله و همزمانی (Multi-Channel Forwarding)
 
-## User flows
+پروژه **MTB Telegram Forwarder** دارای یک معماری پیشرفته برای ارسال پیام از چندین کانال مبدأ به چندین کانال مقصد (ماتریس چند به چند یا N→M) به همراه مدیریت قفل‌های همزمانی و بهینه‌سازی توکن است.
 
-- Channel management lists every source/destination, ten at a time. Add preserves existing channels; removal uses the exact role and Telegram ID. The same Telegram channel can have both roles. Listener refresh removes the previous handler; queued events from that handler are ignored.
-- Manual transfer selects one historical source and a destination subset before accepting a range or explicit message IDs. A message ID is never interpreted across multiple sources. Confirmation revalidates the stored selection against current configuration.
-- Auto-forward subscribes to all configured sources and sends to all configured destinations. Both auto and manual forwarding use `fanout.fan_out`: one Guard preparation followed by independent destination deliveries.
-- Progress and final counts describe destination deliveries. Recent history and errors include route IDs. Dashboard and statistics show multiple channels explicitly.
+---
 
-## Persistence and compatibility
+## ۱. حالت‌های انتقال محتوا
 
-- Each destination retains its own ordinary `ForwardJob` and `JobMessageResult` ledger. `job_routes:<primary_job_id>` stores the ordered list of participating jobs, and `job_selection:<job_id>` preserves sparse selections. Missing group metadata means the old job's one route. Pause/resume uses the least advanced route cursor; successful deliveries remain protected during replay.
-- Retry reads job ledgers as well as legacy forwarding records, because another operation can take ownership of the canonical route record. It sends only failed/missing routes, never successful or skipped routes.
-- `review_routes:<review_id>` retains the existing JSON list of `{destination_id, job_id}` objects. Additional destinations merge into one review for a source message. Invalid, empty, or missing metadata falls back to the old `ReviewRequest.destination_id/job_id` fields. Approving an old jobless review creates a delivery job so future flows can see its success.
-- Full history clearing removes reviews, drafts, route metadata, job selections, jobs, result ledgers, and send markers together. Ordinary configuration remains intact.
-- SQLite startup only replaces the old unique Telegram-ID index with uniqueness on `(type, telegram_id)` plus a lookup index. It does not rebuild tables, reset data, or change existing row IDs. The migration is idempotent.
+### ۱. انتقال زنده خودکار (Live Auto-Forwarding)
+- با روشن کردن کلید «انتقال خودکار» در داشبورد، یک شنونده (Event Listener) سراسری در Telethon فعال می‌شود.
+- به محض انتشار هر پیام جدید در **هر یک از کانال‌های مبدأ**، پیام بلافاصله دریافت، نرمال‌سازی و وارد پایپ‌لاین گارد می‌شود.
+- در صورت تأیید گارد، پیام به **تمام کانال‌های مقصد فعال** ارسال می‌گردد.
 
-## Concurrency and uncertain delivery
+### ۲. انتقال دسته‌ای پیام‌های گذشته (Batch Transfer)
+- برای انتقال آرشیو پیام‌های قبلی، مدیر می‌تواند از منوی **🚀 انتقال پیام‌ها** استفاده کند:
+  - **انتقال بر اساس بازه شناسه (Range):** تعیین شماره پیام شروع (`Start ID`) و پایان (`End ID`).
+  - **انتقال پیام‌های انتخابی (Explicit IDs):** وارد کردن چند شماره پیام به صورت دستی (مثلاً: `100, 105, 120`).
+- امکان توقف موقت (`Pause`)، ادامه انتقال (`Resume`) و تلاش مجدد برای خطاخورده‌ها (`Retry`) وجود دارد.
 
-All application send flows acquire a source-message lock before review lookup/preparation, then the same canonical route lock for delivery. Route identity is `(source_channel_id, source_message_id, destination_channel_id)`. The success check is repeated inside the route lock, and successful results are immutable.
+---
 
-A `route_sending:<source>:<message>:<destination>` marker is committed before sending. Success is recorded before removing the marker. Definite Telegram rejections remove it; unknown/network outcomes and process interruption leave it in place. Subsequent attempts require review. Admin reset is the explicit authorization to retry an uncertain outcome; other successful destinations are still excluded. These locks coordinate the application's single event loop, as in the existing deployment; this is not a distributed worker queue.
+## ۲. معماری توزیع Fan-Out و بهینه‌سازی هزینه هوش مصنوعی
 
-Review approval uses the same delivery primitive, prepares with `approved=True`, and does not rerun Guard. Only the explicit AI rewrite action invokes the rewriting pipeline. Known destination failures leave the shared review pending for the missing routes.
+یکی از بزرگ‌ترین مزایای معماری جدید سیستم، **تفکیک مرحله پردازش از مرحله ارسال** است:
 
-## Guard Block review lifecycle
+```text
+               پیام جدید از کانال مبدأ
+                         ↓
+             یک‌بار پردازش در گارد هوش مصنوعی
+              (فقط ۱ درخواست به مدل و کسر توکن)
+                         ↓
+               تولید خروجی نهایی / تلطیف
+                         ↓
+         ┌───────────────┼───────────────┐
+         ↓               ↓               ↓
+     ارسال به        ارسال به        ارسال به
+    مقصد اول        مقصد دوم        مقصد سوم
+```
 
-Guard `PUBLISH` continues through normal fan-out. Guard `REVIEW` queues an ordinary review. Guard `DROP` never publishes automatically: `ai_service` encodes the result as `guard_block:<label>:<reason>` in the existing review `reason` field. `review_kind` is the only parser/encoder for this compatibility representation; legacy `guard_block:<reason>` rows remain recognizable. The original DROP label and detailed reason stay attached to the review while an AI or manual candidate is stored separately in `ReviewDraft`.
+اگر ۵ کانال مقصد تنظیم شده باشد، هوش مصنوعی ۵ بار پیام را تحلیل نمی‌کند؛ بلکه پیام **فقط یک‌بار** از گارد عبور کرده و متن نهایی به تمام ۵ مقصد فرستاده می‌شود. این قابلیت هزینه مصرف توکن و زمان تأخیر را به میزان چشم‌گیری کاهش می‌دهد.
 
-Guard Block cards have a distinct warning and show the DROP decision, source/message identity, and associated destination routes. Their actions are explicit administrator override, AI candidate generation, manual edit, and final rejection. Rewrite and edit only save a candidate. Approval uses the routes persisted for that review, bypasses a second Guard pass to avoid a DROP→REVIEW loop, applies the normal approved-content sanitizer, and uses the shared delivery marker and immutable success ledger. A conditional `pending`→`sending` claim lets one administrator act; delivery locks and destination ledgers prevent duplicate sends across routes.
+---
 
-If an administrator acts on a stale fingerprint, the old approval is invalidated, the changed source content is rechecked by Guard, and the changed version is queued for a new decision. A newly returned DROP creates a new Guard Block reason and label. Final rejection remains terminal across duplicate events, source edits, retries, and startup recovery; new routes for that same source message are marked skipped as part of the rejection. Interrupted sends recover as `uncertain`, requiring an administrator to check destinations and explicitly reopen before retrying.
+## ۳. کنترل همزمانی و جلوگیری از فریز (Bounded Concurrency)
 
-This lifecycle adds no database columns: it uses the existing `ReviewRequest.reason`, `status`, `fingerprint`, route metadata, and `ReviewDraft`. Existing SQLite tables therefore need no Guard Block schema migration.
+برای جلوگیری از مسدود شدن جریان پردازش هنگام انتشار همزمان در چند کانال پرمخاطب:
 
-## Single-channel search classification
+1. **محدودکننده همزمانی (`ProcessingLimiter`):**  
+   ظرفیت پردازش همزمان کانال‌ها روی سقف ایمن **۵ اسلات موازی** تنظیم شده است. اگر در یک ثانیه ۱۰ پیام از مبداهای مختلف برسد، ۵ پیام به صورت همزمان وارد فرآیند فیلتر و ارسال شده و پیام‌های بعدی در صف انتظار (Waiting Queue) قرار می‌گیرند تا بدون تداخل پردازش شوند.
+2. **قفل سطح پیام (`message_lock`):**  
+   برای هر سه‌گانه `(کانال مبدأ، شماره پیام، کانال مقصد)` یک قفل مستقل ایجاد می‌شود تا از خطای ارسال دوبل (Duplicate Delivery) در شرایط دریافت مکرر رویداد تلگرام جلوگیری شود.
+3. **دفتر کل وضعیت‌ها (`JobMessageResult`):**  
+   نتیجه ارسال به هر کانال مقصد به صورت مستقل ثبت می‌شود. اگر پیام به مقصد اول و دوم ارسال شود ولی در مقصد سوم به دلیل خطای شبکه ناموفق باشد، سیستم پیام را به عنوان «ارسال ناقص» ثبت می‌کند و در تلاش مجدد (Retry)، پیام فقط برای مقصد سوم بازفرستاده می‌شود و مقصدهای اول و دوم دست‌نخورده باقی می‌مانند.
 
-| Occurrences | Classification |
-| --- | --- |
-| `ChannelRepository.get_by_type` definition and repository tests | Legacy low-level compatibility API; no application screen or transfer uses it to choose a route. |
-| `get_channels(selection)` in transfer handlers/input | Explicit selected source and selected destination list; singleton defaults preserve the old configuration. No argumentless application calls remain. |
-| `ForwardJob.source_channel_id/destination_channel_id`, repository models, result storage | Valid per-route fields retained for SQLite compatibility. |
-| `job.source_channel_id/destination_channel_id` in resume/retry | Legacy call signature; the runner resolves the entire persisted job group before sending. |
-| `ChannelType.SOURCE/DESTINATION` in management/dashboard/statistics/listener | All-channel queries or exact role operations. |
-| `send_prepared_message` in fan-out/review | Called through the common locked delivery primitive. |
-| `prepare_message` in auto/manual | Passed once to common fan-out, before its destination loop. |
-| `prepare_message` in review approval | Once with `approved=True`; no Guard rerun. |
-| `message_sender.send_message`, `_send_message`, `fetch_and_send_message` | Retained low-level compatibility helpers tested independently; production auto/manual/review flows use preparation plus common delivery. |
-| `review_store.enqueue` | Compatibility wrapper for one route; application fan-out uses `enqueue_routes`. |
-| Bot `send_message` in review notifications | Administrative notifications, not channel forwarding. |
+---
 
-## Validation scope
+## ۴. مدیریت وقفه‌های تلگرام (FloodWait Handling)
 
-`tests/test_multi_channel.py` covers the 1→1, 1→N, N→1, N→N matrix, Guard spies, shared review/approval/rejection, partial failures, route reassignment, missing/skipped/successful retries, uncertainty/restart markers, cross-flow races, selection, pagination, listener refresh, legacy review resolution, and SQLite index migration. Existing forwarding, UI, review, and repository regressions remain in place.
-
-The starting branch's full suite could not collect eight Guard files because its tests referenced the removed composite Verification API. With explicit user authorization, tests were migrated to the existing separate classification/decomposition/rewrite/policy/meaning stages. Confirmed regressions in failure-circuit accounting, schema diagnostics, and raw-response logging were repaired; documented limits now match Guard defaults. No tests were deleted, skipped, or marked xfail.
+تلگرام برای جلوگیری از اسپم، در صورت ارسال رگباری پیام‌ها محدودیت موقت موسوم به `FloodWait` اعمال می‌کند:
+- سیستم به صورت کاملاً خودکار مدت زمان وقفه مورد نیاز تلگرام را شناسایی کرده و انتقال را به حالت استراحت ایمن می‌برد.
+- با پایان ثانیه‌های وقفه، انتقال بدون نیاز به دخالت ادمین از همان نقطه ادامه می‌یابد.
+- برای پیشگیری از وقوع وقفه، پارامتر `FORWARD_DELAY` (فاصله زمانی پیش‌فرض بین پیام‌ها) در فایل تنظیمات `.env` تعبیه شده است.

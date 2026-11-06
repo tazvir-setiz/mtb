@@ -1,164 +1,121 @@
-# راه‌اندازی مرحله‌به‌مرحله روی Railway
+# راهنمای جامع استقرار و راه‌اندازی سرور (Deployment & Hosting)
 
-این راهنما مخصوص همین پروژه است. ربات یک پردازش دائمی Python است؛ دامنه، وب‌سرور، پورت عمومی و webhook لازم ندارد. دستورهای PowerShell روی کامپیوتر خودتان اجرا می‌شوند. نصب تازه، دیتابیس و تنظیمات نصب قبلی را خودکار منتقل نمی‌کند.
+این راهنما آموزش کامل نحوه استقرار ربات **MTB Telegram Forwarder** را بر روی سرویس‌های ابری نظیر **Railway**، سرورهای مجازی شخصی (**VPS Linux**) و کانتینرهای **Docker** ارائه می‌دهد.
 
-## ۱. اطلاعات لازم
+ربات یک سرویس دائمی (Long-running Background Daemon) است و نیازی به دامنه اختصاصی، وب‌سرور، وب‌هوک (Webhook) یا باز کردن پورت اینترنتی ندارد.
 
-| مقدار | روش تهیه |
-|---|---|
-| `BOT_TOKEN` | در تلگرام، `/newbot` را برای `@BotFather` بفرستید |
-| `API_ID` و `API_HASH` | در `my.telegram.org` بخش API development tools برنامه بسازید |
-| `ADMIN_IDS` | شناسه عددی حساب مدیر؛ چند مدیر با کاما مانند `123456789,987654321` |
-| حساب تلگرام | حساب عضو مبدأ و دارای اجازه انتشار در مقصد |
-| GitHub و Railway | مخزن نسخه موردنظر و حساب دارای امکان اجرای سرویس دائمی و Volume |
+---
 
-شناسه مدیر، شماره تلفن، آیدی کانال یا نام کاربری نیست؛ آن را با ابزار معتبر نمایش شناسه حساب بررسی کنید. حساب کاربری Telethon و ربات مدیریتی دو هویت جدا هستند. دسترسی خواندن مبدأ و نوشتن مقصد برای **حساب کاربری واردشده در Telethon** لازم است.
+## ۱. پیش‌نیازها و اطلاعات هویتی مورد نیاز
 
-منابع: [ساخت ربات](https://core.telegram.org/bots/tutorial)، [دریافت API ID](https://core.telegram.org/api/obtaining_api_id).
+| متغیر محیطی | توضیح | روش دریافت |
+|---|---|---|
+| `BOT_TOKEN` | توکن ربات تلگرامی مدیریت | ارسال `/newbot` به ربات رسمی [@BotFather](https://t.me/BotFather) |
+| `API_ID` و `API_HASH` | کلیدهای اتصال کلاینت Telethon | ثبت‌نام و ساخت App در سایت رسمی [my.telegram.org](https://my.telegram.org) |
+| `ADMIN_IDS` | شناسه‌های عددی ادمین‌های ربات | شناسه عددی اکانت خود را از ربات‌هایی مثل [@userinfobot](https://t.me/userinfobot) بگیرید |
+| اکانت تلگرام | شماره تلفنی که عضو کانال‌هاست | این اکانت باید عضو کانال‌های مبدأ و ادمین کانال‌های مقصد باشد |
 
-## ۲. آماده‌سازی نشست روی کامپیوتر
+> [!IMPORTANT]
+> ربات مدیریتی (`BOT_TOKEN`) و اکانت کاربری Telethon دو هویت کاملاً مجزا هستند. دسترسی خواندن از کانال‌های خصوصی مبدأ و اجازه انتشار در کانال‌های مقصد متعلق به **اکانت کاربری Telethon** است.
 
-۱. ربات محلی را با `Ctrl+C` متوقف کنید.
-۲. در PowerShell به پروژه بروید:
+---
 
-```powershell
-cd "D:\Habib\mtb\New folder\telegram-forwarder"
+## ۲. آماده‌سازی و استخراج رشته سشن (Session Generation)
+
+از آنجا که سرورهای ابری نظیر Railway کنسول تعاملی برای وارد کردن کد پیامک ورود ندارند، ابتدا باید ورود را یک‌بار روی کامپیوتر خود انجام داده و رشته نشست (`TELETHON_STRING_SESSION`) را استخراج کنید:
+
+1. در خط فرمان یا PowerShell به پوشه پروژه بروید.
+2. اسکریپت استخراج سشن را اجرا کنید:
+   ```powershell
+   python -m scripts.export_session
+   ```
+3. شماره تلفن بین‌المللی اکانت (مثلاً `+989123456789`) را وارد کنید.
+4. کد تأیید ارسال‌شده در تلگرام و رمز عبور دومرحله‌ای (در صورت داشتن 2FA) را وارد نمایید.
+5. پس از ورود موفق، رشته نشست طولانی در فایل `sessions/railway-session.txt` ذخیره می‌شود.
+
+> [!CAUTION]
+> این رشته نشست مجوز ورود به حساب کاربری تلگرام شماست! هرگز آن را در گیت‌هاب کامیت نکنید یا در گروه‌ها نفرستید.
+
+---
+
+## ۳. استقرار روی سرویس ابری Railway
+
+1. پروژه خود را در گیت‌هاب (به صورت مخزن خصوصی یا عمومی) Push کنید.
+2. در داشبورد [Railway.app](https://railway.app)، یک **New Project** بسازید و گزینه **Deploy from GitHub repo** را انتخاب کنید.
+3. در تنظیمات سرویس (Settings)، بررسی کنید که بخش Build از **Dockerfile** استفاده کند.
+4. **ایجاد حجم دائمی (Persistent Volume):**
+   - وارد تب **Volume** سرویس شوید و دکمه **Add Volume** را بزنید.
+   - مقدار Mount Path را دقیقاً `/data` قرار دهید. این کار باعث می‌شود دیتابیس و فایل‌های سشن با هر بار راه‌اندازی سرور حفظ شوند.
+5. **تنظیم متغیرهای محیطی (Variables):**
+   در تب **Variables** مقادیر زیر را وارد کنید:
+   ```dotenv
+   BOT_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
+   API_ID=12345678
+   API_HASH=0123456789abcdef0123456789abcdef
+   ADMIN_IDS=123456789
+   DATABASE_URL=sqlite:////data/forwarder.db
+   TELETHON_SESSION=/data/forwarder_session
+   TELETHON_STRING_SESSION=متن_کپی_شده_از_railway-session.txt
+   AI_ENABLED=true
+   AI_API_KEY=کلید_سرویس_هوش_مصنوعی_شما
+   AI_MODEL=google/gemini-2.5-flash
+   AI_BASE_URL=https://openrouter.ai/api/v1
+   LOG_LEVEL=INFO
+   ```
+6. سرویس به صورت خودکار بیلد و اجرا می‌شود. اکنون می‌توانید در تلگرام دستور `/start` را برای ربات خود ارسال کنید.
+
+---
+
+## ۴. استقرار روی سرور لینوکس شخصی (Ubuntu / Debian VPS)
+
+اگر مایلید ربات را روی سرور مجازی اختصاصی خود اجرا کنید:
+
+### ۱. نصب پیش‌نیازها و پایتون:
+```bash
+sudo apt update && sudo apt install -y python3 python3-venv git
+git clone https://github.com/your-username/telegram-forwarder.git
+cd telegram-forwarder
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+nano .env  # اطلاعات توکن و دیتابیس را وارد کنید
 ```
 
-۳. اگر محیط مجازی ندارید، با Python 3.12 بسازید؛ اگر دارید فقط نصب وابستگی‌ها را اجرا کنید:
-
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+### ۲. ساخت سرویس سیستمی (Systemd Service) برای اجرای دائمی:
+یک فایل سرویس ایجاد کنید:
+```bash
+sudo nano /etc/systemd/system/telegram-forwarder.service
 ```
 
-۴. اگر `.env` ندارید، از `.env.example` کپی بگیرید و نام آن را `.env` بگذارید؛ فایل موجود را بازنویسی نکنید. چهار اعتبارنامه مرحله اول را تنظیم کنید. مسیرهای محلی:
+محتوای زیر را داخل آن قرار دهید:
+```ini
+[Unit]
+Description=MTB Telegram Forwarder Bot
+After=network.target
 
-```dotenv
-DATABASE_URL=sqlite:///data/forwarder.db
-TELETHON_SESSION=sessions/forwarder_session
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/telegram-forwarder
+ExecStart=/root/telegram-forwarder/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/root/telegram-forwarder/.env
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-۵. اگر تلگرام مستقیم وصل می‌شود `PROXY_ENABLED=false` بگذارید؛ در غیر این صورت تنظیمات `PROXY_*` الگو را با پروکسی واقعاً فعال کامپیوتر تطبیق دهید.
-۶. نشست را صادر کنید؛ نام ماژول دقیقاً `export_session` است:
-
-```powershell
-.\.venv\Scripts\python.exe -m scripts.export_session
+فعال‌سازی و شروع سرویس:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable telegram-forwarder
+sudo systemctl start telegram-forwarder
+sudo systemctl status telegram-forwarder
 ```
 
-در صورت نیاز، شماره حساب، کد ورود و رمز دومرحله‌ای پرسیده می‌شود. خروجی موفق در `sessions/railway-session.txt` ذخیره می‌شود. این فایل مجوز ورود حساب است؛ آن را در Git، لاگ یا گفت‌وگو نفرستید. محتوا را فقط در مرحله ۵ استفاده کنید.
-
-اسکریپت فایل موجود را بازنویسی نمی‌کند: خروجی قبلی معتبر را استفاده کنید یا برای خروجی تازه، فایل قبلی را به محل خصوصی پشتیبان منتقل کنید. اگر Timeout رخ داد، ابتدا اتصال یا پروکسی کامپیوتر را اصلاح کنید؛ timeout گارد AI ارتباطی با ورود تلگرام ندارد.
-
-## ۳. ساخت سرویس
-
-۱. کد نسخه موردنظر را در GitHub قرار دهید؛ `.env`، نشست‌ها و دیتابیس نباید داخل مخزن باشند.
-۲. در Railway پروژه بسازید و سرویس را به مخزن GitHub متصل کنید.
-۳. شاخه حاوی نسخه موردنظر را انتخاب کنید.
-۴. Root Directory باید پوشه حاوی `Dockerfile` و `main.py` باشد؛ اگر در ریشه مخزن هستند همان ریشه را نگه دارید.
-۵. بررسی کنید build از Dockerfile استفاده کند؛ این فایل Python 3.12 و وابستگی‌ها را نصب می‌کند.
-
-شکست اجرای اول پیش از ثبت اعتبارنامه‌ها طبیعی است؛ مراحل بعد را کامل و دوباره Deploy کنید. [مرجع استقرار](https://docs.railway.com/deployments/reference)
-
-## ۴. فضای دائمی
-
-به **همان سرویس** یک Volume اضافه کنید و Mount Path را دقیقاً `/data` قرار دهید.
-
-| مسیر | کاربرد |
-|---|---|
-| `/data/forwarder.db` | تنظیمات، کانال‌ها، تاریخچه و درخواست‌های بررسی |
-| `/data/forwarder_session.session` | نشست ورود حساب تلگرام |
-
-Volume را هنگام آپدیت حذف نکنید. فضای خالی یعنی نصب تازه؛ دیتابیس کامپیوتر خودکار آپلود نمی‌شود. [راهنمای Volume](https://docs.railway.com/volumes)
-
-## ۵. Variables
-
-در بخش Variables، مقادیر را تک‌به‌تک یا با Raw Editor وارد کنید. `.env.railway.example` الگوی کامل است. اعتبارنامه‌های نمونه زیر را جایگزین کنید:
-
-```dotenv
-BOT_TOKEN=REPLACE_WITH_BOT_TOKEN
-API_ID=123456
-API_HASH=REPLACE_WITH_API_HASH
-ADMIN_IDS=123456789
-TELETHON_STRING_SESSION=REPLACE_WITH_SESSION_FILE_CONTENT
-DATABASE_URL=sqlite:////data/forwarder.db
-TELETHON_SESSION=/data/forwarder_session
-PROXY_ENABLED=false
-LOG_LEVEL=INFO
-LOG_TO_FILE=false
-FORWARD_DELAY=1.5
-PROGRESS_UPDATE_INTERVAL=3
-AI_ENABLED=false
-AI_GUARD_MAX_OUTPUT_TOKENS=1800
-AI_GUARD_TIMEOUT_SECONDS=60
-AI_GUARD_TOTAL_TIMEOUT_SECONDS=150
-AI_GUARD_MAX_STAGES=12
-AI_GUARD_MAX_REQUESTS=12
+برای مشاهده لاگ‌های زنده سرویس در سرور:
+```bash
+journalctl -u telegram-forwarder -f
 ```
-
-بعد از `sqlite:` چهار اسلش لازم است. به مسیر نشست پسوند اضافه نکنید. رشته نشست باید کامل و بدون کوتیشن اضافه باشد. پروکسی `127.0.0.1` کامپیوتر شما روی Railway قابل استفاده نیست؛ سرور باید اتصال مستقیم یا پروکسی قابل دسترس خودش داشته باشد.
-
-`AI_ENABLED=false` برای تکمیل نصب اولیه است و یعنی پالایش AI انجام نمی‌شود؛ تا مرحله ۸ انتقال خودکار را روشن نکنید. [مستندات Variables](https://docs.railway.com/variables)
-
-## ۶. تنظیمات اجرا
-
-| تنظیم | مقدار |
-|---|---|
-| Build | Dockerfile پروژه |
-| Start Command | خالی؛ دستور Dockerfile برابر `python -u main.py` است |
-| Pre-deploy Command | خالی؛ جدول‌ها هنگام شروع ساخته می‌شوند |
-| Healthcheck Path | خالی؛ برنامه endpoint وب ندارد |
-| تعداد اجرا | فقط یک نمونه؛ سرویس یا Replica اضافه نسازید |
-| Serverless / Sleeping | خاموش؛ دریافت پیام دائمی است |
-| Restart Policy | `On Failure` با ۱۰ تلاش، یا سیاست متناسب با پلن |
-| Domain | لازم نیست |
-
-برای این روش فایل تنظیمات دیگری لازم نیست. [سیاست Restart](https://docs.railway.com/deployments/restart-policy)، [Serverless](https://docs.railway.com/deployments/serverless).
-
-## ۷. Deploy و بررسی اتصال
-
-۱. تغییرات را Apply/Deploy کنید و پایان build را منتظر بمانید.
-۲. Runtime Logs را باز کنید؛ خطای اعتبارنامه، اتصال یا مسیر دیتابیس نباید باشد.
-۳. از حساب ثبت‌شده در `ADMIN_IDS`، در چت خصوصی ربات `/start` بفرستید.
-۴. در لاگ دوره‌ای، `telegram_connected=True` را بررسی کنید. قبل از فعال‌سازی، `auto_enabled=False` طبیعی است.
-
-Active بودن سرویس به‌تنهایی سلامت اتصال تلگرام را ثابت نمی‌کند. همین ربات را روی کامپیوتر یا cPanel هم‌زمان اجرا نکنید.
-
-## ۸. کانال‌ها و AI
-
-۱. مبدأ و مقصد را در داشبورد تعیین کنید؛ ابتدا مقصد آزمایشی انتخاب کنید.
-۲. در تنظیمات AI ابتدا آدرس سرویس را ثبت کنید؛ تغییر آدرس، کلید قبلی را پاک و AI را خاموش می‌کند.
-۳. سپس کلید API و مدل قابل استفاده در حساب سرویس‌دهنده را ثبت و AI را فعال کنید. آدرس باید endpoint کامل Chat Completions باشد؛ مثلاً `https://api.openai.com/v1/chat/completions`، بدون قالب لینک Markdown.
-۴. امضا و رفتار لینک‌ها و آیدی‌ها را تنظیم کنید.
-۵. یک پیام عادی و یک پیام نیازمند اصلاح را آزمایش کنید؛ متن نهایی و لاگ گارد را ببینید.
-۶. Auto-Forward را روشن و یک پیام **جدید** در مبدأ ایجاد کنید؛ فعال‌سازی خودکار به‌تنهایی آرشیو را منتقل نمی‌کند.
-۷. `/reviews` را بررسی کنید؛ موارد حل‌نشده امکان رد، تأیید یا ویرایش دارند.
-
-تنظیمات AI ذخیره‌شده در ربات بر پیش‌فرض‌های env اولویت دارند؛ تغییر Variables لزوماً تنظیم ذخیره‌شده را عوض نمی‌کند. خالی بودن `AI_GUARDRAILS` یعنی استفاده از قوانین همراه پروژه. بودجه پیش‌فرض فعلی ۱۲ مرحله/۱۲ درخواست است؛ این مقادیر سقف‌اند، نه تعداد الزامی درخواست برای هر پیام.
-
-## ۹. پشتیبان و آپدیت
-
-۱. یک Restart انجام دهید؛ کانال‌ها، تنظیمات و اتصال باید باقی بمانند.
-۲. در زبانه Backups سرویس، پشتیبان Volume و زمان‌بندی مناسب را فعال کنید؛ پیش از تغییرات مهم هم پشتیبان بگیرید. بازیابی، تغییراتی برای Deploy آماده می‌کند؛ قبل از اعمال بررسی کنید. [راهنمای Backup](https://docs.railway.com/volumes/backups)
-۳. برای آپدیت، نسخه تازه را به شاخه متصل بفرستید و commit نمایش‌داده‌شده در Deployment را بررسی کنید؛ Redeploy یک استقرار قدیمی الزاماً کد تازه را انتخاب نمی‌کند.
-۴. Volume و مسیرها را ثابت نگه دارید. برگشت کد، دیتابیس را به گذشته برنمی‌گرداند؛ بازیابی داده جداست.
-
-برای مهاجرت داده موجود، از دیتابیس و نشست در زمان توقف برنامه پشتیبان بگیرید و از امکانات رسمی انتقال فایل Volume استفاده کنید. SQLite در حال نوشتن را به‌تنهایی کپی نکنید. [مرجع مدیریت فایل Volume](https://docs.railway.com/volumes/reference)
-
-## ۱۰. رفع خطا
-
-| نشانه | اقدام |
-|---|---|
-| `interactive login is unavailable` | نشست معتبر مرحله ۲ را وارد کنید؛ ورود تعاملی روی کامپیوتر انجام می‌شود |
-| `Invalid TELETHON_STRING_SESSION` | رشته کامل و بدون فاصله یا کوتیشن اضافه را بررسی کنید |
-| نشست لغوشده؛ تغییر Variable بی‌اثر است | فایل نشست موجود مرجع است. سرویس را متوقف و پشتیبان بگیرید؛ فقط فایل نشست و فایل‌های جانبی همان نشست را کنار بگذارید تا از رشته تازه ساخته شود؛ `forwarder.db` را نگه دارید |
-| `Conflict ... getUpdates` | اجرای محلی، cPanel یا نمونه اضافی با همین توکن را متوقف کنید |
-| `database is locked` | اجرای هم‌زمان یا اشتراک نشست را بررسی کنید؛ دیتابیس را حذف نکنید |
-| تنظیمات پس از Deploy پاک شده | اتصال Volume و مسیر مطلق دیتابیس را بررسی کنید |
-| `/start` پاسخ نمی‌دهد | توکن، شناسه عددی مدیر، خصوصی بودن چت و لاگ اتصال را بررسی کنید |
-| مبدأ خوانده یا مقصد نوشته نمی‌شود | مجوزهای حساب Telethon و شناسه کانال‌ها را بررسی کنید |
-| AI خطای 401/403 یا مدل نامعتبر دارد | آدرس، کلید، اعتبار حساب و نام مدل در تنظیمات ربات را بررسی کنید |
-| AI timeout دارد | لاگ مرحله را ببینید؛ timeout هر درخواست ۶۰ ثانیه و بودجه کل پیش‌فرض ۱۵۰ ثانیه است؛ این مقادیر تضمین پاسخ سرویس نیستند |
-| پیام ارسال نشده ولی سرویس سالم است | `action=DROP`، Review، تکراری بودن و متن خالی را از لاگ تفکیک کنید |
-
-درخواست بررسی را فقط برای خالی شدن صف تأیید نکنید؛ تأیید دستی ممکن است انتشار واقعی انجام دهد.
