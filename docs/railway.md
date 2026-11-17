@@ -1,8 +1,8 @@
 # راهنمای جامع استقرار و راه‌اندازی سرور (Deployment & Hosting)
 
-این راهنما آموزش کامل نحوه استقرار ربات **MTB Telegram Forwarder** را بر روی سرویس‌های ابری نظیر **Railway**، سرورهای مجازی شخصی (**VPS Linux**) و کانتینرهای **Docker** ارائه می‌دهد.
+این راهنما آموزش کامل نحوه استقرار ربات **MTB Forwarder** (پشتیبانی از تلگرام و پیام‌رسان بله) را بر روی سرویس‌های ابری نظیر **Railway**، سرورهای مجازی شخصی (**VPS Linux**) و کانتینرهای **Docker** ارائه می‌دهد.
 
-ربات یک سرویس دائمی (Long-running Background Daemon) است و نیازی به دامنه اختصاصی، وب‌سرور، وب‌هوک (Webhook) یا باز کردن پورت اینترنتی ندارد.
+ربات یک سرویس دائمی (Long-running Background Daemon) مبتنی بر Long Polling است و نیازی به دامنه اختصاصی، وب‌سرور، وب‌هوک (Webhook) یا باز کردن پورت اینترنتی ندارد.
 
 ---
 
@@ -10,31 +10,34 @@
 
 | متغیر محیطی | توضیح | روش دریافت |
 |---|---|---|
-| `BOT_TOKEN` | توکن ربات تلگرامی مدیریت | ارسال `/newbot` به ربات رسمی [@BotFather](https://t.me/BotFather) |
-| `API_ID` و `API_HASH` | کلیدهای اتصال کلاینت Telethon | ثبت‌نام و ساخت App در سایت رسمی [my.telegram.org](https://my.telegram.org) |
+| `PLATFORM` | پلتفرم هدف (`telegram` یا `bale`) | پیش‌فرض `telegram` است؛ برای بله مقدار را `bale` بگذارید |
+| `BOT_TOKEN` | توکن رسمی ربات (تلگرام یا بله) | **تلگرام:** ربات [@BotFather](https://t.me/BotFather)<br>**بله:** بازوی [@BotFather](https://ble.ir/botfather) |
 | `ADMIN_IDS` | شناسه‌های عددی ادمین‌های ربات | شناسه عددی اکانت خود را از ربات‌هایی مثل [@userinfobot](https://t.me/userinfobot) بگیرید |
-| اکانت تلگرام | شماره تلفنی که عضو کانال‌هاست | این اکانت باید عضو کانال‌های مبدأ و ادمین کانال‌های مقصد باشد |
+| `DATABASE_URL` | آدرس اتصال به پایگاه داده | `sqlite:////data/forwarder.db` یا PostgreSQL |
+| `API_ID` و `API_HASH` | *(اختیاری / موروثی)* کلیدهای کلاینت Telethon | در معماری جدید ربات نیازی به این متغیرها نیست |
+| `TELETHON_STRING_SESSION` | *(اختیاری / موروثی)* نشست کاربری Telethon | در معماری جدید نیازی به ورود تلفنی و سشن کاربری نیست |
 
 > [!IMPORTANT]
-> ربات مدیریتی (`BOT_TOKEN`) و اکانت کاربری Telethon دو هویت کاملاً مجزا هستند. دسترسی خواندن از کانال‌های خصوصی مبدأ و اجازه انتشار در کانال‌های مقصد متعلق به **اکانت کاربری Telethon** است.
+> **معماری ربات‌محور (Bot-Native):**  
+> سیستم اکنون تمام عملیات دریافت پست‌های کانال و ارسال به کانال‌های مقصد را مستقیماً از طریق **Bot API** تلگرام یا بله انجام می‌دهد. دیگر نیازی به سیم‌کارت، لاگین با شماره تلفن و کدهای یکبارمصرف پیامکی نیست. کافی است ربات را به عنوان ادمین (با دسترسی ارسال پیام) در کانال‌های مقصد و مبدأ عضو کنید.
 
 ---
 
-## ۲. آماده‌سازی و استخراج رشته سشن (Session Generation)
+## ۲. راه‌اندازی و شناسایی در تلگرام و بله
 
-از آنجا که سرورهای ابری نظیر Railway کنسول تعاملی برای وارد کردن کد پیامک ورود ندارند، ابتدا باید ورود را یک‌بار روی کامپیوتر خود انجام داده و رشته نشست (`TELETHON_STRING_SESSION`) را استخراج کنید:
+### الف) اتصال به تلگرام (Telegram)
+1. در تلگرام به [@BotFather](https://t.me/BotFather) پیام دهید و دستور `/newbot` را بزنید تا ربات ساخته شده و `BOT_TOKEN` به شما داده شود.
+2. در تنظیمات ربات در BotFather، در صورت تمایل حریم خصوصی گروه را مدیریت کنید.
+3. در متغیرهای محیطی `PLATFORM=telegram` قرار دهید.
 
-1. در خط فرمان یا PowerShell به پوشه پروژه بروید.
-2. اسکریپت استخراج سشن را اجرا کنید:
-   ```powershell
-   python -m scripts.export_session
-   ```
-3. شماره تلفن بین‌المللی اکانت (مثلاً `+989123456789`) را وارد کنید.
-4. کد تأیید ارسال‌شده در تلگرام و رمز عبور دومرحله‌ای (در صورت داشتن 2FA) را وارد نمایید.
-5. پس از ورود موفق، رشته نشست طولانی در فایل `sessions/railway-session.txt` ذخیره می‌شود.
+### ب) اتصال به پیام‌رسان بله (Bale)
+1. در پیام‌رسان بله به بازوی رسمی [@BotFather](https://ble.ir/botfather) مراجعه کرده و یک ربات جدید ایجاد کنید.
+2. توکن اختصاصی صادرشده را دریافت نمایید.
+3. در متغیرهای محیطی `PLATFORM=bale` قرار دهید. سیستم به طور خودکار `BOT_BASE_URL=https://tapi.bale.ai/bot` را به کار خواهد گرفت.
 
-> [!CAUTION]
-> این رشته نشست مجوز ورود به حساب کاربری تلگرام شماست! هرگز آن را در گیت‌هاب کامیت نکنید یا در گروه‌ها نفرستید.
+> [!NOTE]
+> **پشتیبانی از سشن کاربری قدیمی (Legacy Telethon):**  
+> چنانچه بخواهید از قابلیت‌های قدیمی خواندن از کانال‌های خصوصی بدون عضویت ربات استفاده کنید، می‌توانید اسکریپت `python -m scripts.export_session` را اجرا کنید و رشته سشن را در `TELETHON_STRING_SESSION` قرار دهید؛ اما برای عملکرد عادی سیستم هیچ نیازی به این مرحله نیست.
 
 ---
 
@@ -45,24 +48,21 @@
 3. در تنظیمات سرویس (Settings)، بررسی کنید که بخش Build از **Dockerfile** استفاده کند.
 4. **ایجاد حجم دائمی (Persistent Volume):**
    - وارد تب **Volume** سرویس شوید و دکمه **Add Volume** را بزنید.
-   - مقدار Mount Path را دقیقاً `/data` قرار دهید. این کار باعث می‌شود دیتابیس و فایل‌های سشن با هر بار راه‌اندازی سرور حفظ شوند.
+   - مقدار Mount Path را دقیقاً `/data` قرار دهید. این کار باعث می‌شود دیتابیس با هر بار راه‌اندازی سرور حفظ شود.
 5. **تنظیم متغیرهای محیطی (Variables):**
    در تب **Variables** مقادیر زیر را وارد کنید:
    ```dotenv
+   PLATFORM=telegram
    BOT_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
-   API_ID=12345678
-   API_HASH=0123456789abcdef0123456789abcdef
    ADMIN_IDS=123456789
    DATABASE_URL=sqlite:////data/forwarder.db
-   TELETHON_SESSION=/data/forwarder_session
-   TELETHON_STRING_SESSION=متن_کپی_شده_از_railway-session.txt
    AI_ENABLED=true
    AI_API_KEY=کلید_سرویس_هوش_مصنوعی_شما
    AI_MODEL=google/gemini-2.5-flash
    AI_BASE_URL=https://openrouter.ai/api/v1
    LOG_LEVEL=INFO
    ```
-6. سرویس به صورت خودکار بیلد و اجرا می‌شود. اکنون می‌توانید در تلگرام دستور `/start` را برای ربات خود ارسال کنید.
+6. سرویس به صورت خودکار بیلد و اجرا می‌شود. اکنون می‌توانید در پیام‌رسان دستور `/start` را برای ربات خود ارسال کنید.
 
 ---
 
@@ -79,7 +79,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-nano .env  # اطلاعات توکن و دیتابیس را وارد کنید
+nano .env  # اطلاعات توکن، پلتفرم و دیتابیس را وارد کنید
 ```
 
 ### ۲. ساخت سرویس سیستمی (Systemd Service) برای اجرای دائمی:
@@ -91,13 +91,34 @@ sudo nano /etc/systemd/system/telegram-forwarder.service
 محتوای زیر را داخل آن قرار دهید:
 ```ini
 [Unit]
-Description=MTB Telegram Forwarder Bot
+Description=MTB Forwarder Bot (Telegram & Bale)
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/root/telegram-forwarder
+ExecStart=/root/telegram-forwarder/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/root/telegram-forwarder/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+فعال‌سازی و شروع سرویس:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable telegram-forwarder
+sudo systemctl start telegram-forwarder
+sudo systemctl status telegram-forwarder
+```
+
+برای مشاهده لاگ‌های زنده سرویس در سرور:
+```bash
+journalctl -u telegram-forwarder -f
+```
 ExecStart=/root/telegram-forwarder/.venv/bin/python main.py
 Restart=always
 RestartSec=5
