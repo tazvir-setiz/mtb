@@ -19,8 +19,10 @@ from app.handlers.commands import (
     command_stats,
 )
 from app.handlers.router import on_callback, on_text
+from app.telegram import auto_forward
 from app.telegram.bot_profile import setup_bot_ui as setup_bot_ui
 from app.telegram.bot_proxy import get_bot_api_proxy_url
+from app.telegram.client import set_bot
 
 
 def build_application() -> Application:
@@ -34,11 +36,15 @@ def build_application() -> Application:
         .pool_timeout(30.0)
     )
 
-    proxy_url = get_bot_api_proxy_url()
-    if proxy_url:
-        builder = builder.proxy(proxy_url).get_updates_proxy(proxy_url)
+    if settings.platform == "bale":
+        builder = builder.base_url(settings.bot_base_url).base_file_url(settings.bot_base_file_url)
+    else:
+        proxy_url = get_bot_api_proxy_url()
+        if proxy_url:
+            builder = builder.proxy(proxy_url).get_updates_proxy(proxy_url)
 
     application = builder.build()
+    set_bot(application.bot)
 
     application.add_handler(CommandHandler("start", start.handle_start))
     application.add_handler(CommandHandler("menu", start.handle_start))
@@ -56,8 +62,15 @@ def build_application() -> Application:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     application.add_handler(MessageHandler(filters.Document.ALL, guard_settings.receive))
 
+    # Channel post listener in separate handler group to avoid interfering with command/menu handlers
+    channel_post_filter = (
+        filters.ChatType.CHANNEL | filters.ChatType.GROUPS | filters.UpdateType.CHANNEL_POST
+    ) & ~filters.COMMAND
+    application.add_handler(MessageHandler(channel_post_filter, auto_forward.handle_channel_update), group=1)
+
     async def _on_error(update, context):
         import logging
+
         from telegram.error import NetworkError, TimedOut
 
         logger = logging.getLogger(__name__)

@@ -7,6 +7,7 @@ from contextlib import suppress
 
 from telegram.error import InvalidToken, NetworkError
 
+from app.config import settings
 from app.database.database import init_db
 from app.handlers.reviews import notify_pending
 from app.logging_config import setup_logging
@@ -20,8 +21,8 @@ from app.telegram.client import ensure_started, stop_client
 async def _post_init(application) -> None:
     await setup_bot_ui(application.bot)
 
-    client = await ensure_started()
-    logging.getLogger(__name__).info("Telethon client connected.")
+    client = await ensure_started(application.bot)
+    logging.getLogger(__name__).info("Bot client connected (%s).", settings.platform)
     await auto_forward.sync_on_startup(client)
     application.bot_data["status_monitor"] = asyncio.create_task(monitor_status(client))
     application.bot_data["review_notifications"] = asyncio.create_task(
@@ -37,13 +38,14 @@ async def _post_shutdown(application) -> None:
             with suppress(asyncio.CancelledError):
                 await task
     await stop_client()
-    logging.getLogger(__name__).info("Shutdown completed; Telegram client disconnected.")
+    logging.getLogger(__name__).info("Shutdown completed; client disconnected.")
 
 
 def main() -> int:
     setup_logging()
     logger = logging.getLogger(__name__)
-    logger.info("Starting bot... (Telegram Forwarder + AI Guardrails)")
+    platform_label = "Bale" if settings.platform == "bale" else "Telegram"
+    logger.info("Starting bot... (%s Forwarder + AI Guardrails)", platform_label)
 
     init_db()
     recover_interrupted()
@@ -56,9 +58,9 @@ def main() -> int:
     with asyncio.Runner(loop_factory=loop_factory) as runner:
         asyncio.set_event_loop(runner.get_loop())
         try:
-            logger.info("Telegram startup: up to 3 retries on temporary connection failures.")
+            logger.info("Startup: connecting to %s Bot API...", platform_label)
             application.run_polling(
-                allowed_updates=["message", "callback_query"],
+                allowed_updates=["message", "channel_post", "edited_channel_post", "callback_query"],
                 bootstrap_retries=3,
                 close_loop=False,
             )
@@ -68,7 +70,7 @@ def main() -> int:
         except NetworkError as exc:
             logger.error(
                 "اتصال Bot API برقرار نشد (%s). وضعیت اینترنت و پروکسی تنظیم‌شده را بررسی کنید؛ "
-                "اگر پروکسی محلی است، برنامهٔ پروکسی باید روشن و مسیر Telegram قابل دسترس باشد.",
+                "اگر پروکسی محلی است، برنامهٔ پروکسی باید روشن و مسیر سرویس قابل دسترس باشد.",
                 type(exc).__name__,
             )
             return 1

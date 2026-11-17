@@ -25,9 +25,36 @@ def content_fingerprint(message):
         return value
 
     media = getattr(message, "media", None)
+    if media is None:
+        for attr in ("photo", "video", "document", "audio", "voice", "animation", "poll"):
+            val = getattr(message, attr, None)
+            if val:
+                media = val
+                break
+
+    if hasattr(message, "text_html") and message.text_html:
+        msg_text = message.text_html
+    elif hasattr(message, "caption_html") and message.caption_html:
+        msg_text = message.caption_html
+    elif hasattr(message, "message") and message.message is not None:
+        msg_text = html.unparse(message.message or "", getattr(message, "entities", None) or [])
+    else:
+        msg_text = getattr(message, "text", "") or getattr(message, "caption", "") or ""
+
+    media_dict = None
+    if media:
+        if hasattr(media, "to_dict"):
+            media_dict = stable(media.to_dict())
+        elif isinstance(media, list) and media and hasattr(media[-1], "file_unique_id"):
+            media_dict = {"file_unique_id": media[-1].file_unique_id}
+        elif hasattr(media, "file_unique_id"):
+            media_dict = {"file_unique_id": media.file_unique_id}
+        else:
+            media_dict = {"repr": str(media)}
+
     data = (
-        html.unparse(message.message or "", message.entities or []),
-        stable(media.to_dict()) if media else None,
+        msg_text,
+        media_dict,
     )
     return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
@@ -114,21 +141,27 @@ def enqueue_routes(original, source_id, routes_list, reason):
     if not routes_list:
         return None
     primary_destination, primary_job = routes_list[0]
+    orig_id = getattr(original, "id", None) or getattr(original, "message_id", None)
+    orig_text = (
+        getattr(original, "message", None)
+        or getattr(original, "text", None)
+        or getattr(original, "caption", None)
+    )
     with get_session() as session:
         row = session.scalar(
             select(ReviewRequest).where(
                 ReviewRequest.source_id == source_id,
-                ReviewRequest.message_id == original.id,
+                ReviewRequest.message_id == orig_id,
             )
         )
         fingerprint = content_fingerprint(original)
         if row is None:
             row = ReviewRequest(
                 source_id=source_id,
-                message_id=original.id,
+                message_id=orig_id,
                 destination_id=primary_destination,
                 fingerprint=fingerprint,
-                preview=(original.message or "[پیام بدون متن]")[:2500],
+                preview=(orig_text or "[پیام بدون متن]")[:2500],
                 reason=reason[:100],
             )
             session.add(row)
@@ -157,7 +190,7 @@ def enqueue_routes(original, source_id, routes_list, reason):
         if draft:
             session.delete(draft)
         row.fingerprint = fingerprint
-        row.preview = (original.message or "[پیام رسانه‌ای یا نظرسنجی بدون متن]")[:2500]
+        row.preview = (orig_text or "[پیام رسانه‌ای یا نظرسنجی بدون متن]")[:2500]
         row.reason = reason[:100]
         row.status = "pending"
         row.notified = "[]"
@@ -167,7 +200,7 @@ def enqueue_routes(original, source_id, routes_list, reason):
             "Review queued review_id=%d source=%s message=%s destinations=%d reason=%s",
             row.id,
             source_id,
-            original.id,
+            orig_id,
             len(routes_list),
             row.reason,
         )

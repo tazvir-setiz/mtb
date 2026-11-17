@@ -34,7 +34,7 @@ async def prepare_message(
     approved: bool = False,
     replacement_html: str | None = None,
 ) -> PreparedMessage | None:
-    msg_id = getattr(original, "id", None)
+    msg_id = getattr(original, "id", None) or getattr(original, "message_id", None)
     ai_enabled = load_ai_settings(settings).enabled
 
     if getattr(original, "poll", None):
@@ -42,11 +42,19 @@ async def prepare_message(
             raise AIReviewRequired("poll")
         return PreparedMessage("", None, forward_direct=True)
 
-    current_html = (
-        replacement_html
-        if replacement_html is not None
-        else telethon_html.unparse(original.message or "", original.entities or [])
-    )
+    if replacement_html is not None:
+        current_html = replacement_html
+    elif hasattr(original, "text_html") and original.text_html:
+        current_html = original.text_html
+    elif hasattr(original, "caption_html") and original.caption_html:
+        current_html = original.caption_html
+    elif hasattr(original, "message") and original.message is not None:
+        current_html = telethon_html.unparse(
+            original.message or "", getattr(original, "entities", None) or []
+        )
+    else:
+        current_html = getattr(original, "text", "") or getattr(original, "caption", "") or ""
+
     processed_html = (
         sanitize_text(current_html, remove_links=True)
         if approved
@@ -58,9 +66,17 @@ async def prepare_message(
         processed_html = sanitize_text(processed_html, remove_links=False)
     if signature:
         processed_html += ("\n\n" if processed_html.strip() else "") + signature
-    if not processed_html and not original.media:
+
+    media = getattr(original, "media", None)
+    if media is None:
+        for attr in ("photo", "video", "document", "audio", "voice", "animation"):
+            val = getattr(original, attr, None)
+            if val:
+                media = val
+                break
+
+    if not processed_html and not media:
         return None
-    media = original.media
     if media and type(media).__name__ == "MessageMediaWebPage":
         media = None
     if media and ai_enabled and not approved:
@@ -73,15 +89,31 @@ async def prepare_message(
 
 
 async def send_prepared_message(client, original, source_id, destination_id, prepared):
+    orig_id = getattr(original, "id", None) or getattr(original, "message_id", None)
+
     if prepared.forward_direct:
         result = await client.forward_messages(
             entity=destination_id,
-            messages=original.id,
+            messages=orig_id,
             from_peer=source_id,
             drop_author=True,
         )
         return result[0] if isinstance(result, list) else result
-    plain_text, _ = telethon_html.parse(prepared.html)
+
+    # If client supports copy_message with media, use it directly
+    if prepared.media and hasattr(client, "copy_message") and orig_id is not None:
+        try:
+            return await client.copy_message(
+                chat_id=destination_id,
+                from_chat_id=source_id,
+                message_id=orig_id,
+                caption=prepared.html,
+                parse_mode="html",
+            )
+        except Exception as exc:
+            logger.debug("copy_message fallback due to: %s", exc)
+
+    plain_text, _ = telethon_html.parse(prepared.html) if prepared.html else ("", [])
     if len(plain_text.encode("utf-16-le")) // 2 <= TELEGRAM_TEXT_LIMIT:
         return await client.send_message(
             entity=destination_id,

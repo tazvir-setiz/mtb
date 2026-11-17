@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import logging
 import time
+
 from sqlalchemy import func, select, text
 
 from app.config import settings
 from app.database.database import get_session
-from app.database.models import Channel, ChannelType, ForwardedMessage, ForwardJob, MessageStatus, ReviewRequest
-from app.database.repository import ChannelRepository, ForwardedMessageRepository, SettingsRepository
+from app.database.models import (
+    Channel,
+    ChannelType,
+    ForwardJob,
+    MessageStatus,
+    ReviewRequest,
+)
+from app.database.repository import (
+    ChannelRepository,
+    ForwardedMessageRepository,
+    SettingsRepository,
+)
 from app.services.ai_settings import load_ai_settings
 from app.telegram import auto_forward
 from app.telegram.client import get_client
@@ -123,7 +134,8 @@ def get_recent_messages(limit: int = 10) -> list[dict]:
 
 
 async def get_system_health_report() -> str:
-    # 1. Telegram Client Health
+    # 1. Messenger Bot Client Health
+    platform_label = "بله (Bale)" if settings.platform == "bale" else "تلگرام (Telegram)"
     client_status_lines = []
     try:
         client = get_client()
@@ -137,20 +149,24 @@ async def get_system_health_report() -> str:
                 connected = False
 
         if connected:
-            authorized = await client.is_user_authorized()
+            authorized = await client.is_user_authorized() if hasattr(client, "is_user_authorized") else True
             if authorized:
                 me = await client.get_me()
                 latency_ms = (time.monotonic() - t0) * 1000
-                account_name = getattr(me, "first_name", "کاربر")
+                account_name = getattr(me, "first_name", "ربات")
                 username = f"@{me.username}" if getattr(me, "username", None) else str(getattr(me, "id", ""))
-                client_status_lines.append(f"• وضعیت: <b>🟢 متصل و آماده</b>")
+                client_status_lines.append("• وضعیت: <b>🟢 متصل و آماده</b>")
+                client_status_lines.append(f"• پلتفرم فعال: <b>{platform_label}</b>")
                 client_status_lines.append(f"• حساب: <b>{account_name}</b> ({username})")
                 client_status_lines.append(f"• تأخیر رفت‌وبرگشت: <code>{latency_ms:.1f}ms</code>")
             else:
+                client_status_lines.append(f"• پلتفرم فعال: <b>{platform_label}</b>")
                 client_status_lines.append("• وضعیت: <b>⚠️ سشن لاگین نیست (نیاز به auth)</b>")
         else:
-            client_status_lines.append("• وضعیت: <b>🔴 قطع اتصال (بررسی اینترنت یا پروکسی)</b>")
+            client_status_lines.append(f"• پلتفرم فعال: <b>{platform_label}</b>")
+            client_status_lines.append("• وضعیت: <b>🔴 قطع اتصال (بررسی اینترنت یا توکن)</b>")
     except Exception as exc:
+        client_status_lines.append(f"• پلتفرم فعال: <b>{platform_label}</b>")
         client_status_lines.append(f"• وضعیت: <b>❌ خطای کلاینت: {exc.__class__.__name__}</b>")
 
     # 2. Database Health
@@ -162,7 +178,7 @@ async def get_system_health_report() -> str:
             db_ms = (time.monotonic() - t_db) * 1000
             dialect = session.bind.dialect.name if session.bind else "unknown"
             engine_desc = "PostgreSQL" if dialect == "postgresql" else "SQLite (WAL)"
-            db_status_lines.append(f"• وضعیت: <b>🟢 متصل و پایدار</b>")
+            db_status_lines.append("• وضعیت: <b>🟢 متصل و پایدار</b>")
             db_status_lines.append(f"• موتور: <b>{engine_desc}</b>")
             db_status_lines.append(f"• تأخیر کوئری: <code>{db_ms:.2f}ms</code>")
     except Exception as exc:
@@ -173,7 +189,7 @@ async def get_system_health_report() -> str:
     ai_cfg = load_ai_settings(settings)
     if ai_cfg.enabled:
         key_status = "✅ ثبت شده" if ai_cfg.api_key else "⚠️ کلید ثبت نشده"
-        ai_status_lines.append(f"• وضعیت گارد: <b>🟢 فعال</b>")
+        ai_status_lines.append("• وضعیت گارد: <b>🟢 فعال</b>")
         ai_status_lines.append(f"• مدل فعال: <code>{ai_cfg.model}</code>")
         ai_status_lines.append(f"• کلید API: <b>{key_status}</b>")
         ai_status_lines.append(f"• سرویس: <code>{ai_cfg.base_url}</code>")
@@ -197,7 +213,7 @@ async def get_system_health_report() -> str:
     return (
         "🩺 <b>گزارش تست سلامت سیستم (Diagnostics)</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "📡 <b>کلاینت تلگرام (Telethon):</b>\n"
+        f"📡 <b>کلاینت پیام‌رسان ({platform_label}):</b>\n"
         + "\n".join(client_status_lines)
         + "\n\n🗄 <b>پایگاه داده:</b>\n"
         + "\n".join(db_status_lines)

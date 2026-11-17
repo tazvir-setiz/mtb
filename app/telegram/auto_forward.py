@@ -5,8 +5,9 @@ import logging
 import time
 from collections import Counter
 from contextlib import asynccontextmanager
+from typing import Any
 
-from telethon import TelegramClient, events
+from telethon import events
 
 from app.database.database import get_session
 from app.database.models import ChannelType, JobStatus, MessageStatus
@@ -26,7 +27,10 @@ SETTING_KEY = "auto_forward_enabled"
 _AUTO_JOB_MARKER = -1
 
 _handler = None  # type: ignore[var-annotated]
-_registered_client: TelegramClient | None = None
+_registered_client: Any | None = None
+_route_map: dict[int, list[tuple[int, int]]] = {}
+
+
 class ProcessingLimiter:
     """Bounded concurrency limiter with an asyncio.Lock-compatible interface."""
 
@@ -61,7 +65,7 @@ _counts = Counter()
 
 def status_snapshot():
     return dict(
-        listener_active=_handler is not None,
+        listener_active=_handler is not None or is_enabled(),
         waiting=_waiting,
         processing=_processing_lock.locked(),
         **_counts,
@@ -115,23 +119,30 @@ def _get_auto_job_id(source_id: int, destination_id: int) -> int:
 
 @traced
 async def _on_new_message(
-    event,
+    event: Any,
     source_id: int,
     routes: list[tuple[int, int]],
     *,
-    listener=None,
+    listener: Any = None,
 ) -> None:
     async with processing_slot():
         if listener is not None and listener is not _handler:
             _counts["stale"] += 1
             return
 
-        async with message_lock(source_id, event.message.id, None):
+        client = getattr(event, "client", None) or _registered_client
+        msg = getattr(event, "message", None) or event
+        msg_id = getattr(msg, "id", None) or getattr(msg, "message_id", None)
+
+        if client and hasattr(client, "cache_message") and msg_id is not None:
+            client.cache_message(source_id, msg)
+
+        async with message_lock(source_id, msg_id, None):
             with get_session() as session:
                 signature = SettingsRepository.get(session, "signature_text")
             outcomes = await fan_out(
-                event.client,
-                event.message,
+                client,
+                msg,
                 source_id,
                 routes,
                 signature,
@@ -172,44 +183,100 @@ def _channel_aliases(channel_id: int) -> set[int]:
     return aliases
 
 
-async def start_listener(client: TelegramClient) -> bool:
-    global _handler, _registered_client
-    await stop_listener(client)
+def _build_route_map() -> tuple[bool, list[int], list[int], set[int]]:
+    global _route_map
     with get_session() as session:
         sources = ChannelRepository.get_all_by_type(session, ChannelType.SOURCE)
-        destinations = ChannelRepository.get_all_by_type(
-            session,
-            ChannelType.DESTINATION,
-        )
+        destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
 
     if not sources or not destinations:
-        return False
+        _route_map = {}
+        return False, [], [], set()
 
     source_ids = [channel.telegram_id for channel in sources]
     destination_ids = [channel.telegram_id for channel in destinations]
-    route_map = {}
-    chats_to_listen = set()
+    new_map: dict[int, list[tuple[int, int]]] = {}
+    chats: set[int] = set()
     for source_id in source_ids:
         routes = [
-            (
-                destination_id,
-                _get_auto_job_id(source_id, destination_id),
-            )
+            (destination_id, _get_auto_job_id(source_id, destination_id))
             for destination_id in destination_ids
         ]
         for alias in _channel_aliases(source_id):
-            route_map[alias] = routes
-            chats_to_listen.add(alias)
+            new_map[alias] = routes
+            chats.add(alias)
+    _route_map = new_map
+    return True, source_ids, destination_ids, chats
+
+
+async def handle_channel_update(update: Any, context: Any = None) -> None:
+    """Entry point for incoming channel posts from python-telegram-bot Application."""
+    if not is_enabled():
+        return
+
+    msg = (
+        getattr(update, "channel_post", None)
+        or getattr(update, "message", None)
+        or getattr(update, "effective_message", None)
+    )
+    if msg is None:
+        return
+
+    chat_id = getattr(getattr(update, "effective_chat", None), "id", None)
+    if chat_id is None:
+        chat_id = getattr(msg, "chat_id", None) or getattr(getattr(msg, "chat", None), "id", None)
+    if chat_id is None:
+        return
+
+    routes = _route_map.get(chat_id)
+    if routes is None:
+        for alias in _channel_aliases(chat_id):
+            if alias in _route_map:
+                routes = _route_map[alias]
+                break
+
+    if not routes:
+        if not _route_map:
+            _build_route_map()
+            routes = _route_map.get(chat_id)
+            if routes is None:
+                for alias in _channel_aliases(chat_id):
+                    if alias in _route_map:
+                        routes = _route_map[alias]
+                        break
+
+    if not routes:
+        return
+
+    from types import SimpleNamespace
+
+    from app.telegram.client import get_client, set_bot
+
+    bot = getattr(context, "bot", None) if context else None
+    if bot:
+        set_bot(bot)
+    client = _registered_client or get_client()
+
+    event = SimpleNamespace(client=client, message=msg, chat_id=chat_id)
+    await _on_new_message(event, chat_id, routes, listener=_handler)
+
+
+async def start_listener(client: Any) -> bool:
+    global _handler, _registered_client
+    await stop_listener(client)
+    routes_built, source_ids, destination_ids, chats_to_listen = _build_route_map()
+    if not routes_built:
+        return False
 
     async def handler(event):
         chat_id = getattr(event, "chat_id", None)
         if chat_id is None:
             return
-        routes = route_map.get(chat_id)
+        routes = _route_map.get(chat_id)
         if routes is None:
             for alias in _channel_aliases(chat_id):
-                if alias in route_map:
-                    routes = route_map[alias]
+                if alias in _route_map:
+                    routes = _route_map[alias]
                     break
         if not routes:
             return
@@ -220,7 +287,12 @@ async def start_listener(client: TelegramClient) -> bool:
             listener=handler,
         )
 
-    client.add_event_handler(handler, events.NewMessage(chats=list(chats_to_listen)))
+    if hasattr(client, "add_event_handler"):
+        try:
+            client.add_event_handler(handler, events.NewMessage(chats=list(chats_to_listen)))
+        except Exception:
+            client.add_event_handler(handler)
+
     _handler = handler
     _registered_client = client
     logger.info(
@@ -231,15 +303,20 @@ async def start_listener(client: TelegramClient) -> bool:
     return True
 
 
-async def stop_listener(client: TelegramClient | None = None) -> None:
-    global _handler, _registered_client
-    if _handler is not None and _registered_client is not None:
-        _registered_client.remove_event_handler(_handler)
+async def stop_listener(client: Any | None = None) -> None:
+    global _handler, _registered_client, _route_map
+    target_client = client or _registered_client
+    if _handler is not None and target_client is not None and hasattr(target_client, "remove_event_handler"):
+        try:
+            target_client.remove_event_handler(_handler)
+        except Exception:
+            pass
     _handler = None
     _registered_client = None
+    _route_map = {}
 
 
-async def enable(client: TelegramClient) -> bool:
+async def enable(client: Any) -> bool:
     try:
         started = await start_listener(client)
     except Exception:
@@ -249,16 +326,16 @@ async def enable(client: TelegramClient) -> bool:
     return started
 
 
-async def disable(client: TelegramClient | None = None) -> None:
+async def disable(client: Any | None = None) -> None:
     await stop_listener(client)
     _set_enabled(False)
 
 
-async def sync_on_startup(client: TelegramClient) -> bool:
+async def sync_on_startup(client: Any) -> bool:
     return await refresh_listener(client)
 
 
-async def refresh_listener(client: TelegramClient) -> bool:
+async def refresh_listener(client: Any) -> bool:
     if not is_enabled():
         return False
     try:

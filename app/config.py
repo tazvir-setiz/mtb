@@ -48,9 +48,12 @@ def _parse_admin_ids(raw: str) -> list[int]:
 @dataclass(frozen=True)
 class Settings:
     bot_token: str
-    api_id: int
-    api_hash: str
+    api_id: int = 0
+    api_hash: str = ""
     admin_ids: list[int] = field(default_factory=list)
+    platform: str = "telegram"
+    bot_base_url: str = "https://api.telegram.org/bot"
+    bot_base_file_url: str = "https://api.telegram.org/file/bot"
     database_url: str = "sqlite:///data/forwarder.db"
     telethon_session: str = "sessions/forwarder_session"
     telethon_string_session: str = field(default="", repr=False)
@@ -94,11 +97,29 @@ def load_guardrails() -> str:
 
 
 def load_settings() -> Settings:
+    platform = optional_env("PLATFORM", optional_env("BOT_PLATFORM", "telegram")).strip().lower()
+    if platform not in ("telegram", "bale"):
+        platform = "telegram"
+
+    if platform == "bale":
+        default_base_url = "https://tapi.bale.ai/bot"
+        default_base_file_url = "https://tapi.bale.ai/file/bot"
+    else:
+        default_base_url = "https://api.telegram.org/bot"
+        default_base_file_url = "https://api.telegram.org/file/bot"
+
+    raw_api_id = optional_env("API_ID", "0").strip()
+    api_id = int(raw_api_id) if raw_api_id.isdigit() else 0
+    api_hash = optional_env("API_HASH", "")
+
     return Settings(
         bot_token=_get_env("BOT_TOKEN"),
-        api_id=int(_get_env("API_ID")),
-        api_hash=_get_env("API_HASH"),
+        api_id=api_id,
+        api_hash=api_hash,
         admin_ids=_parse_admin_ids(optional_env("ADMIN_IDS")),
+        platform=platform,
+        bot_base_url=optional_env("BOT_BASE_URL", default_base_url),
+        bot_base_file_url=optional_env("BOT_BASE_FILE_URL", default_base_file_url),
         database_url=optional_env("DATABASE_URL", "sqlite:///data/forwarder.db"),
         telethon_session=optional_env("TELETHON_SESSION", "sessions/forwarder_session"),
         telethon_string_session=optional_env("TELETHON_STRING_SESSION").strip(),
