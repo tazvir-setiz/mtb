@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 _locks = {}
+_channel_locks = {}
 
 
 @asynccontextmanager
@@ -16,3 +17,16 @@ async def message_lock(source_id, message_id, destination_id):
         entry[1] -= 1
         if not entry[1]:
             _locks.pop(key, None)
+
+
+@asynccontextmanager
+async def channel_lock(source_id: int):
+    entry = _channel_locks.setdefault(source_id, [asyncio.Lock(), 0])
+    entry[1] += 1
+    try:
+        async with entry[0]:
+            yield
+    finally:
+        entry[1] -= 1
+        if not entry[1]:
+            _channel_locks.pop(source_id, None)

@@ -18,7 +18,7 @@ from app.database.repository import (
 )
 from app.log_context import traced
 from app.services.fanout import fan_out
-from app.services.message_locks import message_lock
+from app.services.message_locks import channel_lock, message_lock
 from app.telegram.message_sender import prepare_message, send_prepared_message
 
 logger = logging.getLogger(__name__)
@@ -137,18 +137,19 @@ async def _on_new_message(
         if client and hasattr(client, "cache_message") and msg_id is not None:
             client.cache_message(source_id, msg)
 
-        async with message_lock(source_id, msg_id, None):
-            with get_session() as session:
-                signature = SettingsRepository.get(session, "signature_text")
-            outcomes = await fan_out(
-                client,
-                msg,
-                source_id,
-                routes,
-                signature,
-                prepare_message,
-                send_prepared_message,
-            )
+        async with channel_lock(source_id):
+            async with message_lock(source_id, msg_id, None):
+                with get_session() as session:
+                    signature = SettingsRepository.get(session, "signature_text")
+                outcomes = await fan_out(
+                    client,
+                    msg,
+                    source_id,
+                    routes,
+                    signature,
+                    prepare_message,
+                    send_prepared_message,
+                )
             for status in outcomes.values():
                 _counts[
                     {

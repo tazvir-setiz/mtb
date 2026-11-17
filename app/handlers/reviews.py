@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import time
+from collections import Counter
 from html import escape, unescape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -324,6 +325,96 @@ def _plain_card(text):
     return unescape(re.sub(r"<[^>]*>", "", text))
 
 
+SYSTEMIC_AI_REASONS = {
+    "missing_api_key",
+    "invalid_credentials",
+    "rate_limit",
+    "circuit_open",
+    "service_unavailable",
+    "connection_error",
+    "provider_error",
+    "timeout",
+}
+
+
+def _is_systemic_ai_error(reason: str) -> bool:
+    parsed = parse_review_reason(reason)
+    base = parsed.reason.strip().lower()
+    return base in SYSTEMIC_AI_REASONS
+
+
+async def send_systemic_alert(
+    bot, admin_id: int, reason_code: str, count: int, total_pending: int
+) -> None:
+    reason_desc = REASONS.get(reason_code, reason_code)
+    text = (
+        "⚠️ <b>هشدار خطای سراسری هوش مصنوعی</b>\n\n"
+        f"• <b>علت:</b> {reason_desc}\n"
+        f"• <b>پیام‌های تحت تأثیر:</b> {count} پیام به صف بازبینی منتقل شدند\n"
+        f"• <b>کل صف بازبینی:</b> {total_pending} پیام\n\n"
+        "<i>پیام‌های ورودی بدون بازنویسی در صف ذخیره می‌شوند تا مشکل کلید یا سرویس برطرف شود.</i>"
+    )
+    buttons = [
+        [InlineKeyboardButton("⚙️ تنظیمات هوش مصنوعی", callback_data="settings:ai")],
+        [InlineKeyboardButton(f"🔎 صف بازبینی ({total_pending})", callback_data="review:list:0")],
+        [InlineKeyboardButton("🏠 داشبورد", callback_data="nav:home")],
+    ]
+    try:
+        await bot.send_message(
+            chat_id=admin_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    except BadRequest:
+        await bot.send_message(
+            chat_id=admin_id,
+            text=_plain_card(text),
+            parse_mode=None,
+            disable_web_page_preview=True,
+        )
+
+
+async def send_batch_notification(
+    bot, admin_id: int, rows: list, total_pending: int
+) -> None:
+    reasons_count: Counter = Counter()
+    for r in rows:
+        reasons_count[get_row_reason(r)] += 1
+    top_reason = reasons_count.most_common(1)[0][0] if reasons_count else "بررسی محتوا"
+
+    text = (
+        f"📬 <b>{len(rows)} پیام جدید در صف بازبینی قرار گرفت</b>\n\n"
+        f"• <b>علت عمده:</b> {top_reason}\n"
+        f"• <b>مجموع پیام‌های در انتظار:</b> {total_pending} پیام\n\n"
+        "<i>برای جلوگیری از شلوغ شدن چت، اعلان‌ها تجمیع شدند. با لمس دکمه زیر پیام‌ها را بررسی کنید:</i>"
+    )
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"🔎 مشاهده صف بازبینی ({total_pending} پیام)", callback_data="review:list:0"
+            )
+        ],
+        [InlineKeyboardButton("🏠 بازگشت به داشبورد", callback_data="nav:home")],
+    ]
+    try:
+        await bot.send_message(
+            chat_id=admin_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    except BadRequest:
+        await bot.send_message(
+            chat_id=admin_id,
+            text=_plain_card(text),
+            parse_mode=None,
+            disable_web_page_preview=True,
+        )
+
+
 async def send_card(bot, admin_id, row):
     draft = review_drafts.get(row.id)
     text, markup = card(row)
@@ -350,47 +441,133 @@ async def send_card(bot, admin_id, row):
 async def notify_pending(bot):
     after_id = 0
     unreachable_admins: dict[int, tuple[float, int]] = {}
+    last_systemic_alert: dict[tuple[int, str], float] = {}
+
     while True:
         try:
             now = time.monotonic()
             rows = review_store.pending(after_id=after_id)
-            for row in rows:
-                after_id = row.id
-                if row.status == "sending":
-                    continue
+            if rows:
+                after_id = max(r.id for r in rows)
+
                 for admin_id in settings.admin_ids:
                     last_attempt, failures = unreachable_admins.get(admin_id, (0.0, 0))
                     if failures > 0:
                         backoff = min(3600.0, 60.0 * (2 ** min(failures - 1, 6)))
                         if now - last_attempt < backoff:
                             continue
-                    if admin_id in json.loads(row.notified):
+
+                    unnotified = [
+                        r
+                        for r in rows
+                        if r.status != "sending" and admin_id not in json.loads(r.notified)
+                    ]
+                    if not unnotified:
                         continue
-                    try:
-                        version = await send_card(bot, admin_id, row)
-                        unreachable_admins.pop(admin_id, None)
-                        review_store.mark_notified(
-                            row.id, admin_id, row.fingerprint, row.status, version
-                        )
-                    except RetryAfter as exc:
-                        delay = exc.retry_after
-                        await asyncio.sleep(
-                            delay.total_seconds() if hasattr(delay, "total_seconds") else delay
-                        )
-                    except Exception as exc:
-                        detail = str(exc)
-                        if "chat not found" in detail.lower() or "blocked" in detail.lower():
-                            prev_time, prev_fail = unreachable_admins.get(admin_id, (0.0, 0))
-                            unreachable_admins[admin_id] = (now, prev_fail + 1)
-                        logger.warning(
-                            "Review notification failed review_id=%d admin=%s type=%s detail=%s; available via /reviews",
-                            row.id,
-                            admin_id,
-                            type(exc).__name__,
-                            detail[:300],
-                        )
-                    await asyncio.sleep(1.1)
-            if not rows:
+
+                    systemic_rows = [r for r in unnotified if _is_systemic_ai_error(r.reason)]
+                    non_systemic_rows = [
+                        r for r in unnotified if not _is_systemic_ai_error(r.reason)
+                    ]
+
+                    # 1. Handle systemic AI error rows with deduplication / cooldown
+                    if systemic_rows:
+                        by_code: dict[str, list] = {}
+                        for r in systemic_rows:
+                            code = parse_review_reason(r.reason).reason.strip().lower()
+                            by_code.setdefault(code, []).append(r)
+
+                        for code, code_rows in by_code.items():
+                            last_time = last_systemic_alert.get((admin_id, code), 0.0)
+                            if now - last_time >= 600.0:
+                                try:
+                                    await send_systemic_alert(
+                                        bot, admin_id, code, len(code_rows), len(rows)
+                                    )
+                                    last_systemic_alert[(admin_id, code)] = now
+                                    unreachable_admins.pop(admin_id, None)
+                                except RetryAfter as exc:
+                                    delay = exc.retry_after
+                                    await asyncio.sleep(
+                                        delay.total_seconds()
+                                        if hasattr(delay, "total_seconds")
+                                        else delay
+                                    )
+                                    continue
+                                except Exception as exc:
+                                    detail = str(exc)
+                                    if "chat not found" in detail.lower() or "blocked" in detail.lower():
+                                        prev_time, prev_fail = unreachable_admins.get(
+                                            admin_id, (0.0, 0)
+                                        )
+                                        unreachable_admins[admin_id] = (now, prev_fail + 1)
+                                    logger.warning("Systemic alert failed for admin=%s: %s", admin_id, exc)
+                                    continue
+
+                            for r in code_rows:
+                                draft = review_drafts.get(r.id)
+                                v = review_drafts.version(r, draft)
+                                review_store.mark_notified(
+                                    r.id, admin_id, r.fingerprint, r.status, v
+                                )
+
+                    # 2. Handle non-systemic content reviews
+                    if len(non_systemic_rows) > 2:
+                        try:
+                            await send_batch_notification(
+                                bot, admin_id, non_systemic_rows, len(rows)
+                            )
+                            unreachable_admins.pop(admin_id, None)
+                            for r in non_systemic_rows:
+                                draft = review_drafts.get(r.id)
+                                v = review_drafts.version(r, draft)
+                                review_store.mark_notified(
+                                    r.id, admin_id, r.fingerprint, r.status, v
+                                )
+                        except RetryAfter as exc:
+                            delay = exc.retry_after
+                            await asyncio.sleep(
+                                delay.total_seconds()
+                                if hasattr(delay, "total_seconds")
+                                else delay
+                            )
+                        except Exception as exc:
+                            detail = str(exc)
+                            if "chat not found" in detail.lower() or "blocked" in detail.lower():
+                                prev_time, prev_fail = unreachable_admins.get(admin_id, (0.0, 0))
+                                unreachable_admins[admin_id] = (now, prev_fail + 1)
+                            logger.warning("Batch notification failed for admin=%s: %s", admin_id, exc)
+                    else:
+                        for r in non_systemic_rows:
+                            try:
+                                v = await send_card(bot, admin_id, r)
+                                unreachable_admins.pop(admin_id, None)
+                                review_store.mark_notified(
+                                    r.id, admin_id, r.fingerprint, r.status, v
+                                )
+                            except RetryAfter as exc:
+                                delay = exc.retry_after
+                                await asyncio.sleep(
+                                    delay.total_seconds()
+                                    if hasattr(delay, "total_seconds")
+                                    else delay
+                                )
+                            except Exception as exc:
+                                detail = str(exc)
+                                if "chat not found" in detail.lower() or "blocked" in detail.lower():
+                                    prev_time, prev_fail = unreachable_admins.get(
+                                        admin_id, (0.0, 0)
+                                    )
+                                    unreachable_admins[admin_id] = (now, prev_fail + 1)
+                                logger.warning(
+                                    "Review notification failed review_id=%d admin=%s type=%s detail=%s; available via /reviews",
+                                    r.id,
+                                    admin_id,
+                                    type(exc).__name__,
+                                    detail[:300],
+                                )
+                            await asyncio.sleep(1.1)
+            else:
                 after_id = 0
         except Exception as exc:
             logger.error("Review notification worker failed type=%s", type(exc).__name__)
