@@ -27,6 +27,7 @@ def settings_text(
     signature: str | None,
     forward_delay: float | None = None,
     ai_enabled: bool | None = None,
+    auto_cleanup: str | None = None,
 ) -> str:
     if signature:
         preview = signature.strip()
@@ -38,6 +39,7 @@ def settings_text(
 
     delay_line = f"{forward_delay:g} ثانیه" if forward_delay is not None else "—"
     ai_line = "🟢 فعال" if ai_enabled is True else "⚪ غیرفعال" if ai_enabled is False else "—"
+    cleanup_line = f"\n🧹 پاک‌سازی خودکار  <b>{auto_cleanup}</b>" if auto_cleanup else ""
 
     return (
         "⚙️ <b>تنظیمات</b>\n"
@@ -46,6 +48,7 @@ def settings_text(
         f"⏱ فاصله ارسال  <b>{delay_line}</b>\n"
         f"🧠 AI Guardrails  <b>{ai_line}</b>\n"
         f"✍️ امضا  {signature_line}"
+        f"{cleanup_line}"
         "</blockquote>\n\n"
         "<i>تنظیمات حساس با تأیید دوباره اعمال می‌شوند.</i>"
     )

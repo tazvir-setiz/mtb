@@ -15,10 +15,16 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     with get_session() as session:
         signature = SettingsRepository.get(session, "signature_text")
 
+    cleanup_info = (
+        f"🟢 هر {settings.db_cleanup_interval_hours:g}س (نگهداری {settings.db_retention_days} روز)"
+        if settings.db_auto_cleanup_enabled
+        else "⚪ غیرفعال"
+    )
     text = messages.settings_text(
         signature=signature,
         forward_delay=settings.forward_delay,
         ai_enabled=load_ai_settings(settings).enabled,
+        auto_cleanup=cleanup_info,
     )
 
     if update.callback_query:

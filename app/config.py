@@ -61,6 +61,9 @@ class Settings:
     log_to_file: bool = True
     forward_delay: float = 1.5
     progress_update_interval: float = 3.0
+    db_auto_cleanup_enabled: bool = True
+    db_cleanup_interval_hours: float = 24.0
+    db_retention_days: int = 7
 
     ai_enabled: bool = False
     ai_api_key: str = field(default="", repr=False)
@@ -127,6 +130,9 @@ def load_settings() -> Settings:
         log_to_file=env_flag("LOG_TO_FILE", "true"),
         forward_delay=float(optional_env("FORWARD_DELAY", "1.5")),
         progress_update_interval=float(optional_env("PROGRESS_UPDATE_INTERVAL", "3")),
+        db_auto_cleanup_enabled=env_flag("DB_AUTO_CLEANUP_ENABLED", "true"),
+        db_cleanup_interval_hours=float(optional_env("DB_CLEANUP_INTERVAL_HOURS", "24")),
+        db_retention_days=int(optional_env("DB_RETENTION_DAYS", "7")),
         ai_enabled=env_flag("AI_ENABLED"),
         ai_api_key=optional_env("AI_API_KEY"),
         ai_base_url=optional_env("AI_BASE_URL", "https://api.openai.com/v1/chat/completions"),

@@ -11,6 +11,7 @@ from app.config import settings
 from app.database.database import init_db
 from app.handlers.reviews import notify_pending
 from app.logging_config import setup_logging
+from app.services.cleanup_service import auto_cleanup_loop
 from app.services.review_store import recover_interrupted
 from app.status_logging import monitor_status
 from app.telegram import auto_forward
@@ -28,10 +29,17 @@ async def _post_init(application) -> None:
     application.bot_data["review_notifications"] = asyncio.create_task(
         notify_pending(application.bot)
     )
+    if settings.db_auto_cleanup_enabled:
+        application.bot_data["db_auto_cleanup"] = asyncio.create_task(
+            auto_cleanup_loop(
+                interval_hours=settings.db_cleanup_interval_hours,
+                retention_days=settings.db_retention_days,
+            )
+        )
 
 
 async def _post_shutdown(application) -> None:
-    for name in ("status_monitor", "review_notifications"):
+    for name in ("status_monitor", "review_notifications", "db_auto_cleanup"):
         task = application.bot_data.pop(name, None)
         if task:
             task.cancel()

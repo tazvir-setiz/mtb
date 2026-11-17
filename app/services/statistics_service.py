@@ -181,6 +181,12 @@ async def get_system_health_report() -> str:
             db_status_lines.append("• وضعیت: <b>🟢 متصل و پایدار</b>")
             db_status_lines.append(f"• موتور: <b>{engine_desc}</b>")
             db_status_lines.append(f"• تأخیر کوئری: <code>{db_ms:.2f}ms</code>")
+            if settings.db_auto_cleanup_enabled:
+                db_status_lines.append(
+                    f"• پاک‌سازی خودکار: <b>🟢 فعال (هر {settings.db_cleanup_interval_hours:g}س / نگهداری {settings.db_retention_days} روز)</b>"
+                )
+            else:
+                db_status_lines.append("• پاک‌سازی خودکار: <b>⚪ غیرفعال</b>")
     except Exception as exc:
         db_status_lines.append(f"• وضعیت: <b>❌ خطا در دیتابیس: {exc.__class__.__name__}</b>")
 
