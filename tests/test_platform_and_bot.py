@@ -52,6 +52,27 @@ def test_bale_application_builder(monkeypatch):
     assert "tapi.bale.ai" in app.bot.base_url
 
 
+@pytest.mark.asyncio
+async def test_unsupported_profile_method_does_not_abort_startup():
+    """Bale answers unknown methods with ``InvalidToken: Handler not found``."""
+    from telegram.error import InvalidToken
+
+    from app.telegram import bot_profile
+
+    bot = SimpleNamespace(
+        set_my_commands=AsyncMock(),
+        set_chat_menu_button=AsyncMock(side_effect=InvalidToken("Handler not found")),
+        set_my_short_description=AsyncMock(),
+        set_my_description=AsyncMock(),
+    )
+
+    await bot_profile.setup_bot_ui(bot)
+
+    bot.set_my_commands.assert_awaited_once()
+    bot.set_my_short_description.assert_awaited_once()
+    bot.set_my_description.assert_awaited_once()
+
+
 def test_normalize_channel_ref_bale():
     assert normalize_channel_ref("https://ble.ir/my_bale_channel") == "@my_bale_channel"
     assert normalize_channel_ref("https://ble.ir/news_channel/123/456") == "@news_channel"
