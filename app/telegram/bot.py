@@ -2,6 +2,7 @@ from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    ChatMemberHandler,
     CommandHandler,
     Defaults,
     MessageHandler,
@@ -20,11 +21,23 @@ from app.handlers.commands import (
     command_stats,
 )
 from app.handlers.router import on_callback, on_text
-from app.telegram import auto_forward
+from app.telegram import auto_forward, seen_chats
 from app.telegram.bale_bot import BaleBot
 from app.telegram.bot_profile import setup_bot_ui as setup_bot_ui
 from app.telegram.bot_proxy import get_bot_api_proxy_url
 from app.telegram.client import set_bot
+
+
+async def _remember_bot_membership(update, context) -> None:
+    """Record the chat when the bot itself is added to a channel/group.
+
+    Bale sends ``my_chat_member`` when a bot is added to a channel; that update carries
+    the channel object (and therefore its id) even though ``getChat`` cannot resolve it.
+    """
+    member_update = getattr(update, "my_chat_member", None)
+    if member_update is None:
+        return
+    seen_chats.record(getattr(member_update, "chat", None))
 
 
 def build_application() -> Application:
@@ -86,6 +99,14 @@ def build_application() -> Application:
         filters.ChatType.CHANNEL | filters.ChatType.GROUPS | filters.UpdateType.CHANNEL_POST
     ) & ~filters.COMMAND
     application.add_handler(MessageHandler(channel_post_filter, auto_forward.handle_channel_update), group=1)
+
+    # Remember channels the bot is added to (Bale only exposes the id via this update).
+    application.add_handler(
+        ChatMemberHandler(
+            _remember_bot_membership, chat_member_types=ChatMemberHandler.MY_CHAT_MEMBER
+        ),
+        group=2,
+    )
 
     async def _on_error(update, context):
         import logging

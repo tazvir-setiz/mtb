@@ -19,6 +19,7 @@ from app.database.repository import (
 from app.log_context import traced
 from app.services.fanout import fan_out
 from app.services.message_locks import channel_lock, message_lock
+from app.telegram import seen_chats
 from app.telegram.message_sender import prepare_message, send_prepared_message
 
 logger = logging.getLogger(__name__)
@@ -212,15 +213,22 @@ def _build_route_map() -> tuple[bool, list[int], list[int], set[int]]:
 
 async def handle_channel_update(update: Any, context: Any = None) -> None:
     """Entry point for incoming channel posts from python-telegram-bot Application."""
-    if not is_enabled():
-        return
-
     msg = (
         getattr(update, "channel_post", None)
         or getattr(update, "message", None)
         or getattr(update, "effective_message", None)
     )
     if msg is None:
+        return
+
+    # Remember every channel/group the bot receives a message from. On Bale this is the
+    # only reliable way to learn a channel's id (getChat does not resolve channels), so
+    # the setup flow can offer these chats even before auto-forward is enabled.
+    seen_chats.record(
+        getattr(update, "effective_chat", None) or getattr(msg, "chat", None)
+    )
+
+    if not is_enabled():
         return
 
     chat_id = getattr(getattr(update, "effective_chat", None), "id", None)

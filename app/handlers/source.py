@@ -9,7 +9,7 @@ from app.database.database import get_session
 from app.database.models import ChannelType
 from app.database.repository import ChannelRepository
 from app.handlers.states import KEY_PENDING_CHANNEL, KEY_PENDING_CHANNEL_KIND, State, set_state
-from app.telegram import auto_forward
+from app.telegram import auto_forward, seen_chats
 from app.telegram.channel_service import (
     ChannelAccessError,
     resolve_channel,
@@ -17,6 +17,7 @@ from app.telegram.channel_service import (
 )
 from app.telegram.client import ensure_started
 from app.ui import keyboards, messages
+from app.ui.texts.channels import seen_channels_block
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,9 @@ async def show_channel_prompt(
     channel_type = _TYPE_MAP[kind]
     with get_session() as session:
         channels = ChannelRepository.get_all_by_type(session, channel_type)
-    text = messages.ask_channel(kind, f"{len(channels)} کانال" if channels else None)
+    text = messages.ask_channel(
+        kind, f"{len(channels)} کانال" if channels else None, seen_chats.recent(5)
+    )
     context.user_data[KEY_PENDING_CHANNEL_KIND] = kind
     context.user_data.pop(KEY_PENDING_CHANNEL, None)
     set_state(context.user_data, _STATE_MAP[kind])
@@ -99,17 +102,22 @@ async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             info = await resolve_channel(client, raw)
     except ChannelAccessError as exc:
+        seen_list = seen_channels_block(seen_chats.recent(5))
         if kind == "destination" and "Administrator" in str(exc):
             await update.message.reply_text(
-                messages.PERMISSION_ERROR, reply_markup=keyboards.destination_retry()
+                messages.PERMISSION_ERROR + seen_list,
+                reply_markup=keyboards.destination_retry(),
             )
         else:
-            await update.message.reply_text(str(exc), reply_markup=keyboards.cancel_only())
+            await update.message.reply_text(
+                str(exc) + seen_list, reply_markup=keyboards.cancel_only()
+            )
         return
     except Exception:
         logger.exception("Channel resolution failed")
         await update.message.reply_text(
-            messages.CHANNEL_NOT_FOUND, reply_markup=keyboards.cancel_only()
+            messages.CHANNEL_NOT_FOUND + seen_channels_block(seen_chats.recent(5)),
+            reply_markup=keyboards.cancel_only(),
         )
         return
 

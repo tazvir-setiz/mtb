@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from app.config import settings
+from app.telegram import seen_chats
 
 logger = logging.getLogger(__name__)
 
@@ -128,14 +129,54 @@ def _lookup_candidates(ref: str | int) -> list[str | int]:
 def _not_found_message() -> str:
     if settings.platform == "bale":
         return f"{_NOT_FOUND}\n\n{_BALE_HINT}"
-    return _NOT_FOUND
+    return (
+        f"{_NOT_FOUND}\n\n"
+        "مطمئن شوید ربات به کانال اضافه و Administrator شده است."
+    )
+
+
+async def _channel_info_from_seen(client: Any, cached: dict) -> ChannelInfo:
+    """Build channel info from a chat the bot has already received an update from."""
+    chat_id = int(cached["id"])
+    is_admin = False
+    can_post = False
+    try:
+        me = await client.get_me()
+        bot_id = getattr(me, "id", None)
+        if bot_id:
+            member = await client.get_chat_member(chat_id, bot_id)
+            status = getattr(member, "status", "")
+            if status == "creator":
+                is_admin = True
+                can_post = True
+            elif status == "administrator":
+                is_admin = True
+                can_post = bool(getattr(member, "can_post_messages", True))
+    except Exception:
+        is_admin = False
+        can_post = False
+    return ChannelInfo(
+        telegram_id=chat_id,
+        title=cached.get("title") or "بدون نام",
+        username=cached.get("username"),
+        is_admin=is_admin,
+        can_post=can_post,
+    )
 
 
 async def _resolve_bot_chat(client: Any, ref: str | int) -> ChannelInfo:
     try:
         chat = await client.get_chat(ref)
     except Exception as exc:
-        raise ChannelAccessError(_NOT_FOUND) from exc
+        # Bale often cannot resolve a channel through getChat. Fall back to chats the
+        # bot has actually received updates from (channel_post / my_chat_member).
+        cached = seen_chats.find(ref)
+        if cached is None:
+            raise ChannelAccessError(_NOT_FOUND) from exc
+        logger.info(
+            "Channel resolved from a chat the bot has seen ref=%r id=%s", ref, cached["id"]
+        )
+        return await _channel_info_from_seen(client, cached)
 
     chat_type = getattr(chat, "type", "")
     if chat_type and chat_type not in ("channel", "supergroup", "group"):

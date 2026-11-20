@@ -15,7 +15,22 @@ def channel_list(kind, channels, offset=0):
     return "\n".join(lines) if channels else "\n".join(lines) + "هنوز کانالی تنظیم نشده است."
 
 
-def ask_channel(kind: str, current_title: str | None) -> str:
+def seen_channels_block(seen) -> str:
+    """List chats the bot has received updates from, with their numeric ids.
+
+    Bale cannot always resolve a channel from a link/username, so these ids are the
+    reliable way for the admin to add one.
+    """
+    if not seen:
+        return ""
+    rows = "\n".join(
+        f"• {_e((item.get('title') or 'بدون نام')[:60])} — <code>{item.get('id')}</code>"
+        for item in seen[:5]
+    )
+    return f"\n\n<b>کانال‌هایی که ربات دیده است</b>\n<blockquote>{rows}</blockquote>"
+
+
+def ask_channel(kind: str, current_title: str | None, seen=None) -> str:
     label = "📥 <b>کانال مبدأ</b>" if kind == "source" else "📤 <b>کانال مقصد</b>"
     current = f"✅ <b>{_e(current_title)}</b>" if current_title else "⚠️ <i>تنظیم نشده</i>"
     permission_hint = (
@@ -27,7 +42,8 @@ def ask_channel(kind: str, current_title: str | None) -> str:
     return (
         f"{label}\n"
         f"{DIVIDER}\n\n"
-        f"کانال‌های تنظیم‌شده: {current}\n\n"
+        f"کانال‌های تنظیم‌شده: {current}\n"
+        f"{seen_channels_block(seen)}\n\n"
         "افزودن کانال جدید، کانال‌های قبلی را حفظ می‌کند.\n\n"
         "شناسه، Username یا لینک کانال را ارسال کنید.\n\n"
         "<blockquote>"
@@ -35,7 +51,9 @@ def ask_channel(kind: str, current_title: str | None) -> str:
         "<code>-1001234567890</code>\n"
         "<code>https://t.me/channel_username</code>"
         "</blockquote>\n"
-        f"<i>{permission_hint}</i>"
+        f"<i>{permission_hint}</i>\n\n"
+        "<i>اگر کانال شناسایی نشد: ربات را ادمین کانال کنید و یک پست در کانال بگذارید؛ "
+        "سپس شناسهٔ عددیای که در فهرست بالا ظاهر می‌شود را ارسال کنید.</i>"
     )
 
 
