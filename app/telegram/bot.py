@@ -7,6 +7,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 from app.config import settings
 from app.handlers import guard_settings, reviews, start
@@ -20,25 +21,43 @@ from app.handlers.commands import (
 )
 from app.handlers.router import on_callback, on_text
 from app.telegram import auto_forward
+from app.telegram.bale_bot import BaleBot
 from app.telegram.bot_profile import setup_bot_ui as setup_bot_ui
 from app.telegram.bot_proxy import get_bot_api_proxy_url
 from app.telegram.client import set_bot
 
 
 def build_application() -> Application:
-    builder = (
-        Application.builder()
-        .token(settings.bot_token)
-        .defaults(Defaults(parse_mode=ParseMode.HTML))
-        .connect_timeout(30.0)
-        .read_timeout(30.0)
-        .write_timeout(30.0)
-        .pool_timeout(30.0)
-    )
+    defaults = Defaults(parse_mode=ParseMode.HTML)
 
     if settings.platform == "bale":
-        builder = builder.base_url(settings.bot_base_url).base_file_url(settings.bot_base_file_url)
+        # Bale needs no parse_mode (it always renders Markdown), so BaleBot converts
+        # the HTML UI into Bale Markdown on the way out. Defaults live on the ExtBot
+        # because PTB forbids combining `.bot()` with builder-level bot options.
+        request = HTTPXRequest(
+            connect_timeout=30.0,
+            read_timeout=30.0,
+            write_timeout=30.0,
+            pool_timeout=30.0,
+        )
+        bot = BaleBot(
+            token=settings.bot_token,
+            base_url=settings.bot_base_url,
+            base_file_url=settings.bot_base_file_url,
+            request=request,
+            defaults=defaults,
+        )
+        builder = Application.builder().bot(bot)
     else:
+        builder = (
+            Application.builder()
+            .token(settings.bot_token)
+            .defaults(defaults)
+            .connect_timeout(30.0)
+            .read_timeout(30.0)
+            .write_timeout(30.0)
+            .pool_timeout(30.0)
+        )
         proxy_url = get_bot_api_proxy_url()
         if proxy_url:
             builder = builder.proxy(proxy_url).get_updates_proxy(proxy_url)

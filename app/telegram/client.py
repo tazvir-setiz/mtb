@@ -8,6 +8,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 
 from app.config import ConfigError, settings
+from app.telegram.bale_bot import BaleBot
 from app.telegram.bot_proxy import get_bot_api_proxy_url
 
 logger = logging.getLogger(__name__)
@@ -24,16 +25,19 @@ def set_bot(bot: Bot) -> None:
 
 
 def _create_default_bot() -> Bot:
+    if settings.platform == "bale":
+        return BaleBot(
+            token=settings.bot_token,
+            base_url=settings.bot_base_url,
+            base_file_url=settings.bot_base_file_url,
+        )
+
     kwargs: dict[str, Any] = {
         "token": settings.bot_token,
     }
-    if settings.platform == "bale":
-        kwargs["base_url"] = settings.bot_base_url
-        kwargs["base_file_url"] = settings.bot_base_file_url
-    else:
-        proxy_url = get_bot_api_proxy_url()
-        if proxy_url:
-            kwargs["proxy"] = proxy_url
+    proxy_url = get_bot_api_proxy_url()
+    if proxy_url:
+        kwargs["proxy"] = proxy_url
 
     return Bot(**kwargs)
 
