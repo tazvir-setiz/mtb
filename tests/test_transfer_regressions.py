@@ -87,6 +87,27 @@ async def test_progress_failure_does_not_abort_transfer():
 
 
 @pytest.mark.asyncio
+async def test_run_transfer_renders_live_progress_updates(monkeypatch):
+    # Regression: combined_progress used ProgressSnapshot without importing it, so every
+    # live progress callback raised NameError. report_progress only logs that warning, so
+    # the transfer finished while the admin progress message never updated.
+    job_id = transfer_service.create_job_for_ids(-1001, -1002, [1, 2])
+    client = FakeClient()
+
+    async def fake_ensure_started():
+        return client
+
+    monkeypatch.setattr(transfer_service, "ensure_started", fake_ensure_started)
+    bot = SimpleNamespace(edit_message_text=AsyncMock())
+    context = SimpleNamespace(bot=bot)
+
+    await transfer_service.run_transfer(context, 111, 999, job_id, -1001, -1002, [1, 2])
+
+    # One edit per processed message (interval=0 in tests) plus the final result edit.
+    assert bot.edit_message_text.await_count >= 3
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("auto_first", [True, False])
 async def test_auto_and_manual_send_same_message_only_once(monkeypatch, auto_first):
     entered = asyncio.Event()

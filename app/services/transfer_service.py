@@ -14,6 +14,7 @@ from app.database.repository import (
 )
 from app.services.progress_service import ProgressReporter
 from app.telegram.client import ensure_started
+from app.telegram.forward_progress import ProgressSnapshot
 from app.telegram.forward_service import forward_range, request_stop, retry_failed
 from app.ui import keyboards, messages
 
