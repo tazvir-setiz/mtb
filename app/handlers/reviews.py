@@ -16,6 +16,7 @@ from app.handlers.auth import is_authorized, reject
 from app.services import review_drafts, review_store
 from app.services.review_kind import ReviewKind, parse_review_reason
 from app.services.review_service import decide
+from app.telegram.callback_ack import ack
 from app.telegram.client import ensure_started
 
 logger = logging.getLogger(__name__)
@@ -591,12 +592,8 @@ async def show_pending(update, context, after_id=0):
             if after_id > 0
             else "هیچ پیامی در صف بررسی وجود ندارد."
         )
-        if query and hasattr(query, "answer"):
-            try:
-                await query.answer(msg, show_alert=True)
-                return
-            except TelegramError:
-                pass
+        if query and await ack(query, msg, show_alert=True):
+            return
         await update.effective_message.reply_text(msg)
         return
 
@@ -629,7 +626,7 @@ async def on_callback(update, context):
         await reject(update)
         return
     query = update.callback_query
-    await query.answer()
+    await ack(query)
     if update.effective_chat.type != "private":
         return
     parts = (query.data or "").split(":")

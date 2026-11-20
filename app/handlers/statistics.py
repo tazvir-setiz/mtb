@@ -8,6 +8,7 @@ from app.services.statistics_service import (
     get_recent_messages,
     get_statistics_text,
 )
+from app.telegram.callback_ack import ack
 from app.ui import keyboards, messages
 
 
@@ -20,7 +21,7 @@ async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def refresh_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.callback_query.answer("آمار به‌روز شد")
+    await ack(update.callback_query, "آمار به‌روز شد")
     await show_statistics(update, context)
 
 
@@ -36,7 +37,7 @@ async def clear_statistics_handler(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     clear_statistics()
-    await update.callback_query.answer("آمار پاک شد")
+    await ack(update.callback_query, "آمار پاک شد")
     await show_statistics(update, context)
 
 

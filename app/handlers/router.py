@@ -13,6 +13,7 @@ from app.handlers import settings as settings_handlers
 from app.handlers.auth import is_authorized, reject
 from app.handlers.callback_routes import CALLBACK_ROUTES
 from app.handlers.states import State, get_state, reset
+from app.telegram.callback_ack import ack, is_stale_query_error
 from app.ui import keyboards
 from app.ui.callbacks import parse
 
@@ -28,10 +29,6 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await reject(update)
         return
 
-    try:
-        await query.answer()
-    except Exception:
-        pass
     namespace, action, _arg = parse(query.data or "")
     if namespace != "guard" and get_state(getattr(context, "user_data", {}) or {}) in (
         State.GUARD_IMPORT,
@@ -49,7 +46,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await handler(update, context)
 
     except BadRequest as exc:
-        if "message is not modified" in str(exc).lower():
+        if is_stale_query_error(exc) or "message is not modified" in str(exc).lower():
             return
         logger.exception("Telegram rejected callback: %s", query.data)
         if update.effective_message:
@@ -62,6 +59,11 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await update.effective_message.reply_text(
                 "⚠️ خطای غیرمنتظره‌ای رخ داد.\nاز /menu برای بازگشت به داشبورد استفاده کنید."
             )
+    finally:
+        # Handlers show their own toast/alert through `ack`; this only covers routes that never
+        # answered, and is a no-op when the handler already did.
+        with suppress(Exception):
+            await ack(query)
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

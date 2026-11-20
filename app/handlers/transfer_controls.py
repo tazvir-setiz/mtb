@@ -8,6 +8,7 @@ from app.database.models import JobStatus
 from app.database.repository import ForwardJobRepository, SettingsRepository
 from app.handlers.states import KEY_CURRENT_JOB_ID, KEY_PROGRESS_MESSAGE_ID, State, set_state
 from app.services import transfer_service
+from app.telegram.callback_ack import ack
 from app.ui import keyboards, messages
 
 
@@ -15,13 +16,13 @@ async def pause_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     job_id = context.user_data.get(KEY_CURRENT_JOB_ID)
     if job_id:
         transfer_service.stop_job(job_id)
-    await update.callback_query.answer("در حال توقف عملیات...")
+    await ack(update.callback_query, "در حال توقف عملیات...")
 
 
 async def resume_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     job_id = context.user_data.get(KEY_CURRENT_JOB_ID)
     if not job_id:
-        await update.callback_query.answer("عملیات فعالی یافت نشد.", show_alert=True)
+        await ack(update.callback_query, "عملیات فعالی یافت نشد.", show_alert=True)
         return
     with get_session() as session:
         import json
@@ -31,7 +32,7 @@ async def resume_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         batch_jobs = [ForwardJobRepository.get(session, j_id) for j_id in job_ids]
         if not any(j and j.status == JobStatus.PAUSED for j in batch_jobs):
-            await update.callback_query.answer("این عملیات در وضعیت توقف نیست.", show_alert=True)
+            await ack(update.callback_query, "این عملیات در وضعیت توقف نیست.", show_alert=True)
             return
 
         for j in batch_jobs:
@@ -74,7 +75,7 @@ async def show_errors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def retry_failed_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     job_id = context.user_data.get(KEY_CURRENT_JOB_ID)
     if not job_id:
-        await update.callback_query.answer("عملیات فعالی یافت نشد.", show_alert=True)
+        await ack(update.callback_query, "عملیات فعالی یافت نشد.", show_alert=True)
         return
     set_state(context.user_data, State.TRANSFERRING)
     progress_message_id = update.callback_query.message.message_id

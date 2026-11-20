@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from telegram.error import BadRequest
 
 from app.database.database import get_session
 from app.database.repository import SettingsRepository
@@ -77,6 +78,44 @@ async def test_unknown_callback_is_acknowledged(monkeypatch):
     query = SimpleNamespace(data="unknown:action", answer=AsyncMock())
     await router.on_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
     query.answer.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_handler_toast_wins_and_router_does_not_answer_twice(monkeypatch):
+    from app.telegram.callback_ack import ack
+
+    async def handler(update, context):
+        await ack(update.callback_query, "به‌روز شد")
+
+    monkeypatch.setitem(CALLBACK_ROUTES, ("menu", "refresh"), handler)
+    monkeypatch.setattr(router, "is_authorized", lambda _: True)
+    query = SimpleNamespace(id="router-ack-1", data="menu:refresh", answer=AsyncMock())
+
+    await router.on_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+
+    query.answer.assert_awaited_once_with("به‌روز شد", show_alert=False)
+
+
+@pytest.mark.asyncio
+async def test_stale_callback_query_error_is_not_reported_to_the_user(monkeypatch):
+    async def handler(update, context):
+        raise BadRequest(
+            "Query is too old and response timeout expired or query id is invalid"
+        )
+
+    monkeypatch.setitem(CALLBACK_ROUTES, ("menu", "refresh"), handler)
+    monkeypatch.setattr(router, "is_authorized", lambda _: True)
+    reply = AsyncMock()
+    query = SimpleNamespace(id="router-ack-2", data="menu:refresh", answer=AsyncMock())
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_message=SimpleNamespace(reply_text=reply),
+    )
+
+    await router.on_callback(update, SimpleNamespace())
+
+    reply.assert_not_awaited()
+    query.answer.assert_awaited_once()
 
 
 @pytest.mark.asyncio

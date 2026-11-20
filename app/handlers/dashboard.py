@@ -19,6 +19,7 @@ from app.handlers.states import State, reset, set_state
 from app.services.ai_settings import load_ai_settings
 from app.services.statistics_service import get_system_health_report
 from app.telegram import auto_forward
+from app.telegram.callback_ack import ack
 from app.telegram.client import ensure_started
 from app.ui import keyboards, messages
 
@@ -92,13 +93,13 @@ async def show_dashboard(
 
 async def refresh_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.callback_query:
-        await update.callback_query.answer("داشبورد به‌روزرسانی شد")
+        await ack(update.callback_query, "داشبورد به‌روزرسانی شد")
     await show_dashboard(update, context, edit=True)
 
 
 async def show_health_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.callback_query:
-        await update.callback_query.answer("در حال سنجش وضعیت سلامت سیستم...")
+        await ack(update.callback_query, "در حال سنجش وضعیت سلامت سیستم...")
     report = await get_system_health_report()
     markup = keyboards.health_menu()
     if update.callback_query:
@@ -117,7 +118,8 @@ async def toggle_auto_forward(update: Update, context: ContextTypes.DEFAULT_TYPE
         destinations = ChannelRepository.get_all_by_type(session, ChannelType.DESTINATION)
 
     if not sources or not destinations:
-        await update.callback_query.answer(
+        await ack(
+            update.callback_query,
             "ابتدا حداقل یک کانال مبدأ و یک کانال مقصد تنظیم کنید.",
             show_alert=True,
         )

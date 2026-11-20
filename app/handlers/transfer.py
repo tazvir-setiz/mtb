@@ -23,6 +23,7 @@ from app.handlers.transfer_input import show_confirm_from_range as show_confirm_
 from app.handlers.transfer_input import start_ids_flow as start_ids_flow
 from app.handlers.transfer_input import start_range_flow as start_range_flow
 from app.services import transfer_service
+from app.telegram.callback_ack import ack
 from app.ui import keyboards, messages
 from app.ui.buttons.transfer import destination_selection, source_selection
 
@@ -38,8 +39,10 @@ async def show_transfer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data.pop("transfer_destinations", None)
     sources, destinations = transfer_service.configured_channels()
     if not sources or not destinations:
-        await update.callback_query.answer(
-            "ابتدا کانال مبدأ و مقصد را تنظیم کنید.", show_alert=True
+        await ack(
+            update.callback_query,
+            "ابتدا کانال مبدأ و مقصد را تنظیم کنید.",
+            show_alert=True,
         )
         return
     set_state(context.user_data, State.TRANSFER_MENU)
@@ -117,7 +120,7 @@ async def show_destinations(update, context):
         chosen_sources = [context.user_data["transfer_source"]]
         context.user_data["transfer_sources"] = chosen_sources
     if not chosen_sources:
-        await update.callback_query.answer("حداقل یک مبدأ انتخاب کنید.", show_alert=True)
+        await ack(update.callback_query, "حداقل یک مبدأ انتخاب کنید.", show_alert=True)
         return
     _, destinations = transfer_service.configured_channels()
     _, action, arg = parse(getattr(update.callback_query, "data", "") or "")
@@ -161,7 +164,11 @@ async def confirm_routes(update, context):
         context.user_data
     )
     if source_id is None or not destinations:
-        await update.callback_query.answer("یک مبدأ و حداقل یک مقصد انتخاب کنید.", show_alert=True)
+        await ack(
+            update.callback_query,
+            "یک مبدأ و حداقل یک مقصد انتخاب کنید.",
+            show_alert=True,
+        )
         return
     await update.callback_query.edit_message_text(
         messages.transfer_menu_text(source_title, dest_title),

@@ -8,6 +8,7 @@ from app.database.database import get_session
 from app.database.repository import SettingsRepository
 from app.handlers.states import State, reset, set_state
 from app.services.ai_settings import load_ai_settings
+from app.telegram.callback_ack import ack
 from app.ui import keyboards, messages
 
 
@@ -51,12 +52,13 @@ async def clear_signature(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     with get_session() as session:
         SettingsRepository.set(session, "signature_text", "")
 
-    await update.callback_query.answer("امضا حذف شد.")
+    await ack(update.callback_query, "امضا حذف شد.")
     await show_settings(update, context)
 
 
 async def show_delay_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.callback_query.answer(
+    await ack(
+        update.callback_query,
         f"فاصله فعلی ارسال: {settings.forward_delay:g} ثانیه. برای تغییر، FORWARD_DELAY را در .env ویرایش کنید.",
         show_alert=True,
     )
@@ -73,7 +75,7 @@ async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     with get_session() as session:
         SettingsRepository.clear_all_data(session)
 
-    await update.callback_query.answer("داده‌های عملیات پاک شد.")
+    await ack(update.callback_query, "داده‌های عملیات پاک شد.")
     await show_settings(update, context)
 
 
