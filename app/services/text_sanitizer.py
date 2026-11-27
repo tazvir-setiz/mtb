@@ -35,9 +35,16 @@ def remove_urls(data: str) -> str:
     )
 
 
+def _is_trailing_noise_line(line: str) -> bool:
+    if not any(ch.isalnum() for ch in line):
+        return True
+    stripped = re.sub(r"^[\W_]+|[\W_]+$", "", line).strip()
+    return stripped.casefold() in GENERIC_LINK_LABELS
+
+
 def _strip_trailing_non_text_lines(text: str) -> str:
     lines = text.splitlines()
-    while lines and not any(ch.isalnum() for ch in lines[-1]):
+    while lines and _is_trailing_noise_line(lines[-1]):
         lines.pop()
     return "\n".join(lines).rstrip()
 

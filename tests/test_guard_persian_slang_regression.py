@@ -325,6 +325,14 @@ def test_sanitize_text_removes_trailing_markdown_link_and_emoji_lines():
     assert "farsnews.ir" not in cleaned_html_link
     assert cleaned_html_link.endswith("یک‌طرفه می شود.")
 
+    msg_with_plain_link = (
+        "پاسخ آیت‌الله خامنه‌ای: «اشکال ندارد.»\n"
+        " - Link\n"
+    )
+    cleaned_plain_link = sanitize_text(msg_with_plain_link, remove_links=True, replacement="")
+    assert "Link" not in cleaned_plain_link
+    assert cleaned_plain_link.endswith("«اشکال ندارد.»")
+
 
 
 
