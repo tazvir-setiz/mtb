@@ -135,7 +135,7 @@ def get_recent_messages(limit: int = 10) -> list[dict]:
 
 async def get_system_health_report() -> str:
     # 1. Messenger Bot Client Health
-    platform_label = "بله (Bale)" if settings.platform == "bale" else "تلگرام (Telegram)"
+    platform_label = "تلگرام (Telegram)"
     client_status_lines = []
     try:
         client = get_client()

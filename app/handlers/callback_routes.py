@@ -56,6 +56,8 @@ CALLBACK_ROUTES: dict[tuple[str, str], CallbackHandler] = {
     ("nav", "back"): partial(dashboard.show_dashboard, edit=True),
     ("source", "add"): partial(source.show_channel_prompt, kind="source"),
     ("destination", "add"): partial(source.show_channel_prompt, kind="destination"),
+    ("source", "pick"): partial(source.pick_seen_channel, kind="source"),
+    ("destination", "pick"): partial(source.pick_seen_channel, kind="destination"),
     ("source", "removals"): partial(source.show_channels, kind="source", removing=True),
     ("destination", "removals"): partial(source.show_channels, kind="destination", removing=True),
     ("source", "remove"): partial(source.remove_channel, kind="source"),

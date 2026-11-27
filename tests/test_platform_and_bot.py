@@ -7,12 +7,9 @@ from app.config import load_settings
 from app.database.database import get_session
 from app.database.models import ChannelType, ForwardedMessage, MessageStatus
 from app.database.repository import ChannelRepository
-from app.services.statistics_service import get_system_health_report
 from app.telegram import auto_forward
-from app.telegram.bot import build_application
 from app.telegram.channel_service import (
     ChannelAccessError,
-    normalize_channel_ref,
     resolve_channel,
     verify_destination_permissions,
 )
@@ -27,29 +24,6 @@ def test_platform_settings_default_telegram(monkeypatch):
     assert s.platform == "telegram"
     assert s.bot_base_url == "https://api.telegram.org/bot"
     assert s.bot_base_file_url == "https://api.telegram.org/file/bot"
-
-
-def test_platform_settings_bale(monkeypatch):
-    monkeypatch.setenv("PLATFORM", "bale")
-    monkeypatch.setenv("BOT_TOKEN", "123:bale_tok")
-    s = load_settings()
-    assert s.platform == "bale"
-    assert s.bot_base_url == "https://tapi.bale.ai/bot"
-    assert s.bot_base_file_url == "https://tapi.bale.ai/file/bot"
-
-
-def test_bale_application_builder(monkeypatch):
-    monkeypatch.setenv("PLATFORM", "bale")
-    monkeypatch.setenv("BOT_TOKEN", "123:bale_tok")
-    from app import config
-
-    monkeypatch.setattr(config, "settings", load_settings())
-    import app.telegram.bot as bot_module
-
-    monkeypatch.setattr(bot_module, "settings", config.settings)
-
-    app = build_application()
-    assert "tapi.bale.ai" in app.bot.base_url
 
 
 @pytest.mark.asyncio
@@ -71,13 +45,6 @@ async def test_unsupported_profile_method_does_not_abort_startup():
     bot.set_my_commands.assert_awaited_once()
     bot.set_my_short_description.assert_awaited_once()
     bot.set_my_description.assert_awaited_once()
-
-
-def test_normalize_channel_ref_bale():
-    assert normalize_channel_ref("https://ble.ir/my_bale_channel") == "@my_bale_channel"
-    assert normalize_channel_ref("https://ble.ir/news_channel/123/456") == "@news_channel"
-    assert normalize_channel_ref("@bale_group") == "@bale_group"
-    assert normalize_channel_ref("-100987654321") == -100987654321
 
 
 @pytest.mark.asyncio
@@ -219,27 +186,4 @@ async def test_handle_channel_update_end_to_end(monkeypatch):
     await auto_forward.disable(client)
 
 
-@pytest.mark.asyncio
-async def test_bale_health_report(monkeypatch):
-    from dataclasses import replace
 
-    from app import config
-    from app.services import statistics_service
-
-    bale_settings = replace(config.settings, platform="bale")
-    monkeypatch.setattr(config, "settings", bale_settings)
-    monkeypatch.setattr(statistics_service, "settings", bale_settings)
-
-    mock_client = SimpleNamespace(
-        is_connected=lambda: True,
-        is_user_authorized=AsyncMock(return_value=True),
-        get_me=AsyncMock(
-            return_value=SimpleNamespace(id=12345, first_name="BaleBot", username="my_bale_bot")
-        ),
-    )
-    monkeypatch.setattr("app.services.statistics_service.get_client", lambda: mock_client)
-
-    report = await get_system_health_report()
-    assert "بله (Bale)" in report
-    assert "BaleBot" in report
-    assert "سلامت سیستم" in report

@@ -100,16 +100,8 @@ def load_guardrails() -> str:
 
 
 def load_settings() -> Settings:
-    platform = optional_env("PLATFORM", optional_env("BOT_PLATFORM", "telegram")).strip().lower()
-    if platform not in ("telegram", "bale"):
-        platform = "telegram"
-
-    if platform == "bale":
-        default_base_url = "https://tapi.bale.ai/bot"
-        default_base_file_url = "https://tapi.bale.ai/file/bot"
-    else:
-        default_base_url = "https://api.telegram.org/bot"
-        default_base_file_url = "https://api.telegram.org/file/bot"
+    default_base_url = "https://api.telegram.org/bot"
+    default_base_file_url = "https://api.telegram.org/file/bot"
 
     raw_api_id = optional_env("API_ID", "0").strip()
     api_id = int(raw_api_id) if raw_api_id.isdigit() else 0
@@ -120,7 +112,7 @@ def load_settings() -> Settings:
         api_id=api_id,
         api_hash=api_hash,
         admin_ids=_parse_admin_ids(optional_env("ADMIN_IDS")),
-        platform=platform,
+        platform="telegram",
         bot_base_url=optional_env("BOT_BASE_URL", default_base_url),
         bot_base_file_url=optional_env("BOT_BASE_FILE_URL", default_base_file_url),
         database_url=optional_env("DATABASE_URL", "sqlite:///data/forwarder.db"),

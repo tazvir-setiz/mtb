@@ -4,7 +4,6 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 
 from app.config import settings
 from app.telegram import seen_chats
@@ -26,18 +25,12 @@ class ChannelInfo:
 
 
 _NOT_FOUND = "کانال یافت نشد. شناسه یا Username را بررسی کنید."
-_BALE_HINT = (
-    "در بله مطمئن شوید ربات به کانال اضافه شده و Administrator است. "
-    "مطمئن‌ترین راه، ارسال شناسهٔ عددی کانال است (از اطلاعات کانال یا getUpdates)."
-)
 _INVITE_LINK_HINT = (
     "لینک دعوت برای شناسایی کانال کافی نیست. "
     "شناسهٔ عددی یا Username کانال را ارسال کنید."
 )
 
-_INVITE_RE = re.compile(r"^(?:https?://)?(?:ble\.ir/join|t\.me/(?:joinchat|\+))", re.I)
-_BALE_POST_RE = re.compile(r"^(?:https?://)?(?:ble\.ir|bale\.ai)/post/([^/?#]+)", re.I)
-_BALE_WEB_RE = re.compile(r"^(?:https?://)?(?:web\.)?bale\.ai/", re.I)
+_INVITE_RE = re.compile(r"^(?:https?://)?t\.me/(?:joinchat|\+)", re.I)
 _TME_RE = re.compile(r"(?:https?://)?(?:www\.)?(?:t|telegram)\.me/", re.I)
 
 
@@ -70,65 +63,18 @@ def normalize_channel_ref(raw: str) -> str | int:
         if username:
             return f"@{username}"
 
-    # Bale links
     if _INVITE_RE.match(raw):
         return raw  # resolved (rejected) before this point; kept for callers
-    match = _BALE_POST_RE.match(raw)
-    if match and _is_digits(match.group(1)):
-        # ble.ir/post/<group_id>/<message_id>/<date> identifies a group/channel.
-        return int(match.group(1))
-    if _BALE_WEB_RE.match(raw):
-        # web.bale.ai/chat?uid=<id> is what the Bale web client puts in the address bar.
-        parsed = urlparse(raw if "://" in raw else f"https://{raw}")
-        params = parse_qs(parsed.query)
-        for key in ("uid", "gid", "chat_id", "chat", "id"):
-            value = params.get(key, [""])[0]
-            if _is_digits(value):
-                return int(value)
-    ble_link = re.match(r"^(?:https?://)?(?:www\.)?ble\.ir/(.+)$", raw, re.I)
-    if ble_link:
-        part = ble_link.group(1).strip("/").split("/")[0]
-        if part and part.lower() != "join":
-            return f"@{part}"
 
     return raw if raw.startswith("@") else "@" + raw
 
 
 def _lookup_candidates(ref: str | int) -> list[str | int]:
-    """Refs to try against ``getChat``.
-
-    Bale chat ids are quirky: channel/group ids can be negative while the same entity
-    shows a positive id in web links, and usernames may or may not want the ``@``.
-    On Bale we therefore try the documented alternatives before giving up. Telegram
-    keeps the single, exact ref.
-    """
-    candidates: list[str | int] = [ref]
-    if settings.platform != "bale":
-        return candidates
-
-    def add(value: str | int) -> None:
-        if value not in candidates:
-            candidates.append(value)
-
-    if isinstance(ref, int):
-        # String form first: Bale ids can exceed 2**53 and lose precision as JSON numbers.
-        candidates.insert(0, str(ref))
-        if ref > 0:
-            add(-ref)
-    elif isinstance(ref, str):
-        if ref.startswith("@"):
-            add(ref[1:])
-        elif _is_digits(ref):
-            numeric = int(ref)
-            add(numeric)
-            if numeric > 0:
-                add(-numeric)
-    return candidates
+    """Refs to try against ``getChat``."""
+    return [ref]
 
 
 def _not_found_message() -> str:
-    if settings.platform == "bale":
-        return f"{_NOT_FOUND}\n\n{_BALE_HINT}"
     return (
         f"{_NOT_FOUND}\n\n"
         "مطمئن شوید ربات به کانال اضافه و Administrator شده است."

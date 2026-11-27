@@ -1,12 +1,10 @@
-from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from telegram.error import BadRequest
 
-from app import config
-from app.telegram import auto_forward, channel_service, seen_chats
+from app.telegram import auto_forward, seen_chats
 from app.telegram.bot import _remember_bot_membership
 from app.telegram.channel_service import ChannelAccessError, resolve_channel
 from app.telegram.client import BotClient
@@ -73,10 +71,7 @@ def test_ask_channel_lists_seen_channels():
 
 
 @pytest.mark.asyncio
-async def test_resolve_falls_back_to_a_chat_the_bot_has_seen(monkeypatch):
-    monkeypatch.setattr(
-        channel_service, "settings", replace(config.settings, platform="bale")
-    )
+async def test_resolve_falls_back_to_a_chat_the_bot_has_seen():
     seen_chats.record(_channel(chat_id=-100555, title="کانال دیده‌شده", username=None))
     client = _client(
         get_chat=AsyncMock(side_effect=BadRequest("Bad Request: chat not found"))
@@ -90,10 +85,7 @@ async def test_resolve_falls_back_to_a_chat_the_bot_has_seen(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_still_fails_for_unknown_chat(monkeypatch):
-    monkeypatch.setattr(
-        channel_service, "settings", replace(config.settings, platform="bale")
-    )
+async def test_resolve_still_fails_for_unknown_chat():
     client = _client(
         get_chat=AsyncMock(side_effect=BadRequest("Bad Request: chat not found"))
     )

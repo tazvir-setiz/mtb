@@ -8,7 +8,6 @@ from telegram import Bot
 from telegram.constants import ParseMode
 
 from app.config import ConfigError, settings
-from app.telegram.bale_bot import BaleBot
 from app.telegram.bot_proxy import get_bot_api_proxy_url
 
 logger = logging.getLogger(__name__)
@@ -25,13 +24,6 @@ def set_bot(bot: Bot) -> None:
 
 
 def _create_default_bot() -> Bot:
-    if settings.platform == "bale":
-        return BaleBot(
-            token=settings.bot_token,
-            base_url=settings.bot_base_url,
-            base_file_url=settings.bot_base_file_url,
-        )
-
     kwargs: dict[str, Any] = {
         "token": settings.bot_token,
     }
@@ -244,10 +236,36 @@ class BotClient:
             self._event_handlers.remove(handler)
 
 
+def _should_use_telethon() -> bool:
+    return (
+        settings.platform == "telegram"
+        and bool(settings.api_id)
+        and bool(settings.api_hash)
+    )
+
+
+def _create_telethon_client() -> Any:
+    from pathlib import Path
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+
+    if settings.telethon_string_session:
+        session: Any = StringSession(settings.telethon_string_session)
+    else:
+        session_path = Path(settings.telethon_session)
+        session_path.parent.mkdir(parents=True, exist_ok=True)
+        session = str(session_path)
+
+    return TelegramClient(session, settings.api_id, settings.api_hash)
+
+
 def get_client() -> Any:
     global _client
     if _client is None:
-        _client = BotClient(_bot_instance)
+        if _should_use_telethon():
+            _client = _create_telethon_client()
+        else:
+            _client = BotClient(_bot_instance)
     return _client
 
 

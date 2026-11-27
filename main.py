@@ -52,7 +52,7 @@ async def _post_shutdown(application) -> None:
 def main() -> int:
     setup_logging()
     logger = logging.getLogger(__name__)
-    platform_label = "Bale" if settings.platform == "bale" else "Telegram"
+    platform_label = "Telegram"
     logger.info("Starting bot... (%s Forwarder + AI Guardrails)", platform_label)
 
     init_db()

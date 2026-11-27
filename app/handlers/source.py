@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import logging
 
-from telegram import Update
+from telegram import (
+    KeyboardButton,
+    KeyboardButtonRequestChat,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+)
 from telegram.ext import ContextTypes
 
 from app.database.database import get_session
@@ -73,59 +79,141 @@ def remember_channel(user_data: dict, kind: str, info, message_id: int) -> None:
 async def show_channel_prompt(
     update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str
 ) -> None:
+    from app.ui.buttons.channels import channel_prompt_keyboard
+
     channel_type = _TYPE_MAP[kind]
     with get_session() as session:
         channels = ChannelRepository.get_all_by_type(session, channel_type)
+    recent_seen = seen_chats.recent(8)
     text = messages.ask_channel(
-        kind, f"{len(channels)} کانال" if channels else None, seen_chats.recent(5)
+        kind, f"{len(channels)} کانال" if channels else None, recent_seen[:5]
     )
     context.user_data[KEY_PENDING_CHANNEL_KIND] = kind
     context.user_data.pop(KEY_PENDING_CHANNEL, None)
     set_state(context.user_data, _STATE_MAP[kind])
     await update.callback_query.message.reply_text(
-        text, reply_markup=keyboards.cancel_only(force_reply=True)
+        text, reply_markup=channel_prompt_keyboard(kind, recent_seen)
+    )
+    picker_kb = ReplyKeyboardMarkup(
+        [
+            [
+                KeyboardButton(
+                    "📢 انتخاب کانال از تلگرام",
+                    request_chat=KeyboardButtonRequestChat(
+                        request_id=1 if kind == "source" else 2,
+                        chat_is_channel=True,
+                    ),
+                )
+            ]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+    await update.callback_query.message.reply_text(
+        "👇 یا از دکمهٔ زیر کانال را مستقیم از لیست تلگرام انتخاب کنید:",
+        reply_markup=picker_kb,
     )
 
 
-async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    kind = context.user_data.get(KEY_PENDING_CHANNEL_KIND)
-    if kind not in _TYPE_MAP:
-        return
+async def _resolve_and_confirm(
+    message, context: ContextTypes.DEFAULT_TYPE, kind: str, raw: str | int
+) -> None:
     context.user_data.pop(KEY_PENDING_CHANNEL, None)
-    raw = update.message.text.strip()
-    context.user_data["channel_input"] = raw
+    context.user_data["channel_input"] = str(raw)
 
     try:
         client = await ensure_started()
         if kind == "destination":
-            info = await verify_destination_permissions(client, raw)
+            info = await verify_destination_permissions(client, str(raw))
         else:
-            info = await resolve_channel(client, raw)
+            info = await resolve_channel(client, str(raw))
     except ChannelAccessError as exc:
         seen_list = seen_channels_block(seen_chats.recent(5))
         if kind == "destination" and "Administrator" in str(exc):
-            await update.message.reply_text(
+            await message.reply_text(
                 messages.PERMISSION_ERROR + seen_list,
                 reply_markup=keyboards.destination_retry(),
             )
         else:
-            await update.message.reply_text(
+            await message.reply_text(
                 str(exc) + seen_list, reply_markup=keyboards.cancel_only()
             )
         return
     except Exception:
         logger.exception("Channel resolution failed")
-        await update.message.reply_text(
+        await message.reply_text(
             messages.CHANNEL_NOT_FOUND + seen_channels_block(seen_chats.recent(5)),
             reply_markup=keyboards.cancel_only(),
         )
         return
 
     text = messages.channel_confirmed(kind, info.title, info.telegram_id, info.username)
-    confirmation = await update.message.reply_text(
+    confirmation = await message.reply_text(
         text, reply_markup=keyboards.channel_confirm(kind)
     )
     remember_channel(context.user_data, kind, info, confirmation.message_id)
+
+
+async def handle_channel_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    kind = context.user_data.get(KEY_PENDING_CHANNEL_KIND)
+    if kind not in _TYPE_MAP:
+        return
+    forwarded_chat = _extract_forwarded_chat(update.message)
+    if forwarded_chat is not None:
+        seen_chats.record(forwarded_chat)
+        await _resolve_and_confirm(update.message, context, kind, forwarded_chat.id)
+        return
+    raw = (update.message.text or "").strip()
+    if not raw:
+        return
+    await _resolve_and_confirm(update.message, context, kind, raw)
+
+
+def _extract_forwarded_chat(message):
+    origin = getattr(message, "forward_origin", None)
+    chat = getattr(origin, "chat", None) if origin is not None else None
+    if chat is not None:
+        return chat
+    return getattr(message, "forward_from_chat", None)
+
+
+async def pick_seen_channel(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str
+) -> None:
+    from app.ui.callbacks import parse
+
+    _, _, arg = parse(update.callback_query.data)
+    if arg is None or not arg.lstrip("-").isdigit():
+        return
+    context.user_data[KEY_PENDING_CHANNEL_KIND] = kind
+    set_state(context.user_data, _STATE_MAP[kind])
+    await _resolve_and_confirm(update.callback_query.message, context, kind, int(arg))
+
+
+async def handle_chat_shared(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_shared = getattr(update.message, "chat_shared", None)
+    if chat_shared is None:
+        return
+    kind = context.user_data.get(KEY_PENDING_CHANNEL_KIND)
+    if kind not in _TYPE_MAP:
+        kind = "source" if chat_shared.request_id == 1 else "destination"
+        context.user_data[KEY_PENDING_CHANNEL_KIND] = kind
+        set_state(context.user_data, _STATE_MAP[kind])
+    await update.message.reply_text(
+        "⏳ در حال بررسی کانال انتخاب‌شده...", reply_markup=ReplyKeyboardRemove()
+    )
+    await _resolve_and_confirm(update.message, context, kind, chat_shared.chat_id)
+
+
+async def handle_forwarded_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    kind = context.user_data.get(KEY_PENDING_CHANNEL_KIND)
+    if kind not in _TYPE_MAP:
+        return
+    forwarded_chat = _extract_forwarded_chat(update.message)
+    if forwarded_chat is None:
+        return
+    seen_chats.record(forwarded_chat)
+    await _resolve_and_confirm(update.message, context, kind, forwarded_chat.id)
 
 
 async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, kind: str) -> None:

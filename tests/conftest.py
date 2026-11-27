@@ -32,9 +32,23 @@ def _database_lifetime():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_db():
+def _fresh_db(monkeypatch):
+    from dataclasses import replace
+
+    from app.guard_config import GuardSettings
+    from app.services import moderation_service
     from app.services.guard_runtime import runtime
 
+    defaults = GuardSettings()
+    monkeypatch.setattr(
+        moderation_service,
+        "guard_settings",
+        replace(
+            moderation_service.guard_settings,
+            max_stages=defaults.max_stages,
+            max_requests=defaults.max_requests,
+        ),
+    )
     runtime.cache.clear()
     runtime.failures.clear()
     runtime.metrics.clear()

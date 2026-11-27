@@ -12,7 +12,7 @@ from app.handlers.callback_routes import CALLBACK_ROUTES
 from app.handlers.states import State, get_state, set_state
 from app.services.guard_profile import default_profile
 from app.ui import keyboards
-from app.ui.buttons.channels import channel_management
+from app.ui.buttons.channels import channel_management, channel_prompt_keyboard
 from app.ui.buttons.guard import guard_confirm, guard_menu
 from app.ui.buttons.transfer import destination_selection, source_selection
 from app.ui.callbacks import parse
@@ -27,6 +27,8 @@ def test_every_button_has_a_callable_route():
         channel_management("destination", [channel]),
         channel_management("source", [channel], removing=True),
         channel_management("destination", [channel], removing=True),
+        channel_prompt_keyboard("source", [{"id": -1001, "title": "Channel"}]),
+        channel_prompt_keyboard("destination", [{"id": -1001, "title": "Channel"}]),
         guard_menu(default_profile()),
         guard_confirm("test-token"),
         keyboards.main_menu(True, True, True, -1001, -1002),

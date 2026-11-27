@@ -25,6 +25,21 @@ def channel_management(kind, channels, *, removing=False, page=0, pages=1):
     return InlineKeyboardMarkup(rows)
 
 
+def channel_prompt_keyboard(kind: str, seen: list[dict]) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            _cb(
+                f"📢 {(item.get('title') or str(item.get('id')))[:40]}",
+                f"{kind}:pick:{item['id']}",
+            )
+        ]
+        for item in seen
+        if item.get("id") is not None
+    ]
+    rows.append([_cb("✖️ لغو", "nav:cancel")])
+    return InlineKeyboardMarkup(rows)
+
+
 def channel_confirm(prefix: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
