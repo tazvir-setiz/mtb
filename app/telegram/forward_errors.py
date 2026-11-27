@@ -9,6 +9,17 @@ from telethon.errors import (
 )
 from telethon.errors.rpcerrorlist import ChatWriteForbiddenError
 
+try:
+    from telegram.error import (
+        BadRequest as PTBBadRequest,
+        Forbidden as PTBForbidden,
+        NetworkError as PTBNetworkError,
+        RetryAfter as PTBRetryAfter,
+        TimedOut as PTBTimedOut,
+    )
+except ImportError:  # pragma: no cover
+    PTBBadRequest = PTBForbidden = PTBNetworkError = PTBRetryAfter = PTBTimedOut = ()  # type: ignore[assignment,misc]
+
 from app.services.ai_policy import AIProcessingError, AIReviewRequired
 
 
@@ -56,6 +67,19 @@ def classify_error(exc: Exception) -> ForwardErrorType:
         return ForwardErrorType.FORBIDDEN
     if isinstance(exc, ValueError) and "Cannot find" in str(exc):
         return ForwardErrorType.CHAT_NOT_FOUND
-    if isinstance(exc, (ConnectionError, OSError)):
+    if isinstance(exc, (ConnectionError, OSError, PTBTimedOut, PTBNetworkError)):
         return ForwardErrorType.NETWORK_ERROR
+    if isinstance(exc, PTBRetryAfter):
+        return ForwardErrorType.FLOOD_WAIT
+    if isinstance(exc, PTBForbidden):
+        return ForwardErrorType.PERMISSION_DENIED
+    if isinstance(exc, PTBBadRequest):
+        msg = str(exc).lower()
+        if any(k in msg for k in ("chat not found", "peer_id_invalid", "channel_invalid")):
+            return ForwardErrorType.CHAT_NOT_FOUND
+        if any(k in msg for k in ("not enough rights", "need administrator rights", "no rights to send", "chat_write_forbidden")):
+            return ForwardErrorType.PERMISSION_DENIED
+        if any(k in msg for k in ("protected", "forwards_restricted")):
+            return ForwardErrorType.PROTECTED_CONTENT
+        return ForwardErrorType.MESSAGE_NOT_FOUND
     return ForwardErrorType.UNKNOWN

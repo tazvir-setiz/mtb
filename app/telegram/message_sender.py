@@ -69,7 +69,16 @@ async def prepare_message(
 
     media = getattr(original, "media", None)
     if media is None:
-        for attr in ("photo", "video", "document", "audio", "voice", "animation"):
+        for attr in (
+            "photo",
+            "video",
+            "document",
+            "audio",
+            "voice",
+            "animation",
+            "sticker",
+            "video_note",
+        ):
             val = getattr(original, attr, None)
             if val:
                 media = val

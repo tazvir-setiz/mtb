@@ -89,6 +89,9 @@ class BotClient:
         # Bot token acts as full authorization; no user SMS/phone code needed.
         return True
 
+    async def is_bot(self) -> bool:
+        return True
+
     async def get_me(self) -> Any:
         return await self.bot.get_me()
 
@@ -128,12 +131,53 @@ class BotClient:
     ) -> Any:
         pm = ParseMode.HTML if str(parse_mode).lower() == "html" else parse_mode
         if file is not None:
-            if isinstance(file, str) or hasattr(file, "file_id"):
+            if isinstance(file, (list, tuple)) and file:
+                file = file[-1]
+            media_type = type(file).__name__
+            if isinstance(file, str) or media_type == "PhotoSize":
                 return await self.bot.send_photo(
                     chat_id=entity,
                     photo=file,
                     caption=message,
                     parse_mode=pm,
+                )
+            if media_type == "Video":
+                return await self.bot.send_video(
+                    chat_id=entity,
+                    video=file,
+                    caption=message,
+                    parse_mode=pm,
+                )
+            if media_type == "Audio":
+                return await self.bot.send_audio(
+                    chat_id=entity,
+                    audio=file,
+                    caption=message,
+                    parse_mode=pm,
+                )
+            if media_type == "Voice":
+                return await self.bot.send_voice(
+                    chat_id=entity,
+                    voice=file,
+                    caption=message,
+                    parse_mode=pm,
+                )
+            if media_type == "Animation":
+                return await self.bot.send_animation(
+                    chat_id=entity,
+                    animation=file,
+                    caption=message,
+                    parse_mode=pm,
+                )
+            if media_type == "Sticker":
+                return await self.bot.send_sticker(
+                    chat_id=entity,
+                    sticker=file,
+                )
+            if media_type == "VideoNote":
+                return await self.bot.send_video_note(
+                    chat_id=entity,
+                    video_note=file,
                 )
             return await self.bot.send_document(
                 chat_id=entity,
