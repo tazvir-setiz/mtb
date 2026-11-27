@@ -333,6 +333,18 @@ def test_sanitize_text_removes_trailing_markdown_link_and_emoji_lines():
     assert "Link" not in cleaned_plain_link
     assert cleaned_plain_link.endswith("«اشکال ندارد.»")
 
+    msg_with_social_footer = (
+        "🎥 بازیکنان ملوان هم از زمین بازی بیرون رفتند\n\n"
+        "👈دریافت آخرین اخبار:\n"
+        "[سایت](https://snn.ir/) | [ایتا](https://eitaa.com/snn_ir) | [بله](https://ble.ir/snn_ir)\n"
+        "✅ تلگرام: @snntv\n"
+    )
+    cleaned_footer = sanitize_text(msg_with_social_footer, remove_links=True, replacement="")
+    assert "دریافت آخرین اخبار" not in cleaned_footer
+    assert "ایتا" not in cleaned_footer
+    assert "تلگرام" not in cleaned_footer
+    assert cleaned_footer.endswith("بیرون رفتند")
+
 
 
 

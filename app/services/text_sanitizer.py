@@ -16,7 +16,48 @@ SHORT_URL = re.compile(
 )
 MARKDOWN_LINK = re.compile(r"\[([^\]\n]*)\]\([^\s)]*\)")
 GENERIC_LINK_LABELS = frozenset(
-    {"link", "لینک", "مشاهده", "ادامه", "ادامه مطلب", "مشروح خبر", "منبع", "سایت", "اینجا", "کلیک کنید"}
+    {
+        "link",
+        "لینک",
+        "مشاهده",
+        "مشاهده خبر",
+        "ادامه",
+        "ادامه مطلب",
+        "ادامه خبر",
+        "مشروح خبر",
+        "بیشتر بخوانید",
+        "متن کامل",
+        "جزئیات",
+        "جزئیات بیشتر",
+        "لینک خبر",
+        "مطالعه بیشتر",
+        "منبع",
+        "سایت",
+        "اینجا",
+        "اینجا کلیک کنید",
+        "کلیک",
+        "کلیک کنید",
+        "تلگرام",
+        "ایتا",
+        "بله",
+        "روبیکا",
+        "سروش",
+        "سروش پلاس",
+        "آپارات",
+        "اینستاگرام",
+        "یوتیوب",
+        "توییتر",
+        "ایکس",
+    }
+)
+TRAILING_FOOTER_HEADERS = frozenset(
+    {
+        "دریافت آخرین اخبار",
+        "آخرین اخبار",
+        "ما را دنبال کنید",
+        "ما را در شبکه‌های اجتماعی دنبال کنید",
+        "ارتباط با ما",
+    }
 )
 
 
@@ -39,7 +80,13 @@ def _is_trailing_noise_line(line: str) -> bool:
     if not any(ch.isalnum() for ch in line):
         return True
     stripped = re.sub(r"^[\W_]+|[\W_]+$", "", line).strip()
-    return stripped.casefold() in GENERIC_LINK_LABELS
+    if stripped.casefold() in GENERIC_LINK_LABELS or stripped in TRAILING_FOOTER_HEADERS:
+        return True
+    if "|" in stripped:
+        parts = [re.sub(r"^[\W_]+|[\W_]+$", "", part).strip().casefold() for part in stripped.split("|")]
+        if parts and all(not part or part in GENERIC_LINK_LABELS for part in parts):
+            return True
+    return False
 
 
 def _strip_trailing_non_text_lines(text: str) -> str:
