@@ -63,7 +63,7 @@ async def prepare_message(
     if processed_html == AI_DROP_RESULT:
         return None
     if not ai_enabled:
-        processed_html = sanitize_text(processed_html, remove_links=False)
+        processed_html = sanitize_text(processed_html, remove_links=True)
     if signature:
         processed_html += ("\n\n" if processed_html.strip() else "") + signature
 
