@@ -14,4 +14,6 @@ async def reject(update: Update) -> None:
     if update.callback_query:
         await ack(update.callback_query, messages.UNAUTHORIZED, show_alert=True)
     elif update.effective_message:
-        await update.effective_message.reply_text(messages.UNAUTHORIZED)
+        chat = update.effective_chat
+        if chat is not None and chat.type == "private":
+            await update.effective_message.reply_text(messages.UNAUTHORIZED)
