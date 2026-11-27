@@ -19,6 +19,9 @@ FORMATTING_TAGS = {
     "tg-spoiler",
 }
 TELEGRAM_LINK = re.compile(r"(?:https?://)?(?:t|telegram)\.me/|tg://user", re.I)
+GENERIC_LINK_LABELS = frozenset(
+    {"link", "لینک", "مشاهده", "ادامه", "ادامه مطلب", "مشروح خبر", "منبع", "سایت", "اینجا", "کلیک کنید"}
+)
 
 
 class HTMLSanitizer(HTMLParser):
@@ -29,6 +32,7 @@ class HTMLSanitizer(HTMLParser):
         self.parts: list[str] = []
         self.suppressed = 0
         self.stack: list[tuple[str, bool]] = []
+        self._link_buffer: list[str] | None = None
 
     def handle_starttag(self, tag, attrs):
         if tag in {"script", "style"}:
@@ -43,6 +47,11 @@ class HTMLSanitizer(HTMLParser):
                 self.parts.append(f'<a href="{escape(href, quote=True)}">')
                 self.stack.append((tag, True))
                 return
+        if tag == "a" and self.remove_links:
+            self.stack.append((tag, False))
+            if self._link_buffer is None:
+                self._link_buffer = []
+            return
         self.stack.append((tag, allowed))
         if allowed:
             self.parts.append(self.get_starttag_text() if not self.remove_links else f"<{tag}>")
@@ -55,13 +64,23 @@ class HTMLSanitizer(HTMLParser):
             return
         if self.stack and self.stack[-1][0] == tag:
             _, allowed = self.stack.pop()
+            if tag == "a" and self.remove_links and self._link_buffer is not None:
+                buffered = "".join(self._link_buffer)
+                self._link_buffer = None
+                if buffered.strip().casefold() not in GENERIC_LINK_LABELS:
+                    self.parts.append(buffered)
+                return
             if allowed:
                 self.parts.append(f"</{tag}>")
 
     def handle_data(self, data):
         if self.suppressed:
             return
-        self.parts.append(escape(self.transform_text(data), quote=False))
+        rendered = escape(self.transform_text(data), quote=False)
+        if self._link_buffer is not None:
+            self._link_buffer.append(rendered)
+        else:
+            self.parts.append(rendered)
 
     def render(self, text: str) -> str:
         self.feed(text)

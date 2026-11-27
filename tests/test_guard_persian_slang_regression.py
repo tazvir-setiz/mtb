@@ -295,4 +295,36 @@ def test_news_posts_with_channel_footers_are_not_flagged_as_spam_in_rules():
     assert not contains_phrase(normalize_text(news3, 4), SPAM)
 
 
+def test_sanitize_text_removes_trailing_markdown_link_and_emoji_lines():
+    from app.services.text_sanitizer import sanitize_text
+
+    msg_with_emojis = (
+        "🔴چند روز پیش توی دزفول خوزستان، اتفاقی افتاد.\n"
+        "⚠️ ویدیو حاوی صحنه‌های دلخراش..\n\n"
+        "📚  📚\n"
+    )
+    cleaned_emojis = sanitize_text(msg_with_emojis, remove_links=True, replacement="")
+    assert "📚" not in cleaned_emojis
+    assert cleaned_emojis.endswith("دلخراش..")
+
+    msg_with_link = (
+        "رئیس پلیس‌راه مازندران: بعدازظهر امروز جاده‌های هراز و کندوان مقطعی یک‌طرفه می شود.\n"
+        "- [Link](https://farsnews.ir/ZTaheri/1795760376595950265/%D8%A7%D8%B9%D9%84%D8%A7%D9%85)"
+    )
+    cleaned_link = sanitize_text(msg_with_link, remove_links=True, replacement="")
+    assert "Link" not in cleaned_link
+    assert "farsnews.ir" not in cleaned_link
+    assert cleaned_link.endswith("یک‌طرفه می شود.")
+
+    msg_with_html_link = (
+        "رئیس پلیس‌راه مازندران: بعدازظهر امروز جاده‌های هراز و کندوان مقطعی یک‌طرفه می شود.\n"
+        '- <a href="https://farsnews.ir/ZTaheri/1795760376595950265">Link</a>'
+    )
+    cleaned_html_link = sanitize_text(msg_with_html_link, remove_links=True, replacement="")
+    assert "Link" not in cleaned_html_link
+    assert "farsnews.ir" not in cleaned_html_link
+    assert cleaned_html_link.endswith("یک‌طرفه می شود.")
+
+
+
 

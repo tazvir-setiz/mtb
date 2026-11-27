@@ -15,14 +15,31 @@ SHORT_URL = re.compile(
     re.I,
 )
 MARKDOWN_LINK = re.compile(r"\[([^\]\n]*)\]\([^\s)]*\)")
+GENERIC_LINK_LABELS = frozenset(
+    {"link", "لینک", "مشاهده", "ادامه", "ادامه مطلب", "مشروح خبر", "منبع", "سایت", "اینجا", "کلیک کنید"}
+)
+
+
+def _replace_markdown_link(match: re.Match[str]) -> str:
+    label = match.group(1).strip()
+    if label.casefold() in GENERIC_LINK_LABELS:
+        return ""
+    return match.group(1)
 
 
 def remove_urls(data: str) -> str:
-    data = MARKDOWN_LINK.sub(r"\1", data)
+    data = MARKDOWN_LINK.sub(_replace_markdown_link, data)
     data = SHORT_URL.sub("", URL.sub("", data))
     return re.sub(
         r"\S*%[0-9a-fA-F]{2}\S*", lambda m: "" if URL.search(unquote(m[0])) else m[0], data
     )
+
+
+def _strip_trailing_non_text_lines(text: str) -> str:
+    lines = text.splitlines()
+    while lines and not any(ch.isalnum() for ch in lines[-1]):
+        lines.pop()
+    return "\n".join(lines).rstrip()
 
 
 def username_replacement() -> str:
@@ -40,7 +57,10 @@ def sanitize_text(text: str, *, remove_links: bool, replacement: str | None = No
             data = remove_urls(data)
         return USERNAME.sub(lambda _: replacement, data)
 
-    return HTMLSanitizer(transform, remove_links).render(text)
+    rendered = HTMLSanitizer(transform, remove_links).render(text)
+    if remove_links:
+        rendered = _strip_trailing_non_text_lines(rendered)
+    return rendered
 
 
 def publication_is_clean(text: str, *, replacement: str | None = None) -> bool:
